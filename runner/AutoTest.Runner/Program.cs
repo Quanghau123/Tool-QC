@@ -15,6 +15,6 @@ var configuredReportDirectory=env.Get("TEST_RESULTS_DIR")??"test-results";
 var reportDirectory=Path.IsPathRooted(configuredReportDirectory)
     ? configuredReportDirectory
     : Path.GetFullPath(Path.Combine(root,configuredReportDirectory));
-var report=HtmlReportWriter.Write(reportDirectory,project,env.Get("TEST_ENV")??"unspecified",results,startedAt);
+var report=HtmlReportWriter.Write(reportDirectory,project,env.Get("TEST_ENV")??"unspecified",results,startedAt,tags);
 Console.WriteLine($"Tổng số: {cases.Count}, Thành công: {cases.Count-failed}, Thất bại: {failed}");
 Console.WriteLine($"Báo cáo HTML: {report}");return failed==0?0:1;

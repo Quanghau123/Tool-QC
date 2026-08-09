@@ -5,10 +5,21 @@ namespace AutoTest.Core;
 
 public static class HtmlReportWriter
 {
-    public static string Write(string directory, ProjectSpec project, string environment, IReadOnlyList<RunResult> results, DateTimeOffset startedAt)
+    public static string Write(
+        string directory,
+        ProjectSpec project,
+        string environment,
+        IReadOnlyList<RunResult> results,
+        DateTimeOffset startedAt,
+        IReadOnlyCollection<string>? selectedTags = null)
     {
         Directory.CreateDirectory(directory);
-        var path = Path.Combine(directory, $"{project.Name}-{startedAt:yyyyMMdd-HHmmss}.html");
+        var testGroup = selectedTags is { Count: > 0 }
+            ? string.Join("-", selectedTags.OrderBy(tag => tag, StringComparer.OrdinalIgnoreCase))
+            : "tat-ca-test-case";
+        var path = Path.Combine(
+            directory,
+            $"{startedAt:yyyy-MM-dd_HHmmss}_{SafeFileName(project.Name)}_{SafeFileName(testGroup)}.html");
         var passed = results.Count(result => result.Passed);
         var builder = new StringBuilder();
         builder.Append("""
@@ -35,4 +46,13 @@ body{font-family:Segoe UI,Arial,sans-serif;background:#f5f7fa;color:#172033;marg
     }
 
     private static string E(string value) => WebUtility.HtmlEncode(value);
+
+    private static string SafeFileName(string value)
+    {
+        var invalidCharacters = Path.GetInvalidFileNameChars();
+        var normalized = new string(value
+            .Select(character => invalidCharacters.Contains(character) || char.IsWhiteSpace(character) ? '-' : character)
+            .ToArray());
+        return normalized.Trim('-');
+    }
 }

@@ -23,6 +23,16 @@ method/path/payload, kết quả mong đợi, HTTP status/response thực tế, 
 Các trường nhạy cảm như password, token, authorization, secret và connection string
 được che bằng `***`. Thư mục báo cáo là artifact cục bộ và không được commit.
 
+Tên báo cáo có dạng `yyyy-MM-dd_HHmmss_<project>_<tags>.html`, giúp tìm theo ngày,
+dự án và nhóm test đã chạy. Ví dụ:
+
+```text
+2026-08-09_153015_ops-service_events.html
+2026-08-09_154200_ops-service_integration.html
+```
+
+Nếu không chọn tag, phần cuối tên file là `tat-ca-test-case`.
+
 Build toàn bộ solution:
 
 ```powershell
