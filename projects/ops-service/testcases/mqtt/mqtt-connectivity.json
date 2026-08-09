@@ -1,0 +1,41 @@
+{
+  "project": "ops-service",
+  "cases": [
+    {
+      "id": "mqtt.connect-and-roundtrip",
+      "name": "Kiểm tra kết nối, gửi, nhận và đối chiếu nội dung MQTT",
+      "tags": ["mqtt-admin", "diagnostic"],
+      "destructive": false,
+      "variables": {
+        "mqttTopic": "tool-qc/roundtrip/${unique}",
+        "mqttPayload": "Tin nhắn kiểm thử ${unique}"
+      },
+      "steps": [
+        {
+          "name": "Kết nối tới MQTT broker",
+          "request": { "mqtt": { "action": "connect" } },
+          "expect": {}
+        },
+        {
+          "name": "Đăng ký topic, gửi tin nhắn và nhận lại tin nhắn",
+          "request": {
+            "mqtt": {
+              "action": "roundtrip",
+              "topic": "${mqttTopic}",
+              "payload": "${mqttPayload}",
+              "qos": 1,
+              "retain": false,
+              "timeoutMs": 10000
+            }
+          },
+          "expect": {
+            "mqtt": {
+              "topic": "${mqttTopic}",
+              "payload": "${mqttPayload}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

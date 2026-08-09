@@ -18,12 +18,14 @@ public sealed class RunnerEngine : IDisposable
     private readonly ProjectSpec project;
     private readonly EnvironmentStore env;
     private readonly HttpClient http;
+    private readonly MqttTestClient mqtt;
     private string? token;
 
     public RunnerEngine(ProjectSpec project, EnvironmentStore env)
     {
         this.project = project;
         this.env = env;
+        mqtt = new MqttTestClient(env);
         var url = env.Require(project.BaseUrlVariable);
         Guard(url);
         http = new HttpClient
@@ -43,7 +45,8 @@ public sealed class RunnerEngine : IDisposable
         var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["unique"] = Guid.NewGuid().ToString("N"),
-            ["timestamp"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString()
+            ["timestamp"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
+            ["timestampMs"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString()
         };
 
         try
@@ -54,7 +57,7 @@ public sealed class RunnerEngine : IDisposable
                 variables[variable.Key] = Templates.Resolve(variable.Value, variables, env);
             started = true;
             foreach (var step in test.Steps)
-                await RunStepAsync(step, variables, cancellationToken, stepResults);
+                await RunStepWithRetryAsync(step, variables, cancellationToken, stepResults);
             return new(test.Id, test.Name, true, watch.Elapsed, null, stepResults);
         }
         catch (Exception exception)
@@ -80,8 +83,14 @@ public sealed class RunnerEngine : IDisposable
 
     private async Task RunStepAsync(StepSpec step, Dictionary<string, string> variables, CancellationToken cancellationToken, List<StepRunResult> results, bool assertions = true, bool cleanup = false)
     {
+        if (step.Request.Mqtt is not null)
+        {
+            await RunMqttStepAsync(step, variables, cancellationToken, results, assertions, cleanup);
+            return;
+        }
         var watch = Stopwatch.StartNew();
-        var path = Templates.Resolve(step.Request.Path, variables, env);
+        var method = step.Request.Method ?? throw new InvalidDataException($"Thiếu phương thức HTTP cho bước: {step.Name}");
+        var path = Templates.Resolve(step.Request.Path ?? throw new InvalidDataException($"Thiếu đường dẫn HTTP cho bước: {step.Name}"), variables, env);
         var payload = step.Request.Body is { } body ? Templates.Resolve(body.GetRawText(), variables, env) : null;
         var expectedText = assertions ? DescribeExpected(step.Expect, variables) : "Bước dọn dữ liệu: không đối chiếu kết quả";
         int? actualStatus = null;
@@ -89,10 +98,17 @@ public sealed class RunnerEngine : IDisposable
         try
         {
             var requiresAuth = !string.IsNullOrWhiteSpace(step.Auth);
-            if (requiresAuth) await AuthenticateAsync(cancellationToken);
-            using var request = new HttpRequestMessage(new HttpMethod(step.Request.Method), path);
-            if (requiresAuth && token is not null)
-                request.Headers.Authorization = new AuthenticationHeaderValue(project.Authentication?.Prefix ?? "Bearer", token);
+            string? requestToken = null;
+            if (!string.IsNullOrWhiteSpace(step.AuthToken))
+                requestToken = Templates.Resolve(step.AuthToken, variables, env);
+            else if (requiresAuth)
+            {
+                await AuthenticateAsync(cancellationToken);
+                requestToken = token;
+            }
+            using var request = new HttpRequestMessage(new HttpMethod(method), path);
+            if (requiresAuth && requestToken is not null)
+                request.Headers.Authorization = new AuthenticationHeaderValue(project.Authentication?.Prefix ?? "Bearer", requestToken);
             foreach (var header in step.Request.Headers ?? [])
                 request.Headers.TryAddWithoutValidation(header.Key, Templates.Resolve(header.Value, variables, env));
             if (payload is not null)
@@ -106,18 +122,20 @@ public sealed class RunnerEngine : IDisposable
             if (assertions)
             {
                 var expected = step.Expect ?? throw new InvalidDataException($"Thiếu cấu hình kết quả mong đợi cho bước: {step.Name}");
-                if (actualStatus != expected.Status)
+                if (expected.Status is not { } expectedStatus)
+                    throw new InvalidDataException($"Thiếu mã trạng thái HTTP mong đợi cho bước: {step.Name}");
+                if (actualStatus != expectedStatus)
                     throw new InvalidOperationException($"{step.Name}: mong đợi mã HTTP {expected.Status}, thực tế nhận {actualStatus}. Nội dung phản hồi: {Redact(responseText)}");
                 if (expected.MaxResponseTimeMs is { } max && watch.ElapsedMilliseconds > max)
                     throw new InvalidOperationException($"Thời gian phản hồi vượt quá giới hạn {max} ms.");
                 AssertAndSave(step, expected, responseText, variables);
             }
-            results.Add(new(step.Name, cleanup, true, step.Request.Method, path, SanitizeJson(payload), expectedText, actualStatus, SanitizeJson(responseText), watch.Elapsed, null));
+            results.Add(new(step.Name, cleanup, true, method, path, SanitizeJson(payload), expectedText, actualStatus, SanitizeJson(responseText), watch.Elapsed, null));
         }
         catch (Exception exception)
         {
             var error = Redact(exception.Message);
-            results.Add(new(step.Name, cleanup, false, step.Request.Method, path, SanitizeJson(payload), expectedText, actualStatus, SanitizeJson(responseText), watch.Elapsed, error));
+            results.Add(new(step.Name, cleanup, false, method, path, SanitizeJson(payload), expectedText, actualStatus, SanitizeJson(responseText), watch.Elapsed, error));
             throw;
         }
     }
@@ -143,10 +161,125 @@ public sealed class RunnerEngine : IDisposable
         }
     }
 
+    private async Task RunStepWithRetryAsync(StepSpec step, Dictionary<string, string> variables, CancellationToken cancellationToken, List<StepRunResult> results)
+    {
+        if (step.Retry is null)
+        {
+            await RunStepAsync(step, variables, cancellationToken, results);
+            return;
+        }
+        int timeoutMs = step.Retry.TimeoutMs ?? 10000;
+        int intervalMs = step.Retry.IntervalMs ?? 500;
+        var watch = Stopwatch.StartNew();
+        Exception? lastException = null;
+        while (watch.ElapsedMilliseconds < timeoutMs)
+        {
+            var attemptResults = new List<StepRunResult>();
+            try
+            {
+                await RunStepAsync(step, variables, cancellationToken, attemptResults);
+                results.AddRange(attemptResults);
+                return;
+            }
+            catch (Exception exception)
+            {
+                lastException = exception;
+                await Task.Delay(intervalMs, cancellationToken);
+            }
+        }
+        var finalResults = new List<StepRunResult>();
+        try { await RunStepAsync(step, variables, cancellationToken, finalResults); }
+        catch { results.AddRange(finalResults); throw lastException ?? new TimeoutException("Hết thời gian chờ kết quả."); }
+    }
+
+    private async Task RunMqttStepAsync(StepSpec step, Dictionary<string, string> variables, CancellationToken cancellationToken, List<StepRunResult> results, bool assertions, bool cleanup)
+    {
+        var watch = Stopwatch.StartNew();
+        MqttRequestSpec request = step.Request.Mqtt!;
+        string action = request.Action.ToLowerInvariant();
+        string topic = ResolveMqttTopic(request.Topic, variables);
+        string payload = Templates.Resolve(request.Payload ?? string.Empty, variables, env);
+        int qos = request.Qos ?? 1;
+        bool retain = request.Retain ?? false;
+        int timeoutMs = request.TimeoutMs ?? env.Int("MQTT_TIMEOUT_MS", 10000);
+        string? username = ResolveOptional(request.Username, variables);
+        string? password = ResolveOptional(request.Password, variables);
+        string? clientId = ResolveOptional(request.ClientId, variables);
+        string expectedText = assertions ? DescribeMqttExpected(step.Expect, variables) : "Bước dọn dữ liệu MQTT: không đối chiếu kết quả";
+        string? actual = null;
+        try
+        {
+            MqttReceivedMessage? received;
+            switch (action)
+            {
+                case "connect":
+                    await mqtt.ConnectAsync(username, password, clientId, cancellationToken);
+                    received = null;
+                    break;
+                case "publish":
+                    await mqtt.PublishAsync(topic, payload, qos, retain, username, password, clientId, cancellationToken);
+                    received = null;
+                    break;
+                case "subscribe":
+                    received = await mqtt.SubscribeAsync(topic, qos, TimeSpan.FromMilliseconds(timeoutMs), username, password, clientId, cancellationToken);
+                    break;
+                case "roundtrip":
+                    received = await mqtt.RoundtripAsync(topic, payload, qos, retain, TimeSpan.FromMilliseconds(timeoutMs), username, password, clientId, cancellationToken);
+                    break;
+                default:
+                    throw new InvalidOperationException($"Không hỗ trợ thao tác MQTT: {request.Action}");
+            }
+            actual = received is null ? "Đã thực hiện thành công." : JsonSerializer.Serialize(new { received.Topic, received.Payload }, ReportJsonOptions);
+            if (assertions && received is not null) AssertMqtt(step.Expect?.Mqtt, received, variables);
+            results.Add(new(step.Name, cleanup, true, $"MQTT {action.ToUpperInvariant()}", topic, payload.Length == 0 ? null : Redact(payload), expectedText, null, actual, watch.Elapsed, null));
+        }
+        catch (Exception exception)
+        {
+            string error = Redact(exception.Message);
+            results.Add(new(step.Name, cleanup, false, $"MQTT {action.ToUpperInvariant()}", topic, payload.Length == 0 ? null : Redact(payload), expectedText, null, actual, watch.Elapsed, error));
+            throw;
+        }
+    }
+
+    private string? ResolveOptional(string? value, IReadOnlyDictionary<string, string> variables)
+        => string.IsNullOrWhiteSpace(value) ? null : Templates.Resolve(value, variables, env);
+
+    private string ResolveMqttTopic(string? topic, IReadOnlyDictionary<string, string> variables)
+    {
+        string resolved = Templates.Resolve(topic ?? string.Empty, variables, env).Trim('/');
+        if (resolved.Length == 0) return string.Empty;
+        string prefix = (env.Get("MQTT_PREFIX") ?? string.Empty).Trim('/');
+        return prefix.Length == 0 || resolved.StartsWith(prefix + "/", StringComparison.Ordinal) || resolved == prefix
+            ? resolved
+            : $"{prefix}/{resolved}";
+    }
+
+    private void AssertMqtt(MqttExpectSpec? expected, MqttReceivedMessage received, IReadOnlyDictionary<string, string> variables)
+    {
+        if (expected is null) return;
+        if (expected.Topic is { } topic && received.Topic != ResolveMqttTopic(topic, variables))
+            throw new InvalidOperationException("Topic MQTT nhận được không đúng như mong đợi.");
+        if (expected.Payload is { } payload && received.Payload != Templates.Resolve(payload, variables, env))
+            throw new InvalidOperationException("Nội dung MQTT nhận được không đúng như mong đợi.");
+        if (expected.PayloadContains is { } contains && !received.Payload.Contains(Templates.Resolve(contains, variables, env), StringComparison.Ordinal))
+            throw new InvalidOperationException("Nội dung MQTT không chứa giá trị mong đợi.");
+    }
+
+    private string DescribeMqttExpected(ExpectSpec? expected, IReadOnlyDictionary<string, string> variables)
+    {
+        if (expected?.Mqtt is null) return "Thao tác MQTT hoàn thành thành công";
+        var lines = new List<string>();
+        if (expected.Mqtt.Topic is { } topic) lines.Add($"Topic nhận được = {ResolveMqttTopic(topic, variables)}");
+        if (expected.Mqtt.Payload is { } payload) lines.Add($"Nội dung nhận được = {Templates.Resolve(payload, variables, env)}");
+        if (expected.Mqtt.PayloadContains is { } contains) lines.Add($"Nội dung nhận được có chứa {Templates.Resolve(contains, variables, env)}");
+        return string.Join("\n", lines);
+    }
+
     private string DescribeExpected(ExpectSpec? expected, Dictionary<string, string> variables)
     {
         if (expected is null) return "Thiếu cấu hình kết quả mong đợi";
-        var details = new List<string> { $"Mã trạng thái HTTP = {expected.Status}" };
+        var details = new List<string>();
+        if (expected.Status is { } status) details.Add($"Mã trạng thái HTTP = {status}");
         if (expected.MaxResponseTimeMs is { } max) details.Add($"Thời gian phản hồi không quá {max} ms");
         foreach (var item in expected.Json ?? [])
         {
@@ -174,7 +307,16 @@ public sealed class RunnerEngine : IDisposable
     {
         try
         {
-            Templates.Resolve(step.Request.Path, variables, env);
+            if (step.Request.Path is { } path) Templates.Resolve(path, variables, env);
+            if (step.AuthToken is { } authToken) Templates.Resolve(authToken, variables, env);
+            if (step.Request.Mqtt is { } mqttRequest)
+            {
+                if (mqttRequest.Topic is { } topic) Templates.Resolve(topic, variables, env);
+                if (mqttRequest.Payload is { } mqttPayload) Templates.Resolve(mqttPayload, variables, env);
+                if (mqttRequest.Username is { } username) Templates.Resolve(username, variables, env);
+                if (mqttRequest.Password is { } password) Templates.Resolve(password, variables, env);
+                if (mqttRequest.ClientId is { } clientId) Templates.Resolve(clientId, variables, env);
+            }
             if (step.Request.Body is { } body)
                 Templates.Resolve(body.GetRawText(), variables, env);
             foreach (var header in step.Request.Headers ?? [])
@@ -233,10 +375,14 @@ public sealed class RunnerEngine : IDisposable
 
     private string Redact(string value)
     {
-        foreach (var key in new[] { "AUTH_TOKEN", "AUTH_PASSWORD", "DB_CONNECTION_STRING", "REDIS_CONNECTION_STRING" })
+        foreach (var key in new[] { "AUTH_TOKEN", "AUTH_PASSWORD", "DB_CONNECTION_STRING", "REDIS_CONNECTION_STRING", "MQTT_PASSWORD", "MQTT_AUTH_DB_PASSWORD" })
             if (env.Get(key) is { Length: > 0 } secret) value = value.Replace(secret, "***", StringComparison.Ordinal);
         return value;
     }
 
-    public void Dispose() => http.Dispose();
+    public void Dispose()
+    {
+        mqtt.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        http.Dispose();
+    }
 }

@@ -1,0 +1,35 @@
+{
+  "project": "replace-me",
+  "cases": [
+    {
+      "id": "mqtt.roundtrip-example",
+      "name": "Kiểm tra gửi và nhận lại một tin nhắn MQTT",
+      "tags": ["mqtt"],
+      "destructive": true,
+      "variables": {
+        "mqttTopic": "tool-qc/${unique}",
+        "mqttPayload": "Tin nhắn kiểm thử ${unique}"
+      },
+      "steps": [
+        {
+          "name": "Đăng ký topic, gửi tin nhắn và nhận lại nội dung",
+          "request": {
+            "mqtt": {
+              "action": "roundtrip",
+              "topic": "${mqttTopic}",
+              "payload": "${mqttPayload}",
+              "qos": 1,
+              "retain": false
+            }
+          },
+          "expect": {
+            "mqtt": {
+              "topic": "${mqttTopic}",
+              "payload": "${mqttPayload}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

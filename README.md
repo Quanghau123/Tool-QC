@@ -66,6 +66,18 @@ Chạy test quản lý khu vực và gán thiết bị:
 dotnet run --project runner/AutoTest.Runner -- --project ops-service --tags booths
 ```
 
+Chạy test kết nối, publish, subscribe và kiểm tra nội dung MQTT:
+
+```powershell
+dotnet run --project runner/AutoTest.Runner -- --project ops-service --tags mqtt
+```
+
+MQTT test đọc `MQTT_HOST`, `MQTT_PORT`, `MQTT_PREFIX`, `MQTT_USERNAME`,
+`MQTT_PASSWORD`, `MQTT_CLIENT_ID` và `MQTT_TIMEOUT_MS` từ `.env`. Topic tương đối
+trong test case được tự động ghép với `MQTT_PREFIX`. Kịch bản có thể ghi đè
+`username`, `password`, `clientId` ngay trong bước MQTT bằng biến đã lưu từ API;
+nhờ đó mỗi thiết bị có thể dùng đúng tài khoản MQTT động do dịch vụ cấp.
+
 ### Chạy toàn bộ integration test
 
 Lệnh dưới đây chạy tất cả test có tag `integration` của dự án, bao gồm Event,
@@ -168,3 +180,44 @@ projects/ops-service/testcases/
 ```
 
 JSON path hiện hỗ trợ thuộc tính lồng nhau như `$.data.id`. Test làm thay đổi dữ liệu phải khai báo `destructive: true` và chỉ chạy khi `ALLOW_DESTRUCTIVE_TESTS=true`. Authentication được cấu hình trong `project.json`; secret chỉ đặt trong `.env` hoặc CI.
+
+Một bước HTTP có thể dùng token đã lưu từ bước đăng nhập trước bằng `authToken`:
+
+```json
+{
+  "name": "Lấy cấu hình bằng token của thiết bị",
+  "auth": "device",
+  "authToken": "${deviceAccessToken}",
+  "request": { "method": "GET", "path": "/api/Devices/me/mqtt-account" },
+  "expect": { "status": 200 },
+  "save": { "mqttUsername": "$.data.username" }
+}
+```
+
+Bước MQTT hỗ trợ `connect`, `publish`, `subscribe`, `roundtrip` và tài khoản động:
+
+```json
+{
+  "name": "Gửi trạng thái thiết bị qua MQTT",
+  "request": {
+    "mqtt": {
+      "action": "publish",
+      "topic": "device/${deviceId}/status/update",
+      "payload": "{\"connectionStatus\":1,\"connectSessionId\":${timestampMs}}",
+      "qos": 1,
+      "retain": true,
+      "username": "${mqttUsername}",
+      "password": "${mqttPassword}",
+      "clientId": "${mqttClientId}"
+    }
+  },
+  "expect": {}
+}
+```
+
+Với xử lý bất đồng bộ, thêm `retry` vào bước kiểm tra. Runner sẽ gọi lại bước đó
+cho tới khi đạt kết quả hoặc hết `timeoutMs`:
+
+```json
+"retry": { "timeoutMs": 10000, "intervalMs": 500 }
+```

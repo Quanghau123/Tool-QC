@@ -1,0 +1,167 @@
+{
+  "project": "ops-service",
+  "cases": [
+    {
+      "id": "mqtt.device-connection-status",
+      "name": "Kiểm tra thiết bị cập nhật trạng thái kết nối qua MQTT",
+      "tags": ["mqtt", "integration", "devices"],
+      "destructive": true,
+      "variables": {
+        "eventCode": "AUTO-MQTT-EVENT-${unique}",
+        "deviceCode": "AUTO-MQTT-DEVICE-${unique}",
+        "password": "Admin@123"
+      },
+      "steps": [
+        {
+          "name": "Tạo sự kiện chứa thiết bị kiểm thử MQTT",
+          "auth": "admin",
+          "request": {
+            "method": "POST",
+            "path": "/api/Events",
+            "body": { "code": "${eventCode}", "name": "Sự kiện kiểm thử MQTT ${unique}" }
+          },
+          "expect": { "status": 200, "json": { "$.data.id": { "exists": true } } },
+          "save": { "eventId": "$.data.id" }
+        },
+        {
+          "name": "Tạo thiết bị để kiểm tra trạng thái kết nối",
+          "auth": "admin",
+          "request": {
+            "method": "POST",
+            "path": "/api/Devices",
+            "body": {
+              "functionTypes": [1],
+              "eventId": "${eventId}",
+              "code": "${deviceCode}",
+              "name": "Thiết bị kiểm thử MQTT ${unique}",
+              "password": "${password}",
+              "confirmPassword": "${password}"
+            }
+          },
+          "expect": {
+            "status": 200,
+            "json": {
+              "$.data.id": { "exists": true },
+              "$.data.connectionStatus": { "equals": 2 }
+            }
+          },
+          "save": { "deviceId": "$.data.id" }
+        },
+        {
+          "name": "Đăng nhập bằng tài khoản thiết bị",
+          "request": {
+            "method": "POST",
+            "path": "/api/Devices/Auth",
+            "body": { "code": "${deviceCode}", "password": "${password}" }
+          },
+          "expect": {
+            "status": 200,
+            "json": { "$.data.accessToken": { "exists": true } }
+          },
+          "save": { "deviceAccessToken": "$.data.accessToken" }
+        },
+        {
+          "name": "Lấy tài khoản MQTT dành riêng cho thiết bị",
+          "auth": "device",
+          "authToken": "${deviceAccessToken}",
+          "request": { "method": "GET", "path": "/api/Devices/me/mqtt-account" },
+          "expect": {
+            "status": 200,
+            "json": {
+              "$.data.username": { "exists": true },
+              "$.data.password": { "exists": true },
+              "$.data.clientId": { "exists": true }
+            }
+          },
+          "save": {
+            "mqttUsername": "$.data.username",
+            "mqttPassword": "$.data.password",
+            "mqttClientId": "$.data.clientId"
+          }
+        },
+        {
+          "name": "Gửi trạng thái đang kết nối của thiết bị qua MQTT",
+          "request": {
+            "mqtt": {
+              "action": "publish",
+              "topic": "device/${deviceId}/status/update",
+              "payload": "{\"connectionStatus\":1,\"connectSessionId\":${timestampMs}}",
+              "qos": 1,
+              "retain": true,
+              "username": "${mqttUsername}",
+              "password": "${mqttPassword}",
+              "clientId": "${mqttClientId}"
+            }
+          },
+          "expect": {},
+          "retry": { "timeoutMs": 10000, "intervalMs": 500 }
+        },
+        {
+          "name": "Chờ API ghi nhận thiết bị đang kết nối",
+          "auth": "admin",
+          "request": { "method": "GET", "path": "/api/Devices/${deviceId}" },
+          "expect": {
+            "status": 200,
+            "json": { "$.data.connectionStatus": { "equals": 1 } }
+          },
+          "retry": { "timeoutMs": 10000, "intervalMs": 500 }
+        },
+        {
+          "name": "Gửi trạng thái đã ngắt kết nối của thiết bị qua MQTT",
+          "request": {
+            "mqtt": {
+              "action": "publish",
+              "topic": "device/${deviceId}/status/update",
+              "payload": "{\"connectionStatus\":2,\"connectSessionId\":${timestampMs}}",
+              "qos": 1,
+              "retain": true,
+              "username": "${mqttUsername}",
+              "password": "${mqttPassword}",
+              "clientId": "${mqttClientId}"
+            }
+          },
+          "expect": {}
+        },
+        {
+          "name": "Chờ API ghi nhận thiết bị đã ngắt kết nối",
+          "auth": "admin",
+          "request": { "method": "GET", "path": "/api/Devices/${deviceId}" },
+          "expect": {
+            "status": 200,
+            "json": { "$.data.connectionStatus": { "equals": 2 } }
+          },
+          "retry": { "timeoutMs": 10000, "intervalMs": 500 }
+        }
+      ],
+      "cleanup": [
+        {
+          "name": "Chuyển thiết bị MQTT sang trạng thái ngừng sử dụng",
+          "auth": "admin",
+          "request": {
+            "method": "PUT",
+            "path": "/api/Devices/${deviceId}",
+            "body": { "functionTypes": [1], "name": "Thiết bị kiểm thử MQTT ${unique}", "operationStatus": 4 }
+          }
+        },
+        {
+          "name": "Xóa thiết bị dùng để kiểm thử MQTT",
+          "auth": "admin",
+          "request": {
+            "method": "POST",
+            "path": "/api/Devices/DeleteMany",
+            "body": { "items": ["${deviceId}"] }
+          }
+        },
+        {
+          "name": "Xóa sự kiện dùng để kiểm thử MQTT",
+          "auth": "admin",
+          "request": {
+            "method": "POST",
+            "path": "/api/Events/DeleteMany",
+            "body": { "items": ["${eventId}"] }
+          }
+        }
+      ]
+    }
+  ]
+}

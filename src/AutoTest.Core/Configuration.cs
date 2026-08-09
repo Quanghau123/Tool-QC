@@ -7,6 +7,7 @@ public sealed class EnvironmentStore
  public string? Get(string key)=>Environment.GetEnvironmentVariable(key) is {Length:>0} v?v:values.GetValueOrDefault(key);
  public string Require(string key)=>Get(key) is {Length:>0} v?v:throw new InvalidOperationException($"Thiếu cấu hình bắt buộc: {key}");
  public bool Bool(string key,bool fallback=false)=>bool.TryParse(Get(key),out var v)?v:fallback;
+ public int Int(string key,int fallback=0)=>int.TryParse(Get(key),out var v)?v:fallback;
 }
 public static class SpecLoader
 {

@@ -198,9 +198,10 @@ After project/test-case-only changes:
 
 ## Current capability boundary
 
-The shared runner currently supports HTTP cases, variable interpolation, simple
-object-property JSON paths, chained values, static-token/login authentication,
-cleanup, tag filtering, response assertions, secret redaction, and safety guards.
+The shared runner currently supports HTTP and MQTT cases, variable interpolation,
+simple object-property JSON paths, chained values, static-token/login and saved-token
+authentication, per-step dynamic MQTT credentials, bounded step retries, cleanup,
+tag filtering, response assertions, secret redaction, and safety guards.
 
 PostgreSQL/Redis assertions, full JSON Schema validation, HTML/JUnit reporting,
 parallel scheduling, and CI templates are not yet implemented. Do not claim they
