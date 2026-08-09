@@ -1,4 +1,5 @@
 using AutoTest.Core;
+var startedAt=DateTimeOffset.Now;
 var root=Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,"..","..","..","..",".."));
 var env=EnvironmentStore.Load(Path.Combine(root,".env"));
 string Arg(string key,string fallback){var i=Array.IndexOf(args,key);return i>=0&&i+1<args.Length?args[i+1]:fallback;}
@@ -8,6 +9,12 @@ var projectDir=Path.Combine(root,"projects",projectName);
 var project=SpecLoader.Project(Path.Combine(projectDir,"project.json"));
 var cases=SpecLoader.Cases(Path.Combine(projectDir,"testcases"),project.Name).Where(c=>tags.Length==0||c.Tags?.Intersect(tags,StringComparer.OrdinalIgnoreCase).Any()==true).ToList();
 if(cases.Count==0){Console.Error.WriteLine("No matching test cases.");return 2;}
-using var engine=new RunnerEngine(project,env);var failed=0;
-foreach(var test in cases){var result=await engine.RunAsync(test);Console.WriteLine($"[{(result.Passed?"PASS":"FAIL")}] {result.Id} - {result.Name} ({result.Duration.TotalMilliseconds:F0}ms)");if(!result.Passed){failed++;Console.Error.WriteLine($"  {result.Error}");}}
-Console.WriteLine($"Total: {cases.Count}, Passed: {cases.Count-failed}, Failed: {failed}");return failed==0?0:1;
+using var engine=new RunnerEngine(project,env);var failed=0;var results=new List<RunResult>();
+foreach(var test in cases){var result=await engine.RunAsync(test);results.Add(result);Console.WriteLine($"[{(result.Passed?"PASS":"FAIL")}] {result.Id} - {result.Name} ({result.Duration.TotalMilliseconds:F0}ms)");if(!result.Passed){failed++;Console.Error.WriteLine($"  {result.Error}");}}
+var configuredReportDirectory=env.Get("TEST_RESULTS_DIR")??"test-results";
+var reportDirectory=Path.IsPathRooted(configuredReportDirectory)
+    ? configuredReportDirectory
+    : Path.GetFullPath(Path.Combine(root,configuredReportDirectory));
+var report=HtmlReportWriter.Write(reportDirectory,project,env.Get("TEST_ENV")??"unspecified",results,startedAt);
+Console.WriteLine($"Total: {cases.Count}, Passed: {cases.Count-failed}, Failed: {failed}");
+Console.WriteLine($"HTML report: {report}");return failed==0?0:1;

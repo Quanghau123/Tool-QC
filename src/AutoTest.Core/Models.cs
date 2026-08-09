@@ -17,4 +17,16 @@ public sealed class AssertionSpec
  public string? Type { get; init; }
  public string? Contains { get; init; }
 }
-public sealed record RunResult(string Id,string Name,bool Passed,TimeSpan Duration,string? Error);
+public sealed record StepRunResult(
+ string Name,
+ bool Cleanup,
+ bool Passed,
+ string Method,
+ string Path,
+ string? Payload,
+ string Expected,
+ int? ActualStatus,
+ string? ActualResponse,
+ TimeSpan Duration,
+ string? Error);
+public sealed record RunResult(string Id,string Name,bool Passed,TimeSpan Duration,string? Error,IReadOnlyList<StepRunResult> Steps);

@@ -17,11 +17,21 @@ Biến môi trường hệ điều hành hoặc CI luôn ưu tiên hơn `.env`.
 dotnet run --project runner/AutoTest.Runner -- --project ops-service --tags smoke
 ```
 
+Sau mỗi lần chạy, runner tự tạo báo cáo HTML có timestamp trong `test-results/` và in
+đường dẫn file ở dòng `HTML report:`. Báo cáo gồm từng test case và từng step, request
+method/path/payload, kết quả mong đợi, HTTP status/response thực tế, thời gian và lỗi.
+Các trường nhạy cảm như password, token, authorization, secret và connection string
+được che bằng `***`. Thư mục báo cáo là artifact cục bộ và không được commit.
+
 Build toàn bộ solution:
 
 ```powershell
 dotnet build ApiAutoTest.sln
 ```
+
+Thư mục báo cáo mặc định là `test-results/` tương đối theo repository, không phụ thuộc
+đường dẫn máy. Có thể cấu hình `TEST_RESULTS_DIR` bằng đường dẫn tương đối hoặc tuyệt đối.
+Thư mục báo cáo và `projects/*/testcases/` được ignore để không đẩy lên Git ngoài ý muốn.
 
 ## Thêm test case
 

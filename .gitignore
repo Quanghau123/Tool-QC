@@ -1,5 +1,6 @@
 .env
 TestResults/
+test-results/
+projects/*/testcases/
 bin/
 obj/
-
