@@ -41,7 +41,7 @@ public sealed class RunnerEngine : IDisposable
         try
         {
             if (test.Destructive && !env.Bool("ALLOW_DESTRUCTIVE_TESTS"))
-                throw new InvalidOperationException("Destructive test is blocked.");
+                throw new InvalidOperationException("Kịch bản có thay đổi dữ liệu đang bị chặn. Hãy bật ALLOW_DESTRUCTIVE_TESTS trên môi trường kiểm thử an toàn.");
             foreach (var variable in test.Variables ?? [])
                 variables[variable.Key] = Templates.Resolve(variable.Value, variables, env);
             started = true;
@@ -58,7 +58,7 @@ public sealed class RunnerEngine : IDisposable
             if (started)
                 foreach (var step in test.Cleanup ?? [])
                     try { await RunStepAsync(step, variables, cancellationToken, stepResults, false, true); }
-                    catch (Exception exception) { Console.Error.WriteLine($"Cleanup failed for {test.Id}: {Redact(exception.Message)}"); }
+                    catch (Exception exception) { Console.Error.WriteLine($"Dọn dữ liệu thất bại cho kịch bản {test.Id}: {Redact(exception.Message)}"); }
         }
     }
 
@@ -67,7 +67,7 @@ public sealed class RunnerEngine : IDisposable
         var watch = Stopwatch.StartNew();
         var path = Templates.Resolve(step.Request.Path, variables, env);
         var payload = step.Request.Body is { } body ? Templates.Resolve(body.GetRawText(), variables, env) : null;
-        var expectedText = assertions ? DescribeExpected(step.Expect, variables) : "Cleanup: không kiểm tra kết quả";
+        var expectedText = assertions ? DescribeExpected(step.Expect, variables) : "Bước dọn dữ liệu: không đối chiếu kết quả";
         int? actualStatus = null;
         string? responseText = null;
         try
@@ -87,11 +87,11 @@ public sealed class RunnerEngine : IDisposable
             responseText = await response.Content.ReadAsStringAsync(cancellationToken);
             if (assertions)
             {
-                var expected = step.Expect ?? throw new InvalidDataException($"Missing expect: {step.Name}");
+                var expected = step.Expect ?? throw new InvalidDataException($"Thiếu cấu hình kết quả mong đợi cho bước: {step.Name}");
                 if (actualStatus != expected.Status)
-                    throw new InvalidOperationException($"{step.Name}: expected {expected.Status}, got {actualStatus}. Body: {Redact(responseText)}");
+                    throw new InvalidOperationException($"{step.Name}: mong đợi mã HTTP {expected.Status}, thực tế nhận {actualStatus}. Nội dung phản hồi: {Redact(responseText)}");
                 if (expected.MaxResponseTimeMs is { } max && watch.ElapsedMilliseconds > max)
-                    throw new InvalidOperationException($"Response time exceeded {max}ms.");
+                    throw new InvalidOperationException($"Thời gian phản hồi vượt quá giới hạn {max} ms.");
                 AssertAndSave(step, expected, responseText, variables);
             }
             results.Add(new(step.Name, cleanup, true, step.Request.Method, path, SanitizeJson(payload), expectedText, actualStatus, SanitizeJson(responseText), watch.Elapsed, null));
@@ -111,25 +111,25 @@ public sealed class RunnerEngine : IDisposable
         foreach (var assertion in expected.Json ?? [])
         {
             var selected = JsonPath.Select(document.RootElement, assertion.Key);
-            if (assertion.Value.Exists is { } exists && selected.Found != exists) throw new InvalidOperationException($"{assertion.Key} existence mismatch.");
+            if (assertion.Value.Exists is { } exists && selected.Found != exists) throw new InvalidOperationException($"Trường {assertion.Key} không đúng yêu cầu về sự tồn tại.");
             if (!selected.Found) continue;
             var actual = JsonPath.Text(selected.Value);
-            if (assertion.Value.ExpectedValue is { } value && actual != Templates.Resolve(JsonPath.Text(value), variables, env)) throw new InvalidOperationException($"{assertion.Key} mismatch.");
-            if (assertion.Value.Contains is { } contains && !actual.Contains(Templates.Resolve(contains, variables, env), StringComparison.Ordinal)) throw new InvalidOperationException($"{assertion.Key} contains mismatch.");
+            if (assertion.Value.ExpectedValue is { } value && actual != Templates.Resolve(JsonPath.Text(value), variables, env)) throw new InvalidOperationException($"Giá trị của trường {assertion.Key} không đúng như mong đợi.");
+            if (assertion.Value.Contains is { } contains && !actual.Contains(Templates.Resolve(contains, variables, env), StringComparison.Ordinal)) throw new InvalidOperationException($"Trường {assertion.Key} không chứa nội dung mong đợi.");
         }
         foreach (var saved in step.Save ?? [])
         {
             var selected = JsonPath.Select(document.RootElement, saved.Value);
-            if (!selected.Found) throw new InvalidOperationException($"Cannot save {saved.Key}.");
+            if (!selected.Found) throw new InvalidOperationException($"Không thể lưu biến {saved.Key} từ phản hồi.");
             variables[saved.Key] = JsonPath.Text(selected.Value);
         }
     }
 
     private string DescribeExpected(ExpectSpec? expected, Dictionary<string, string> variables)
     {
-        if (expected is null) return "Thiếu cấu hình expect";
-        var details = new List<string> { $"HTTP status = {expected.Status}" };
-        if (expected.MaxResponseTimeMs is { } max) details.Add($"Response time <= {max} ms");
+        if (expected is null) return "Thiếu cấu hình kết quả mong đợi";
+        var details = new List<string> { $"Mã trạng thái HTTP = {expected.Status}" };
+        if (expected.MaxResponseTimeMs is { } max) details.Add($"Thời gian phản hồi không quá {max} ms");
         foreach (var item in expected.Json ?? [])
         {
             var rules = new List<string>();
@@ -171,21 +171,21 @@ public sealed class RunnerEngine : IDisposable
     private async Task AuthenticateAsync(CancellationToken cancellationToken)
     {
         if (token is not null) return;
-        var auth = project.Authentication ?? throw new InvalidOperationException("Authentication is not configured.");
+        var auth = project.Authentication ?? throw new InvalidOperationException("Chưa cấu hình xác thực.");
         if (auth.Strategy.Equals("static-token", StringComparison.OrdinalIgnoreCase))
         {
             token = env.Require("AUTH_TOKEN");
             return;
         }
         if (!auth.Strategy.Equals("login", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException($"Unsupported auth: {auth.Strategy}");
+            throw new InvalidOperationException($"Không hỗ trợ kiểu xác thực: {auth.Strategy}");
         using var content = new StringContent(Templates.Resolve(auth.Body?.GetRawText() ?? "{}", new Dictionary<string, string>(), env), Encoding.UTF8, "application/json");
         using var response = await http.SendAsync(new HttpRequestMessage(new HttpMethod(auth.Method ?? "POST"), auth.LoginPath) { Content = content }, cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         response.EnsureSuccessStatusCode();
         using var document = JsonDocument.Parse(body);
         var selected = JsonPath.Select(document.RootElement, auth.TokenPath ?? "$.accessToken");
-        token = selected.Found ? JsonPath.Text(selected.Value) : throw new InvalidOperationException("Token not found.");
+        token = selected.Found ? JsonPath.Text(selected.Value) : throw new InvalidOperationException("Không tìm thấy access token trong phản hồi đăng nhập.");
     }
 
     private void Guard(string url)
@@ -193,7 +193,7 @@ public sealed class RunnerEngine : IDisposable
         var uri = new Uri(url);
         var production = (project.Safety?.ProductionHosts ?? []).Any(host => uri.Host.Equals(host, StringComparison.OrdinalIgnoreCase)) ||
                          (env.Get("TEST_ENV") ?? "").Equals("production", StringComparison.OrdinalIgnoreCase);
-        if (production && !env.Bool("ALLOW_PRODUCTION")) throw new InvalidOperationException("Production target is blocked.");
+        if (production && !env.Bool("ALLOW_PRODUCTION")) throw new InvalidOperationException("Môi trường production đang bị chặn để bảo vệ dữ liệu.");
     }
 
     private string Redact(string value)

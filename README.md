@@ -39,6 +39,21 @@ Mỗi dự án chỉ sửa nội dung dưới `projects/<project-name>` và `.en
 Tạo dự án mới bằng cách sao chép `projects/project-template`. Engine hỗ trợ nhiều bước,
 `${unique}` để sinh dữ liệu không trùng, lưu giá trị response bằng JSON path và dùng lại ở bước sau.
 
+Trong `testcases`, chia file theo module nghiệp vụ để dễ tìm và bảo trì. Mỗi module dùng
+một thư mục riêng, ví dụ `users/`, `devices/`, `booths/`; các kiểm tra dùng chung như
+health/readiness đặt trong `system/`. Runner tự tìm các file JSON trong toàn bộ thư mục con.
+
+```text
+projects/ops-service/testcases/
+├── system/
+│   └── health.json
+├── users/
+├── devices/
+└── booths/
+    ├── booth-management.json
+    └── booth-management-regression.json
+```
+
 ```json
 {
   "project": "my-service",

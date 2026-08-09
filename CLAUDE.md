@@ -73,6 +73,7 @@ copy. Do not modify `project-template` with business-specific examples.
 ## Test-case design rules
 
 - Keep test cases declarative; do not create C# test classes for a service.
+- The `name` of every test case and test step, including cleanup steps, must be written in clear, natural Vietnamese so Vietnamese users can immediately understand what is being tested. This rule applies to descriptive `name` fields in the test specification, not to business-data fields named `name` inside request bodies or expected API data.
 - A case owns its data. Use `${unique}` to avoid collisions.
 - Save response values with JSON paths and reuse them in later steps.
 - Add cleanup for created data whenever the API supports cleanup.

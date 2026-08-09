@@ -3,7 +3,7 @@ namespace AutoTest.Core;
 public static partial class Templates
 {
  [GeneratedRegex(@"\$\{(?<name>[A-Za-z0-9_.:-]+)\}")]private static partial Regex Pattern();
- public static string Resolve(string input,IReadOnlyDictionary<string,string> vars,EnvironmentStore env)=>Pattern().Replace(input,m=>{var key=m.Groups["name"].Value;if(key.StartsWith("env:",StringComparison.OrdinalIgnoreCase))return env.Require(key[4..]);return vars.TryGetValue(key,out var v)?v:throw new InvalidOperationException($"Unknown variable: {key}");});
+ public static string Resolve(string input,IReadOnlyDictionary<string,string> vars,EnvironmentStore env)=>Pattern().Replace(input,m=>{var key=m.Groups["name"].Value;if(key.StartsWith("env:",StringComparison.OrdinalIgnoreCase))return env.Require(key[4..]);return vars.TryGetValue(key,out var v)?v:throw new InvalidOperationException($"Không tìm thấy biến: {key}");});
 }
 public static class JsonPath
 {
