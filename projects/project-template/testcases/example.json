@@ -1,0 +1,4 @@
+{
+  "project": "replace-me",
+  "cases": [{ "id": "health.ready", "name": "API readiness", "tags": ["smoke"], "destructive": false, "steps": [{ "name": "Health", "request": { "method": "GET", "path": "/health" }, "expect": { "status": 200 } }] }]
+}

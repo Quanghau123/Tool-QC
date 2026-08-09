@@ -1,0 +1,7 @@
+{
+  "name": "ops-service",
+  "baseUrlVariable": "API_BASE_URL",
+  "defaultHeaders": { "Accept": "application/json" },
+  "authentication": { "strategy": "static-token", "header": "Authorization", "prefix": "Bearer" },
+  "safety": { "productionHosts": [] }
+}

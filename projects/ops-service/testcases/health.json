@@ -1,0 +1,14 @@
+{
+  "project": "ops-service",
+  "cases": [{
+    "id": "health.ready",
+    "name": "API readiness",
+    "tags": ["smoke"],
+    "destructive": false,
+    "steps": [{
+      "name": "Check readiness endpoint",
+      "request": { "method": "GET", "path": "/healthz" },
+      "expect": { "status": 200, "maxResponseTimeMs": 3000 }
+    }]
+  }]
+}

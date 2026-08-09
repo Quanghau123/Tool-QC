@@ -1,0 +1,5 @@
+.env
+TestResults/
+bin/
+obj/
+
