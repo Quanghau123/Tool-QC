@@ -65,7 +65,15 @@ public sealed class RunnerEngine : IDisposable
         {
             if (started)
                 foreach (var step in test.Cleanup ?? [])
-                    try { await RunStepAsync(step, variables, cancellationToken, stepResults, false, true); }
+                    try
+                    {
+                        if (!CanResolveCleanupStep(step, variables))
+                        {
+                            Console.Error.WriteLine($"Bỏ qua bước dọn dữ liệu '{step.Name}' vì dữ liệu cần thiết chưa được tạo.");
+                            continue;
+                        }
+                        await RunStepAsync(step, variables, cancellationToken, stepResults, false, true);
+                    }
                     catch (Exception exception) { Console.Error.WriteLine($"Dọn dữ liệu thất bại cho kịch bản {test.Id}: {Redact(exception.Message)}"); }
         }
     }
@@ -93,6 +101,8 @@ public sealed class RunnerEngine : IDisposable
             using var response = await http.SendAsync(request, cancellationToken);
             actualStatus = (int)response.StatusCode;
             responseText = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (cleanup && !response.IsSuccessStatusCode)
+                throw new InvalidOperationException($"Bước dọn dữ liệu nhận mã HTTP {actualStatus}. Nội dung phản hồi: {Redact(responseText)}");
             if (assertions)
             {
                 var expected = step.Expect ?? throw new InvalidDataException($"Thiếu cấu hình kết quả mong đợi cho bước: {step.Name}");
@@ -158,6 +168,23 @@ public sealed class RunnerEngine : IDisposable
             return JsonSerializer.Serialize(SanitizeElement(document.RootElement), ReportJsonOptions);
         }
         catch { return Redact(value); }
+    }
+
+    private bool CanResolveCleanupStep(StepSpec step, IReadOnlyDictionary<string, string> variables)
+    {
+        try
+        {
+            Templates.Resolve(step.Request.Path, variables, env);
+            if (step.Request.Body is { } body)
+                Templates.Resolve(body.GetRawText(), variables, env);
+            foreach (var header in step.Request.Headers ?? [])
+                Templates.Resolve(header.Value, variables, env);
+            return true;
+        }
+        catch (InvalidOperationException exception) when (exception.Message.StartsWith("Không tìm thấy biến:", StringComparison.Ordinal))
+        {
+            return false;
+        }
     }
 
     private object? SanitizeElement(JsonElement element) => element.ValueKind switch
