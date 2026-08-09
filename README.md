@@ -13,13 +13,90 @@ Biến môi trường hệ điều hành hoặc CI luôn ưu tiên hơn `.env`.
 
 ## Chạy
 
+### Chuẩn bị trước khi chạy
+
+Điền các biến cần thiết trong `.env`:
+
+```env
+TEST_ENV=local
+ACTIVE_PROJECT=ops-service
+API_BASE_URL=http://localhost:5000
+AUTH_TYPE=static-token
+AUTH_TOKEN=<access-token-của-tài-khoản-quản-trị>
+ALLOW_PRODUCTION=false
+ALLOW_DESTRUCTIVE_TESTS=true
+```
+
+Thay `API_BASE_URL` bằng địa chỉ API thực tế. Chỉ bật
+`ALLOW_DESTRUCTIVE_TESTS=true` trên môi trường local/test độc lập vì các test
+integration sẽ tạo, cập nhật và xóa dữ liệu. Không bật trên production.
+
+Build runner trước khi chạy:
+
+```powershell
+dotnet build runner/AutoTest.Runner/AutoTest.Runner.csproj
+```
+
+### Chạy smoke test
+
+Smoke test kiểm tra API và các dependency đã sẵn sàng, không thay đổi dữ liệu và
+không cần access token:
+
 ```powershell
 dotnet run --project runner/AutoTest.Runner -- --project ops-service --tags smoke
 ```
 
+### Chạy riêng từng module
+
+Chạy test quản lý sự kiện:
+
+```powershell
+dotnet run --project runner/AutoTest.Runner -- --project ops-service --tags events
+```
+
+Chạy test quản lý và xác thực thiết bị:
+
+```powershell
+dotnet run --project runner/AutoTest.Runner -- --project ops-service --tags devices
+```
+
+Chạy test quản lý khu vực và gán thiết bị:
+
+```powershell
+dotnet run --project runner/AutoTest.Runner -- --project ops-service --tags booths
+```
+
+### Chạy toàn bộ integration test
+
+Lệnh dưới đây chạy tất cả test có tag `integration` của dự án, bao gồm Event,
+Device và Booth:
+
+```powershell
+dotnet run --project runner/AutoTest.Runner -- --project ops-service --tags integration
+```
+
+### Chạy toàn bộ test case của dự án
+
+Không truyền `--tags` để chạy mọi test case, bao gồm smoke và integration:
+
+```powershell
+dotnet run --project runner/AutoTest.Runner -- --project ops-service
+```
+
+### Chạy nhiều nhóm test cùng lúc
+
+Phân cách các tag bằng dấu phẩy:
+
+```powershell
+dotnet run --project runner/AutoTest.Runner -- --project ops-service --tags events,devices
+```
+
+Sau khi chạy, xem tổng số thành công/thất bại trên terminal và mở file được in ở
+dòng `Báo cáo HTML:` trong thư mục `test-results/`.
+
 Sau mỗi lần chạy, runner tự tạo báo cáo HTML có timestamp trong `test-results/` và in
-đường dẫn file ở dòng `HTML report:`. Báo cáo gồm từng test case và từng step, request
-method/path/payload, kết quả mong đợi, HTTP status/response thực tế, thời gian và lỗi.
+đường dẫn file ở dòng `Báo cáo HTML:`. Báo cáo gồm từng test case và từng bước, phương
+thức/đường dẫn/dữ liệu gửi đi, kết quả mong đợi, mã HTTP/phản hồi thực tế, thời gian và lỗi.
 Các trường nhạy cảm như password, token, authorization, secret và connection string
 được che bằng `***`. Thư mục báo cáo là artifact cục bộ và không được commit.
 
