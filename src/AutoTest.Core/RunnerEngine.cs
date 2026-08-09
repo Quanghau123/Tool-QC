@@ -1,12 +1,20 @@
 using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Unicode;
 
 namespace AutoTest.Core;
 
 public sealed class RunnerEngine : IDisposable
 {
+    private static readonly JsonSerializerOptions ReportJsonOptions = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
+    };
+
     private readonly ProjectSpec project;
     private readonly EnvironmentStore env;
     private readonly HttpClient http;
@@ -147,7 +155,7 @@ public sealed class RunnerEngine : IDisposable
         try
         {
             using var document = JsonDocument.Parse(value);
-            return JsonSerializer.Serialize(SanitizeElement(document.RootElement), new JsonSerializerOptions { WriteIndented = true });
+            return JsonSerializer.Serialize(SanitizeElement(document.RootElement), ReportJsonOptions);
         }
         catch { return Redact(value); }
     }

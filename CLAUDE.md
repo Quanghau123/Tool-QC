@@ -74,6 +74,7 @@ copy. Do not modify `project-template` with business-specific examples.
 
 - Keep test cases declarative; do not create C# test classes for a service.
 - The `name` of every test case and test step, including cleanup steps, must be written in clear, natural Vietnamese so Vietnamese users can immediately understand what is being tested. This rule applies to descriptive `name` fields in the test specification, not to business-data fields named `name` inside request bodies or expected API data.
+- Whenever a test case creates a local test account, device, or other test fixture that requires a password, the password must be exactly `Admin@123`, and `confirmPassword` must use the same value. This fixed value is test data only; never use it for production credentials, real users, environment secrets, or authentication configuration.
 - A case owns its data. Use `${unique}` to avoid collisions.
 - Save response values with JSON paths and reuse them in later steps.
 - Add cleanup for created data whenever the API supports cleanup.
