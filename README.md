@@ -60,6 +60,18 @@ Chạy test quản lý và xác thực thiết bị:
 dotnet run --project runner/AutoTest.Runner -- --project ops-service --tags devices
 ```
 
+Chạy test quản lý người dùng và hồ sơ cá nhân:
+
+```powershell
+dotnet run --project runner/AutoTest.Runner -- --project ops-service --tags users,profiles
+```
+
+Chạy test quản lý vai trò:
+
+```powershell
+dotnet run --project runner/AutoTest.Runner -- --project ops-service --tags roles
+```
+
 Chạy test quản lý khu vực và gán thiết bị:
 
 ```powershell
@@ -137,6 +149,11 @@ Thư mục báo cáo và `projects/*/testcases/` được ignore để không đ
 Mỗi dự án chỉ sửa nội dung dưới `projects/<project-name>` và `.env`. Không sửa `src` hoặc `runner`.
 Tạo dự án mới bằng cách sao chép `projects/project-template`. Engine hỗ trợ nhiều bước,
 `${unique}` để sinh dữ liệu không trùng, lưu giá trị response bằng JSON path và dùng lại ở bước sau.
+Runner còn cung cấp `${nowIso}`, `${futureStartIso}` và `${futureEndIso}` để tạo
+thời gian ISO 8601 hiện tại, sau một giờ và sau hai giờ cho dữ liệu kiểm thử.
+Các biến `${futureDay1Iso}`, `${futureDay4Iso}`, `${futureDay5Iso}`,
+`${futureDay6Iso}`, `${futureDay8Iso}`, `${futureDay9Iso}`, `${futureDay10Iso}`
+và `${futureDay15Iso}` hỗ trợ các kịch bản kiểm tra khoảng ngày.
 
 Trong `testcases`, chia file theo module nghiệp vụ để dễ tìm và bảo trì. Mỗi module dùng
 một thư mục riêng, ví dụ `users/`, `devices/`, `booths/`; các kiểm tra dùng chung như
@@ -180,6 +197,21 @@ projects/ops-service/testcases/
 ```
 
 JSON path hiện hỗ trợ thuộc tính lồng nhau như `$.data.id`. Test làm thay đổi dữ liệu phải khai báo `destructive: true` và chỉ chạy khi `ALLOW_DESTRUCTIVE_TESTS=true`. Authentication được cấu hình trong `project.json`; secret chỉ đặt trong `.env` hoặc CI.
+
+Với endpoint nhận `[FromForm]`, dùng `form` thay cho `body`. Runner gửi dữ liệu dưới
+dạng `multipart/form-data`, ví dụ:
+
+```json
+"request": {
+  "method": "POST",
+  "path": "/api/Users",
+  "form": {
+    "Username": "auto_${unique}",
+    "Password": "Admin@123",
+    "Name": "Người dùng kiểm thử"
+  }
+}
+```
 
 Một bước HTTP có thể dùng token đã lưu từ bước đăng nhập trước bằng `authToken`:
 

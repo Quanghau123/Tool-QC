@@ -40,13 +40,25 @@ public sealed class RunnerEngine : IDisposable
     public async Task<RunResult> RunAsync(CaseSpec test, CancellationToken cancellationToken = default)
     {
         var watch = Stopwatch.StartNew();
+        var now = DateTimeOffset.UtcNow;
         var started = false;
         var stepResults = new List<StepRunResult>();
         var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["unique"] = Guid.NewGuid().ToString("N"),
-            ["timestamp"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
-            ["timestampMs"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString()
+            ["timestamp"] = now.ToUnixTimeSeconds().ToString(),
+            ["timestampMs"] = now.ToUnixTimeMilliseconds().ToString(),
+            ["nowIso"] = ToUtcIso(now),
+            ["futureStartIso"] = ToUtcIso(now.AddHours(1)),
+            ["futureEndIso"] = ToUtcIso(now.AddHours(2)),
+            ["futureDay1Iso"] = ToUtcIso(now.AddDays(1)),
+            ["futureDay4Iso"] = ToUtcIso(now.AddDays(4)),
+            ["futureDay5Iso"] = ToUtcIso(now.AddDays(5)),
+            ["futureDay6Iso"] = ToUtcIso(now.AddDays(6)),
+            ["futureDay8Iso"] = ToUtcIso(now.AddDays(8)),
+            ["futureDay9Iso"] = ToUtcIso(now.AddDays(9)),
+            ["futureDay10Iso"] = ToUtcIso(now.AddDays(10)),
+            ["futureDay15Iso"] = ToUtcIso(now.AddDays(15))
         };
 
         try
@@ -92,6 +104,10 @@ public sealed class RunnerEngine : IDisposable
         var method = step.Request.Method ?? throw new InvalidDataException($"Thiếu phương thức HTTP cho bước: {step.Name}");
         var path = Templates.Resolve(step.Request.Path ?? throw new InvalidDataException($"Thiếu đường dẫn HTTP cho bước: {step.Name}"), variables, env);
         var payload = step.Request.Body is { } body ? Templates.Resolve(body.GetRawText(), variables, env) : null;
+        var form = step.Request.Form?.ToDictionary(
+            item => item.Key,
+            item => Templates.Resolve(item.Value, variables, env));
+        var reportPayload = payload ?? (form is null ? null : JsonSerializer.Serialize(form));
         var expectedText = assertions ? DescribeExpected(step.Expect, variables) : "Bước dọn dữ liệu: không đối chiếu kết quả";
         int? actualStatus = null;
         string? responseText = null;
@@ -111,8 +127,17 @@ public sealed class RunnerEngine : IDisposable
                 request.Headers.Authorization = new AuthenticationHeaderValue(project.Authentication?.Prefix ?? "Bearer", requestToken);
             foreach (var header in step.Request.Headers ?? [])
                 request.Headers.TryAddWithoutValidation(header.Key, Templates.Resolve(header.Value, variables, env));
+            if (payload is not null && form is not null)
+                throw new InvalidDataException($"Bước '{step.Name}' không thể gửi đồng thời body JSON và form.");
             if (payload is not null)
                 request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
+            else if (form is not null)
+            {
+                var formContent = new MultipartFormDataContent();
+                foreach (var item in form)
+                    formContent.Add(new StringContent(item.Value), item.Key);
+                request.Content = formContent;
+            }
 
             using var response = await http.SendAsync(request, cancellationToken);
             actualStatus = (int)response.StatusCode;
@@ -130,12 +155,12 @@ public sealed class RunnerEngine : IDisposable
                     throw new InvalidOperationException($"Thời gian phản hồi vượt quá giới hạn {max} ms.");
                 AssertAndSave(step, expected, responseText, variables);
             }
-            results.Add(new(step.Name, cleanup, true, method, path, SanitizeJson(payload), expectedText, actualStatus, SanitizeJson(responseText), watch.Elapsed, null));
+            results.Add(new(step.Name, cleanup, true, method, path, SanitizeJson(reportPayload), expectedText, actualStatus, SanitizeJson(responseText), watch.Elapsed, null));
         }
         catch (Exception exception)
         {
             var error = Redact(exception.Message);
-            results.Add(new(step.Name, cleanup, false, method, path, SanitizeJson(payload), expectedText, actualStatus, SanitizeJson(responseText), watch.Elapsed, error));
+            results.Add(new(step.Name, cleanup, false, method, path, SanitizeJson(reportPayload), expectedText, actualStatus, SanitizeJson(responseText), watch.Elapsed, error));
             throw;
         }
     }
@@ -160,6 +185,9 @@ public sealed class RunnerEngine : IDisposable
             variables[saved.Key] = JsonPath.Text(selected.Value);
         }
     }
+
+    private static string ToUtcIso(DateTimeOffset value)
+        => value.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'");
 
     private async Task RunStepWithRetryAsync(StepSpec step, Dictionary<string, string> variables, CancellationToken cancellationToken, List<StepRunResult> results)
     {
@@ -319,6 +347,8 @@ public sealed class RunnerEngine : IDisposable
             }
             if (step.Request.Body is { } body)
                 Templates.Resolve(body.GetRawText(), variables, env);
+            foreach (var formItem in step.Request.Form ?? [])
+                Templates.Resolve(formItem.Value, variables, env);
             foreach (var header in step.Request.Headers ?? [])
                 Templates.Resolve(header.Value, variables, env);
             return true;

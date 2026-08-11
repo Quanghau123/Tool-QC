@@ -1,4 +1,4 @@
 {
   "project": "replace-me",
-  "cases": [{ "id": "health.ready", "name": "API readiness", "tags": ["smoke"], "destructive": false, "steps": [{ "name": "Health", "request": { "method": "GET", "path": "/health" }, "expect": { "status": 200 } }] }]
+  "cases": [{ "id": "health.ready", "name": "Kiểm tra API đã sẵn sàng hoạt động", "tags": ["smoke"], "destructive": false, "steps": [{ "name": "Gọi endpoint kiểm tra trạng thái sẵn sàng", "request": { "method": "GET", "path": "/health" }, "expect": { "status": 200 } }] }]
 }

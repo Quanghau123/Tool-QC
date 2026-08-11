@@ -76,6 +76,8 @@ copy. Do not modify `project-template` with business-specific examples.
 - The `name` of every test case and test step, including cleanup steps, must be written in clear, natural Vietnamese so Vietnamese users can immediately understand what is being tested. This rule applies to descriptive `name` fields in the test specification, not to business-data fields named `name` inside request bodies or expected API data.
 - Whenever a test case creates a local test account, device, or other test fixture that requires a password, the password must be exactly `Admin@123`, and `confirmPassword` must use the same value. This fixed value is test data only; never use it for production credentials, real users, environment secrets, or authentication configuration.
 - A case owns its data. Use `${unique}` to avoid collisions.
+- Use `${nowIso}`, `${futureStartIso}`, and `${futureEndIso}` when a test fixture needs ISO 8601 event times.
+- Use the `${futureDay*Iso}` variables exposed by the runner for deterministic relative-day schedule tests.
 - Save response values with JSON paths and reuse them in later steps.
 - Add cleanup for created data whenever the API supports cleanup.
 - Cleanup must be safe to run after a partially failed case.
@@ -198,7 +200,7 @@ After project/test-case-only changes:
 
 ## Current capability boundary
 
-The shared runner currently supports HTTP and MQTT cases, variable interpolation,
+The shared runner currently supports HTTP JSON, multipart form, and MQTT cases, variable interpolation,
 simple object-property JSON paths, chained values, static-token/login and saved-token
 authentication, per-step dynamic MQTT credentials, bounded step retries, cleanup,
 tag filtering, response assertions, secret redaction, and safety guards.
