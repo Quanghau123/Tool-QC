@@ -200,13 +200,13 @@ After project/test-case-only changes:
 
 ## Current capability boundary
 
-The shared runner currently supports HTTP JSON, multipart form, and MQTT cases, variable interpolation,
+The shared runner currently supports HTTP JSON, multipart form, concurrent HTTP requests per step, PostgreSQL fixture commands, and MQTT cases, variable interpolation,
 simple object-property JSON paths, chained values, static-token/login and saved-token
 authentication, per-step dynamic MQTT credentials, bounded step retries, cleanup,
 tag filtering, response assertions, secret redaction, and safety guards.
 
-PostgreSQL/Redis assertions, full JSON Schema validation, HTML/JUnit reporting,
-parallel scheduling, and CI templates are not yet implemented. Do not claim they
+PostgreSQL assertions/Redis assertions, full JSON Schema validation, HTML/JUnit reporting,
+parallel case scheduling, and CI templates are not yet implemented. Do not claim they
 exist. When implementing them, keep provider behavior configurable and reusable,
 and add verification for the shared engine before advertising the capability.
 

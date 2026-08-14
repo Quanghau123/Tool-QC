@@ -84,6 +84,28 @@ Chạy test kết nối, publish, subscribe và kiểm tra nội dung MQTT:
 dotnet run --project runner/AutoTest.Runner -- --project ops-service --tags mqtt
 ```
 
+Chạy toàn bộ App đổi quà:
+
+```powershell
+dotnet run --project runner/AutoTest.Runner -- --project ops-service --tags redemptions
+```
+
+Chạy riêng luồng đổi quà tuần tự cho một người:
+
+```powershell
+dotnet run --project runner/AutoTest.Runner -- --project ops-service --tags redemption-single
+```
+
+Chạy App đổi quà, bao gồm hai bước tải đồng thời 100 request:
+
+```powershell
+dotnet run --project runner/AutoTest.Runner -- --project ops-service --tags redemptions
+```
+
+Kịch bản tự đăng nhập quản trị, tạo sự kiện, quầy, thiết bị có `functionTypes: [2]`,
+quà, đăng ký và RFID. Điểm của khách được cấp trực tiếp trong PostgreSQL bằng
+`DB_CONNECTION_STRING`, sau đó kịch bản tự đăng nhập thiết bị và chạy luồng đổi quà.
+
 MQTT test đọc `MQTT_HOST`, `MQTT_PORT`, `MQTT_PREFIX`, `MQTT_USERNAME`,
 `MQTT_PASSWORD`, `MQTT_CLIENT_ID` và `MQTT_TIMEOUT_MS` từ `.env`. Topic tương đối
 trong test case được tự động ghép với `MQTT_PREFIX`. Kịch bản có thể ghi đè
@@ -223,6 +245,19 @@ Một bước HTTP có thể dùng token đã lưu từ bước đăng nhập tr
   "request": { "method": "GET", "path": "/api/Devices/me/mqtt-account" },
   "expect": { "status": 200 },
   "save": { "mqttUsername": "$.data.username" }
+}
+```
+
+Để kiểm tra nhiều request HTTP đồng thời, đặt `parallelRequests` ở cấp bước. Mỗi
+request được đối chiếu độc lập với cùng cấu hình `expect`; bước song song không hỗ
+trợ `save` hoặc `retry`. Ví dụ tải đồng thời 100 request:
+
+```json
+{
+  "name": "Gửi đồng thời 100 yêu cầu xác nhận",
+  "parallelRequests": 100,
+  "request": { "method": "POST", "path": "/api/items/${itemId}/confirm" },
+  "expect": { "status": 200 }
 }
 ```
 

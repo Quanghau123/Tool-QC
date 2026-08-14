@@ -13,8 +13,22 @@
       },
       "steps": [
         {
+          "name": "Đăng nhập quản trị để chuẩn bị dữ liệu kiểm thử MQTT",
+          "request": {
+            "method": "POST",
+            "path": "/api/Users/Auth",
+            "body": {
+              "username": "${env:AUTH_USERNAME}",
+              "password": "${env:AUTH_PASSWORD}"
+            }
+          },
+          "expect": { "status": 200, "json": { "$.data.accessToken": { "exists": true } } },
+          "save": { "adminToken": "$.data.accessToken" }
+        },
+        {
           "name": "Tạo sự kiện chứa thiết bị kiểm thử MQTT",
           "auth": "admin",
+          "authToken": "${adminToken}",
           "request": {
             "method": "POST",
             "path": "/api/Events",
@@ -26,6 +40,7 @@
         {
           "name": "Tạo thiết bị để kiểm tra trạng thái kết nối",
           "auth": "admin",
+          "authToken": "${adminToken}",
           "request": {
             "method": "POST",
             "path": "/api/Devices",
@@ -51,7 +66,7 @@
           "name": "Đăng nhập bằng tài khoản thiết bị",
           "request": {
             "method": "POST",
-            "path": "/api/Devices/Auth",
+            "path": "/api/OnsiteOperations/Auth",
             "body": { "code": "${deviceCode}", "password": "${password}" }
           },
           "expect": {
@@ -64,7 +79,7 @@
           "name": "Lấy tài khoản MQTT dành riêng cho thiết bị",
           "auth": "device",
           "authToken": "${deviceAccessToken}",
-          "request": { "method": "GET", "path": "/api/Devices/me/mqtt-account" },
+          "request": { "method": "GET", "path": "/api/OnsiteOperations/me/mqtt-account" },
           "expect": {
             "status": 200,
             "json": {
@@ -99,6 +114,7 @@
         {
           "name": "Chờ API ghi nhận thiết bị đang kết nối",
           "auth": "admin",
+          "authToken": "${adminToken}",
           "request": { "method": "GET", "path": "/api/Devices/${deviceId}" },
           "expect": {
             "status": 200,
@@ -125,6 +141,7 @@
         {
           "name": "Chờ API ghi nhận thiết bị đã ngắt kết nối",
           "auth": "admin",
+          "authToken": "${adminToken}",
           "request": { "method": "GET", "path": "/api/Devices/${deviceId}" },
           "expect": {
             "status": 200,
@@ -137,6 +154,7 @@
         {
           "name": "Chuyển thiết bị MQTT sang trạng thái ngừng sử dụng",
           "auth": "admin",
+          "authToken": "${adminToken}",
           "request": {
             "method": "PUT",
             "path": "/api/Devices/${deviceId}",
@@ -146,6 +164,7 @@
         {
           "name": "Xóa thiết bị dùng để kiểm thử MQTT",
           "auth": "admin",
+          "authToken": "${adminToken}",
           "request": {
             "method": "POST",
             "path": "/api/Devices/DeleteMany",
@@ -155,6 +174,7 @@
         {
           "name": "Xóa sự kiện dùng để kiểm thử MQTT",
           "auth": "admin",
+          "authToken": "${adminToken}",
           "request": {
             "method": "POST",
             "path": "/api/Events/DeleteMany",
@@ -165,3 +185,5 @@
     }
   ]
 }
+
+

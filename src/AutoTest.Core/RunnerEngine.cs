@@ -4,6 +4,8 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Unicode;
+using Npgsql;
+using System.Text.RegularExpressions;
 
 namespace AutoTest.Core;
 
@@ -69,7 +71,7 @@ public sealed class RunnerEngine : IDisposable
                 variables[variable.Key] = Templates.Resolve(variable.Value, variables, env);
             started = true;
             foreach (var step in test.Steps)
-                await RunStepWithRetryAsync(step, variables, cancellationToken, stepResults);
+                await RunConfiguredStepAsync(step, variables, cancellationToken, stepResults);
             return new(test.Id, test.Name, true, watch.Elapsed, null, stepResults);
         }
         catch (Exception exception)
@@ -95,6 +97,11 @@ public sealed class RunnerEngine : IDisposable
 
     private async Task RunStepAsync(StepSpec step, Dictionary<string, string> variables, CancellationToken cancellationToken, List<StepRunResult> results, bool assertions = true, bool cleanup = false)
     {
+        if (step.Request.Database is not null)
+        {
+            await RunDatabaseStepAsync(step, variables, cancellationToken, results, assertions, cleanup);
+            return;
+        }
         if (step.Request.Mqtt is not null)
         {
             await RunMqttStepAsync(step, variables, cancellationToken, results, assertions, cleanup);
@@ -183,6 +190,82 @@ public sealed class RunnerEngine : IDisposable
             var selected = JsonPath.Select(document.RootElement, saved.Value);
             if (!selected.Found) throw new InvalidOperationException($"Không thể lưu biến {saved.Key} từ phản hồi.");
             variables[saved.Key] = JsonPath.Text(selected.Value);
+        }
+    }
+
+    private async Task RunDatabaseStepAsync(StepSpec step, Dictionary<string, string> variables, CancellationToken cancellationToken, List<StepRunResult> results, bool assertions, bool cleanup)
+    {
+        var watch = Stopwatch.StartNew();
+        string commandText = step.Request.Database!.Command;
+        string expectedText = assertions ? "Lệnh PostgreSQL thực thi thành công" : "Bước dọn dữ liệu PostgreSQL";
+        try
+        {
+            var resolvedParameters = (step.Request.Database.Parameters ?? [])
+                .ToDictionary(x => x.Key, x => Templates.Resolve(x.Value, variables, env), StringComparer.OrdinalIgnoreCase);
+            var parameterOrder = new List<string>();
+            commandText = Regex.Replace(commandText, @"@([A-Za-z_][A-Za-z0-9_]*)", match =>
+            {
+                string name = match.Groups[1].Value;
+                if (!resolvedParameters.ContainsKey(name))
+                    throw new InvalidDataException($"Thiếu tham số PostgreSQL: {name}");
+                int index = parameterOrder.FindIndex(x => x.Equals(name, StringComparison.OrdinalIgnoreCase));
+                if (index < 0)
+                {
+                    parameterOrder.Add(name);
+                    index = parameterOrder.Count - 1;
+                }
+                return $"${index + 1}";
+            });
+            await using var connection = new NpgsqlConnection(env.Require("DB_CONNECTION_STRING"));
+            await connection.OpenAsync(cancellationToken);
+            await using var command = new NpgsqlCommand(commandText, connection);
+            foreach (string parameterName in parameterOrder)
+                command.Parameters.Add(new NpgsqlParameter { Value = resolvedParameters[parameterName] });
+            int affectedRows = await command.ExecuteNonQueryAsync(cancellationToken);
+            results.Add(new(step.Name, cleanup, true, "POSTGRESQL", "database", null, expectedText, null, $"Số dòng ảnh hưởng: {affectedRows}", watch.Elapsed, null));
+        }
+        catch (Exception exception)
+        {
+            string error = Redact(exception.Message);
+            results.Add(new(step.Name, cleanup, false, "POSTGRESQL", "database", null, expectedText, null, null, watch.Elapsed, error));
+            throw;
+        }
+    }
+
+    private async Task RunConfiguredStepAsync(StepSpec step, Dictionary<string, string> variables, CancellationToken cancellationToken, List<StepRunResult> results)
+    {
+        int parallelRequests = step.ParallelRequests ?? 1;
+        if (parallelRequests < 1 || parallelRequests > 1000)
+            throw new InvalidDataException($"Số request đồng thời của bước '{step.Name}' phải từ 1 đến 1000.");
+        if (parallelRequests == 1)
+        {
+            await RunStepWithRetryAsync(step, variables, cancellationToken, results);
+            return;
+        }
+        if (step.Save is not null)
+            throw new InvalidDataException($"Bước '{step.Name}' không thể vừa gửi song song vừa lưu biến từ phản hồi.");
+        if (step.Retry is not null)
+            throw new InvalidDataException($"Bước '{step.Name}' không thể dùng đồng thời retry và parallelRequests.");
+        if (step.Request.Mqtt is not null)
+            throw new InvalidDataException($"Bước '{step.Name}' chỉ hỗ trợ parallelRequests cho HTTP.");
+        if (step.Request.Database is not null)
+            throw new InvalidDataException($"Bước '{step.Name}' không hỗ trợ parallelRequests cho PostgreSQL.");
+
+        var attempts = Enumerable.Range(1, parallelRequests).Select(async attempt =>
+        {
+            var attemptResults = new List<StepRunResult>();
+            await RunStepAsync(step with { Name = $"{step.Name} (request {attempt}/{parallelRequests})", ParallelRequests = null }, new Dictionary<string, string>(variables, StringComparer.OrdinalIgnoreCase), cancellationToken, attemptResults);
+            return attemptResults.Single();
+        }).ToArray();
+        try
+        {
+            results.AddRange(await Task.WhenAll(attempts));
+        }
+        catch
+        {
+            foreach (var attempt in attempts.Where(x => x.IsCompletedSuccessfully))
+                results.Add(attempt.Result);
+            throw;
         }
     }
 
@@ -345,6 +428,8 @@ public sealed class RunnerEngine : IDisposable
                 if (mqttRequest.Password is { } password) Templates.Resolve(password, variables, env);
                 if (mqttRequest.ClientId is { } clientId) Templates.Resolve(clientId, variables, env);
             }
+            if (step.Request.Database is { } databaseRequest)
+                foreach (var parameter in databaseRequest.Parameters ?? []) Templates.Resolve(parameter.Value, variables, env);
             if (step.Request.Body is { } body)
                 Templates.Resolve(body.GetRawText(), variables, env);
             foreach (var formItem in step.Request.Form ?? [])
