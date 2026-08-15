@@ -172,6 +172,37 @@ If `--project` or `--tags` is omitted, the runner uses `ACTIVE_PROJECT` and
 
 ## Verification requirements
 
+### Tests against a changing service
+
+When an existing test case was written for an older version of the selected
+service, never repair it from names or behavior remembered from an earlier run.
+Before editing the test:
+
+1. Read the latest controller routes, request/response DTOs, entities, EF model
+   snapshot, and the service methods that implement the behavior in the current
+   service source tree.
+2. Treat API response fields and database tables/columns as versioned contracts.
+   Confirm their current names from source; do not infer them from an old HTML
+   report or an old test case.
+3. Run the smallest applicable tag against the available local service and use
+   the actual response body/report to correct the next mismatch. A successful
+   HTTP status does not prove a saved JSON path still exists.
+4. Continue the inspect-edit-run loop until the requested tag passes, or report
+   the concrete environment blocker. Do not tell the user a migrated test is
+   ready based on JSON parsing or a successful runner build alone.
+5. After changing shared database-command handling, verify it with a real
+   parameterized PostgreSQL step. In particular, do not place Npgsql parameters
+   inside PostgreSQL dollar-quoted blocks (`DO $$ ... $$`) and do not send
+   multiple parameterized SQL commands as one prepared statement. Prefer one
+   parameterized statement, using CTEs when several mutations must be atomic.
+
+For the current ops-service redemption design, always re-check the source before
+use. As of 2026-08-15 it uses `cartId` in the Scan response and persists data in
+`redemption_cart`, `redemption_cart_gift`, and `redemption_history`; the older
+`redemption_session`, `redemption_session_line`, `redemption`, `redemption_line`,
+`Stage`, and `ExchangedQuantity` contracts are obsolete. This note is a warning
+against stale assumptions, not a substitute for checking the latest source.
+
 After framework changes:
 
 1. Build `runner/AutoTest.Runner/AutoTest.Runner.csproj` with zero errors.
@@ -200,7 +231,7 @@ After project/test-case-only changes:
 
 ## Current capability boundary
 
-The shared runner currently supports HTTP JSON, multipart form, concurrent HTTP requests per step, PostgreSQL fixture commands, and MQTT cases, variable interpolation,
+The shared runner currently supports HTTP JSON, multipart form, concurrent HTTP requests per step, PostgreSQL fixture commands, and MQTT cases including real broker Last Will verification, variable interpolation,
 simple object-property JSON paths, chained values, static-token/login and saved-token
 authentication, per-step dynamic MQTT credentials, bounded step retries, cleanup,
 tag filtering, response assertions, secret redaction, and safety guards.

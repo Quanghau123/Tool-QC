@@ -320,6 +320,8 @@ public sealed class RunnerEngine : IDisposable
         string? actual = null;
         try
         {
+            if (timeoutMs <= 0) throw new InvalidOperationException("MQTT timeoutMs phải lớn hơn 0.");
+            if (qos is < 0 or > 2) throw new InvalidOperationException("MQTT QoS chỉ hỗ trợ các giá trị 0, 1 hoặc 2.");
             MqttReceivedMessage? received;
             switch (action)
             {
@@ -336,6 +338,37 @@ public sealed class RunnerEngine : IDisposable
                     break;
                 case "roundtrip":
                     received = await mqtt.RoundtripAsync(topic, payload, qos, retain, TimeSpan.FromMilliseconds(timeoutMs), username, password, clientId, cancellationToken);
+                    break;
+                case "lastwill":
+                    if (request.Will is null) throw new InvalidOperationException("Thao tác MQTT lastwill yêu cầu object will.");
+                    topic = ResolveMqttTopic(request.Will.Topic, variables);
+                    if (topic.Length == 0) throw new InvalidOperationException("MQTT will.topic không được để trống.");
+                    qos = request.Will.Qos ?? 1;
+                    if (qos is < 0 or > 2) throw new InvalidOperationException("MQTT will.qos chỉ hỗ trợ các giá trị 0, 1 hoặc 2.");
+                    payload = Templates.Resolve(request.Will.Payload ?? string.Empty, variables, env);
+                    retain = request.Will.Retain ?? false;
+                    received = await mqtt.LastWillAsync(
+                        topic,
+                        payload,
+                        qos,
+                        retain,
+                        TimeSpan.FromMilliseconds(timeoutMs),
+                        username,
+                        password,
+                        clientId,
+                        (stageName, stageActual) => results.Add(new(
+                            stageName,
+                            cleanup,
+                            true,
+                            "MQTT LASTWILL",
+                            topic,
+                            null,
+                            "Giai đoạn phải hoàn thành thành công",
+                            null,
+                            stageActual,
+                            watch.Elapsed,
+                            null)),
+                        cancellationToken);
                     break;
                 default:
                     throw new InvalidOperationException($"Không hỗ trợ thao tác MQTT: {request.Action}");
@@ -427,6 +460,8 @@ public sealed class RunnerEngine : IDisposable
                 if (mqttRequest.Username is { } username) Templates.Resolve(username, variables, env);
                 if (mqttRequest.Password is { } password) Templates.Resolve(password, variables, env);
                 if (mqttRequest.ClientId is { } clientId) Templates.Resolve(clientId, variables, env);
+                if (mqttRequest.Will?.Topic is { } willTopic) Templates.Resolve(willTopic, variables, env);
+                if (mqttRequest.Will?.Payload is { } willPayload) Templates.Resolve(willPayload, variables, env);
             }
             if (step.Request.Database is { } databaseRequest)
                 foreach (var parameter in databaseRequest.Parameters ?? []) Templates.Resolve(parameter.Value, variables, env);

@@ -32,7 +32,7 @@
           "request": {
             "method": "POST",
             "path": "/api/Events",
-            "body": { "code": "${eventCode}", "name": "Sự kiện kiểm thử MQTT ${unique}" }
+            "body": { "code": "${eventCode}", "name": "Sự kiện kiểm thử MQTT ${unique}", "startAt": "${futureStartIso}", "endAt": "${futureEndIso}" }
           },
           "expect": { "status": 200, "json": { "$.data.id": { "exists": true } } },
           "save": { "eventId": "$.data.id" }
@@ -150,7 +150,7 @@
           "retry": { "timeoutMs": 10000, "intervalMs": 500 }
         }
       ],
-      "cleanup": [
+      "preservedCleanup": [
         {
           "name": "Chuyển thiết bị MQTT sang trạng thái ngừng sử dụng",
           "auth": "admin",

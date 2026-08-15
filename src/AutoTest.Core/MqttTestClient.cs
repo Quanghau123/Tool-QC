@@ -102,6 +102,102 @@ internal sealed class MqttTestClient : IAsyncDisposable
         }
     }
 
+    public async Task<MqttReceivedMessage> LastWillAsync(
+        string topic,
+        string payload,
+        int qos,
+        bool retain,
+        TimeSpan timeout,
+        string? username,
+        string? password,
+        string? clientId,
+        Action<string, string> reportStage,
+        CancellationToken cancellationToken)
+    {
+        IMqttClient? observer = null;
+        IMqttClient? device = null;
+        try
+        {
+            var factory = new MqttFactory();
+            observer = factory.CreateMqttClient();
+            device = factory.CreateMqttClient();
+            var received = new TaskCompletionSource<MqttReceivedMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+            observer.ApplicationMessageReceivedAsync += args =>
+            {
+                received.TrySetResult(new(args.ApplicationMessage.Topic, args.ApplicationMessage.ConvertPayloadToString()));
+                return Task.CompletedTask;
+            };
+            string observerClientId = environment.Get("MQTT_CLIENT_ID") ?? "tool-qc";
+            var observerOptions = new MqttClientOptionsBuilder()
+                .WithClientId(observerClientId)
+                .WithTcpServer(environment.Require("MQTT_HOST"), environment.Int("MQTT_PORT", 1883))
+                .WithCredentials(environment.Get("MQTT_USERNAME"), environment.Get("MQTT_PASSWORD"))
+                .WithCleanSession()
+                .Build();
+            try
+            {
+                await observer.ConnectAsync(observerOptions, cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                throw new InvalidOperationException(
+                    "Client quan sát MQTT không thể kết nối. Hãy kiểm tra MQTT_USERNAME, MQTT_PASSWORD và MQTT_CLIENT_ID của tài khoản có quyền subscribe.",
+                    exception);
+            }
+            await observer.SubscribeAsync(new MqttClientSubscribeOptionsBuilder()
+                .WithTopicFilter(filter => filter.WithTopic(topic).WithQualityOfServiceLevel(ToQos(qos)))
+                .Build(), cancellationToken);
+            reportStage(
+                "Client quan sát kết nối và đăng ký nhận topic Last Will",
+                $"Đã subscribe topic {topic} với QoS {qos}.");
+
+            username ??= environment.Get("MQTT_USERNAME");
+            password ??= environment.Get("MQTT_PASSWORD");
+            clientId ??= environment.Get("MQTT_CLIENT_ID") ?? "tool-qc";
+            var deviceOptions = new MqttClientOptionsBuilder()
+                .WithClientId(clientId)
+                .WithTcpServer(environment.Require("MQTT_HOST"), environment.Int("MQTT_PORT", 1883))
+                .WithCredentials(username, password)
+                .WithCleanSession()
+                .WithWillTopic(topic)
+                .WithWillPayload(payload)
+                .WithWillQualityOfServiceLevel(ToQos(qos))
+                .WithWillRetain(retain)
+                .Build();
+            try
+            {
+                await device.ConnectAsync(deviceOptions, cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                throw new InvalidOperationException(
+                    "Client thiết bị MQTT không thể kết nối bằng tài khoản động được cung cấp cho action lastwill.",
+                    exception);
+            }
+            reportStage(
+                "Thiết bị CONNECT và đăng ký Last Will với broker",
+                $"Broker đã chấp nhận CONNECT kèm Will; QoS {qos}, retain {retain.ToString().ToLowerInvariant()}.");
+            device.Dispose();
+            device = null;
+            reportStage(
+                "Đóng kết nối thiết bị bất thường mà không gửi DISCONNECT",
+                "Transport của client thiết bị đã bị đóng trực tiếp; không gọi MQTT DisconnectAsync.");
+            return await received.Task.WaitAsync(timeout, cancellationToken);
+        }
+        finally
+        {
+            if (device is not null) device.Dispose();
+            if (observer is not null)
+            {
+                if (observer.IsConnected)
+                {
+                    try { await observer.DisconnectAsync(cancellationToken: CancellationToken.None); } catch { }
+                }
+                observer.Dispose();
+            }
+        }
+    }
+
     private static MqttQualityOfServiceLevel ToQos(int qos) => qos switch
     {
         0 => MqttQualityOfServiceLevel.AtMostOnce,

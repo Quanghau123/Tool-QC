@@ -10,7 +10,8 @@ public sealed record StepSpec(string Name,string? Auth,string? AuthToken,Request
 public sealed record RetrySpec(int? TimeoutMs,int? IntervalMs);
 public sealed record RequestSpec(string? Method,string? Path,JsonElement? Body,Dictionary<string,string>? Form,Dictionary<string,string>? Headers,MqttRequestSpec? Mqtt,DatabaseRequestSpec? Database);
 public sealed record DatabaseRequestSpec(string Command,Dictionary<string,string>? Parameters);
-public sealed record MqttRequestSpec(string Action,string? Topic,string? Payload,int? Qos,bool? Retain,int? TimeoutMs,string? Username,string? Password,string? ClientId);
+public sealed record MqttRequestSpec(string Action,string? Topic,string? Payload,int? Qos,bool? Retain,int? TimeoutMs,string? Username,string? Password,string? ClientId,MqttWillSpec? Will);
+public sealed record MqttWillSpec(string? Topic,string? Payload,int? Qos,bool? Retain);
 public sealed record ExpectSpec(int? Status,int? MaxResponseTimeMs,Dictionary<string,AssertionSpec>? Json,MqttExpectSpec? Mqtt);
 public sealed record MqttExpectSpec(string? Topic,string? Payload,string? PayloadContains);
 public sealed class AssertionSpec

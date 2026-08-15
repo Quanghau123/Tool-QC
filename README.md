@@ -112,6 +112,39 @@ trong test case được tự động ghép với `MQTT_PREFIX`. Kịch bản c�
 `username`, `password`, `clientId` ngay trong bước MQTT bằng biến đã lưu từ API;
 nhờ đó mỗi thiết bị có thể dùng đúng tài khoản MQTT động do dịch vụ cấp.
 
+MQTT hỗ trợ các action `connect`, `publish`, `subscribe`, `roundtrip` và
+`lastwill`. Action `lastwill` tạo một client quan sát subscribe trước, kết nối
+client thiết bị với Will trong gói CONNECT, rồi cố ý đóng client thiết bị mà
+không gửi MQTT DISCONNECT. Broker phải phát Will thật; graceful disconnect sẽ
+không phát Will. Topic tương đối trong `will.topic` vẫn được ghép `MQTT_PREFIX`.
+
+```json
+{
+  "name": "Broker phát trạng thái ngắt kết nối bằng Last Will",
+  "request": {
+    "mqtt": {
+      "action": "lastwill",
+      "timeoutMs": 15000,
+      "username": "${mqttUsername}",
+      "password": "${mqttPassword}",
+      "clientId": "${mqttClientId}",
+      "will": {
+        "topic": "device/${deviceId}/status/update",
+        "payload": "{\"connectionStatus\":2,\"connectSessionId\":${timestampMs}}",
+        "qos": 1,
+        "retain": true
+      }
+    }
+  },
+  "expect": {
+    "mqtt": {
+      "topic": "device/${deviceId}/status/update",
+      "payload": "{\"connectionStatus\":2,\"connectSessionId\":${timestampMs}}"
+    }
+  }
+}
+```
+
 ### Chạy toàn bộ integration test
 
 Lệnh dưới đây chạy tất cả test có tag `integration` của dự án, bao gồm Event,

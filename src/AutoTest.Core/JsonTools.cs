@@ -7,6 +7,6 @@ public static partial class Templates
 }
 public static class JsonPath
 {
- public static (bool Found,JsonElement Value) Select(JsonElement root,string path){if(path=="$")return(true,root);if(!path.StartsWith("$.",StringComparison.Ordinal))throw new InvalidOperationException($"Unsupported JSON path: {path}");var current=root;foreach(var part in path[2..].Split('.'))if(current.ValueKind!=JsonValueKind.Object||!current.TryGetProperty(part,out current))return(false,default);return(true,current);}
+public static (bool Found,JsonElement Value) Select(JsonElement root,string path){if(path=="$")return(true,root);if(!path.StartsWith("$.",StringComparison.Ordinal))throw new InvalidOperationException($"Unsupported JSON path: {path}");var current=root;foreach(var part in path[2..].Split('.')){if(current.ValueKind==JsonValueKind.Object&&current.TryGetProperty(part,out current))continue;if(current.ValueKind==JsonValueKind.Array&&int.TryParse(part,out var index)&&index>=0&&index<current.GetArrayLength()){current=current[index];continue;}return(false,default);}return(true,current);}
  public static string Text(JsonElement v)=>v.ValueKind==JsonValueKind.String?v.GetString()!:v.GetRawText();
 }
