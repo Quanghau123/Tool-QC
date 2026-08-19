@@ -53,6 +53,12 @@ Build runner trước khi chạy:
 dotnet build runner/AutoTest.Runner/AutoTest.Runner.csproj
 ```
 
+Khi agent tạo hoặc sửa testcase, agent phải tự chạy tag nhỏ nhất, đọc report,
+phân loại lỗi và tự sửa/chạy lại nếu nguyên nhân nằm ở testcase, fixture hoặc
+shared framework. Vòng lặp chỉ dừng để báo người dùng khi đã xác nhận lỗi backend
+hoặc gặp blocker môi trường/quyền cần người dùng xử lý. Agent không được thay đổi
+expected chỉ để ép testcase thành công.
+
 ### Chạy smoke test
 
 Smoke test kiểm tra API và các dependency đã sẵn sàng, không thay đổi dữ liệu và

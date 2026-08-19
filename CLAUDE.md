@@ -196,6 +196,57 @@ Before editing the test:
    multiple parameterized SQL commands as one prepared statement. Prefer one
    parameterized statement, using CTEs when several mutations must be atomic.
 
+### Autonomous test authoring and rerun loop
+
+When asked to create, migrate, or repair testcases, completing the JSON or C#
+change is not the end of the task. The agent must own the complete verification
+loop instead of asking the user to run each intermediate version manually:
+
+1. Inspect the current backend source and the closest existing testcase before
+   writing or changing the testcase.
+2. Parse all affected JSON and build the runner.
+3. Announce the project, hostname, environment, selected tags, and destructive
+   status, then run the smallest affected tag.
+4. Inspect the complete console output and HTML report after every failed run.
+5. Classify each failure before changing anything:
+   - `TEST_SCRIPT_ERROR`: wrong route, method, payload, saved JSON path,
+     assertion, stale enum, SQL, fixture, or cleanup. Correct the testcase or
+     reusable framework and rerun automatically.
+   - `TEST_DATA_ERROR`: incomplete, invalid, conflicting, or expired fixture.
+     Correct the fixture and rerun automatically.
+   - `ENVIRONMENT_BLOCKER`: API/broker/database unavailable, missing safe
+     configuration, or execution permission denied. Perform safe diagnostics,
+     then request the exact permission or environment action required.
+   - `BACKEND_BUG`: the request and fixture match the current source contract,
+     but actual behavior violates the stated business rule or corrupts/leaks
+     data. Stop that affected scenario and report reproducible evidence so the
+     backend can be fixed.
+6. Continue the inspect-edit-run loop for test/framework/data errors until the
+   affected tag passes. Do not hand an unverified testcase to the user merely
+   because it builds or parses.
+7. After a fix, rerun related regression tags when the change can affect shared
+   setup, authentication, cleanup, mappings, or framework execution.
+
+Never change an expected status, message, response field, or business assertion
+only to match an unexpected response. Such a change is allowed only after the
+current backend source or an explicit approved business rule proves the testcase
+was stale. Never modify production backend code as part of this loop unless the
+user separately asks for a backend change.
+
+If tool execution is blocked by sandbox or network permissions, request approval
+for the narrowly scoped test command immediately and resume the same loop after
+approval. If destructive tests are blocked and the user has explicitly confirmed
+an isolated local/test environment, provide this PowerShell form (with the actual
+project and tags substituted) so authorization applies only to that process:
+
+```powershell
+$env:ALLOW_DESTRUCTIVE_TESTS='true'
+dotnet run --project runner/AutoTest.Runner -- --project <project> --tags <tags>
+```
+
+Do not set `ALLOW_PRODUCTION=true`, expose secrets, silently bypass permission
+checks, or classify connection refusal as a backend business bug.
+
 For the current ops-service redemption design, always re-check the source before
 use. As of 2026-08-15 it uses `cartId` in the Scan response and persists data in
 `redemption_cart`, `redemption_cart_gift`, and `redemption_history`; the older
