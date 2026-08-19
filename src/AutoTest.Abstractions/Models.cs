@@ -1,6 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-namespace AutoTest.Core;
+namespace AutoTest.Abstractions;
 public sealed record ProjectSpec(string Name,string BaseUrlVariable,Dictionary<string,string>? DefaultHeaders,AuthSpec? Authentication,SafetySpec? Safety);
 public sealed record AuthSpec(string Strategy,string? LoginPath,string? Method,JsonElement? Body,string? TokenPath,string? Header,string? Prefix);
 public sealed record SafetySpec(string[]? ProductionHosts);
@@ -16,24 +16,6 @@ public sealed record MqttWillSpec(string? Topic,string? Payload,int? Qos,bool? R
 public sealed record ExpectSpec(int? Status,int[]? StatusOneOf,int? MaxResponseTimeMs,Dictionary<string,AssertionSpec>? Json,MqttExpectSpec? Mqtt,DatabaseExpectSpec? Database);
 public sealed record MqttExpectSpec(string? Topic,string? Payload,string? PayloadContains);
 public sealed record DatabaseExpectSpec(string? ScalarEquals);
-public sealed class AssertionSpec
-{
- [JsonPropertyName("equals")]
- public JsonElement? ExpectedValue { get; init; }
- public bool? Exists { get; init; }
- public string? Type { get; init; }
- public string? Contains { get; init; }
-}
-public sealed record StepRunResult(
- string Name,
- bool Cleanup,
- bool Passed,
- string Method,
- string Path,
- string? Payload,
- string Expected,
- int? ActualStatus,
- string? ActualResponse,
- TimeSpan Duration,
- string? Error);
+public sealed class AssertionSpec { [JsonPropertyName("equals")] public JsonElement? ExpectedValue { get; init; } public bool? Exists { get; init; } public string? Type { get; init; } public string? Contains { get; init; } }
+public sealed record StepRunResult(string Name,bool Cleanup,bool Passed,string Method,string Path,string? Payload,string Expected,int? ActualStatus,string? ActualResponse,TimeSpan Duration,string? Error);
 public sealed record RunResult(string Id,string Name,bool Passed,TimeSpan Duration,string? Error,IReadOnlyList<StepRunResult> Steps);

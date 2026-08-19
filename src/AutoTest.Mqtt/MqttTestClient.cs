@@ -1,20 +1,21 @@
+using AutoTest.Abstractions;
 using MQTTnet;
 using MQTTnet.Client;
 using MQTTnet.Protocol;
 
-namespace AutoTest.Core;
+namespace AutoTest.Mqtt;
 
 internal sealed record MqttReceivedMessage(string Topic, string Payload);
 
 internal sealed class MqttTestClient : IAsyncDisposable
 {
-    private readonly EnvironmentStore environment;
+    private readonly IEnvironmentStore environment;
     private readonly IMqttClient client;
     private readonly SemaphoreSlim connectionLock = new(1, 1);
     private TaskCompletionSource<MqttReceivedMessage>? pendingMessage;
     private string? connectionIdentity;
 
-    public MqttTestClient(EnvironmentStore environment)
+    public MqttTestClient(IEnvironmentStore environment)
     {
         this.environment = environment;
         client = new MqttFactory().CreateMqttClient();
@@ -213,3 +214,4 @@ internal sealed class MqttTestClient : IAsyncDisposable
         connectionLock.Dispose();
     }
 }
+

@@ -1,5 +1,16 @@
 # API Auto Test
 
+## Kiến trúc module
+
+Shared framework được chia theo ranh giới mở rộng: `AutoTest.Abstractions` chứa
+contract chung, `AutoTest.Core` điều phối suite, các project `AutoTest.Http`,
+`AutoTest.PostgreSql`, `AutoTest.Mqtt` sở hữu transport và
+`AutoTest.Reporting.Html` sở hữu báo cáo. Thiết kế dependency và quy tắc thêm tool
+mới được mô tả tại [`docs/architecture.md`](docs/architecture.md).
+
+Dự án mới luôn được thêm tại `projects/<project-name>/`, không thêm business rule
+vào shared framework. Testcase nằm trong `projects/<project-name>/testcases/**/*.json`.
+
 Khung kiểm thử API dùng chung cho nhiều dự án. Cấu hình kết nối tập trung trong `.env`; logic riêng của từng dịch vụ nằm trong `projects/<project-name>`.
 
 ## Cấu hình

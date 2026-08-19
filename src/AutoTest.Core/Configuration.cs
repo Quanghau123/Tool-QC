@@ -1,6 +1,7 @@
 using System.Text.Json;
+using AutoTest.Abstractions;
 namespace AutoTest.Core;
-public sealed class EnvironmentStore
+public sealed class EnvironmentStore : IEnvironmentStore
 {
  private readonly Dictionary<string,string> values=new(StringComparer.OrdinalIgnoreCase);
  public static EnvironmentStore Load(string path){var s=new EnvironmentStore();if(!File.Exists(path))return s;foreach(var raw in File.ReadLines(path)){var line=raw.Trim();if(line.Length==0||line.StartsWith('#'))continue;var i=line.IndexOf('=');if(i>0)s.values[line[..i].Trim()]=line[(i+1)..].Trim().Trim('"');}return s;}
