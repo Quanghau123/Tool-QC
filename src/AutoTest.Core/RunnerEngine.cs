@@ -79,18 +79,8 @@ public sealed class RunnerEngine : IDisposable
         }
         finally
         {
-            if (started)
-                foreach (var step in test.Cleanup ?? [])
-                    try
-                    {
-                        if (!CanResolveCleanupStep(step, variables))
-                        {
-                            Console.Error.WriteLine($"Bỏ qua bước dọn dữ liệu '{step.Name}' vì dữ liệu cần thiết chưa được tạo.");
-                            continue;
-                        }
-                        await RunStepAsync(step, variables, cancellationToken, stepResults, false, true);
-                    }
-                    catch (Exception exception) { Console.Error.WriteLine($"Dọn dữ liệu thất bại cho kịch bản {test.Id}: {Redact(exception.Message)}"); }
+            if (started && test.Cleanup is { Count: > 0 })
+                Console.WriteLine($"[GIỮ DỮ LIỆU] {test.Id}: bỏ qua {test.Cleanup.Count} bước cleanup để phục vụ kiểm tra lại.");
         }
     }
 
@@ -243,39 +233,6 @@ public sealed class RunnerEngine : IDisposable
         var finalResults = new List<StepRunResult>();
         try { await RunStepAsync(step, variables, cancellationToken, finalResults); }
         catch { results.AddRange(finalResults); throw lastException ?? new TimeoutException("Hết thời gian chờ kết quả."); }
-    }
-
-    private bool CanResolveCleanupStep(StepSpec step, IReadOnlyDictionary<string, string> variables)
-    {
-        try
-        {
-            if (step.Request is null) return false;
-            if (step.Request.Path is { } path) ResolveTemplate(path, variables, env);
-            if (step.AuthToken is { } authToken) ResolveTemplate(authToken, variables, env);
-            if (step.Request.Mqtt is { } mqttRequest)
-            {
-                if (mqttRequest.Topic is { } topic) ResolveTemplate(topic, variables, env);
-                if (mqttRequest.Payload is { } mqttPayload) ResolveTemplate(mqttPayload, variables, env);
-                if (mqttRequest.Username is { } username) ResolveTemplate(username, variables, env);
-                if (mqttRequest.Password is { } password) ResolveTemplate(password, variables, env);
-                if (mqttRequest.ClientId is { } clientId) ResolveTemplate(clientId, variables, env);
-                if (mqttRequest.Will?.Topic is { } willTopic) ResolveTemplate(willTopic, variables, env);
-                if (mqttRequest.Will?.Payload is { } willPayload) ResolveTemplate(willPayload, variables, env);
-            }
-            if (step.Request.Database is { } databaseRequest)
-                foreach (var parameter in databaseRequest.Parameters ?? []) ResolveTemplate(parameter.Value, variables, env);
-            if (step.Request.Body is { } body)
-                ResolveTemplate(body.GetRawText(), variables, env);
-            foreach (var formItem in step.Request.Form ?? [])
-                ResolveTemplate(formItem.Value, variables, env);
-            foreach (var header in step.Request.Headers ?? [])
-                ResolveTemplate(header.Value, variables, env);
-            return true;
-        }
-        catch (InvalidOperationException exception) when (exception.Message.StartsWith("Không tìm thấy biến:", StringComparison.Ordinal))
-        {
-            return false;
-        }
     }
 
     private async Task AuthenticateAsync(CancellationToken cancellationToken)

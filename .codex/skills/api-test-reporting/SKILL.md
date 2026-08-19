@@ -22,6 +22,11 @@ description: Run Tool-QC testcases autonomously, inspect HTML reports, classify 
 6. Continue automatically for script/data errors until pass. Run related regression tags
    when shared setup, auth, cleanup, mapping, or framework execution changed.
 
+Do not ask the user to execute intermediate reruns. Repair and rerun autonomously for
+`TEST_SCRIPT_ERROR` and `TEST_DATA_ERROR`. Stop only for a confirmed `BACKEND_BUG` or an
+external permission/environment blocker. Preserve all created fixtures: do not execute
+cleanup and do not delete test data after either passing or failing runs.
+
 If destructive execution is approved for an isolated environment but blocked, provide:
 
 ```powershell

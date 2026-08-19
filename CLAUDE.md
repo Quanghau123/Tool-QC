@@ -83,8 +83,9 @@ copy. Do not modify `project-template` with business-specific examples.
 - Use `${nowIso}`, `${futureStartIso}`, and `${futureEndIso}` when a test fixture needs ISO 8601 event times.
 - Use the `${futureDay*Iso}` variables exposed by the runner for deterministic relative-day schedule tests.
 - Save response values with JSON paths and reuse them in later steps.
-- Add cleanup for created data whenever the API supports cleanup.
-- Cleanup must be safe to run after a partially failed case.
+- Preserve all created test data after every run so the user can inspect APIs and the
+  database. The runner must not execute testcase `cleanup` steps. Existing cleanup
+  declarations may remain as documentation, but must be reported as skipped.
 - Assert response status and all fields material to the behavior; status-only
   checks are acceptable only for health endpoints.
 - Use `maxResponseTimeMs` only when the requirement has a meaningful threshold.
@@ -231,6 +232,12 @@ loop instead of asking the user to run each intermediate version manually:
 7. After a fix, rerun related regression tags when the change can affect shared
    setup, authentication, cleanup, mappings, or framework execution.
 
+This loop is mandatory for every testcase task. Do not stop after a
+`TEST_SCRIPT_ERROR` or `TEST_DATA_ERROR`, and do not ask the user to run the next
+intermediate command manually. Edit and rerun autonomously. Stop only for a
+confirmed `BACKEND_BUG`, an external environment outage, or permission/configuration
+that only the user can provide. After that blocker is resolved, resume the same loop.
+
 Never change an expected status, message, response field, or business assertion
 only to match an unexpected response. Such a change is allowed only after the
 current backend source or an explicit approved business rule proves the testcase
@@ -287,11 +294,11 @@ After project/test-case-only changes:
 ## Current capability boundary
 
 The shared runner currently supports HTTP JSON, multipart form, concurrent HTTP requests per step, PostgreSQL fixture commands, and MQTT cases including real broker Last Will verification, variable interpolation,
-simple object-property JSON paths, chained values, static-token/login and saved-token
+preflight testcase validation, JSON paths with array indexes and wildcards, comparison/count/regex assertions, chained values, static-token/login and saved-token
 authentication, per-step dynamic MQTT credentials, bounded step retries, cleanup,
 tag filtering, response assertions, secret redaction, and safety guards.
 
-PostgreSQL assertions/Redis assertions, full JSON Schema validation, HTML/JUnit reporting,
+Redis assertions, full JSON Schema/OpenAPI validation, JUnit reporting,
 parallel case scheduling, and CI templates are not yet implemented. Do not claim they
 exist. When implementing them, keep provider behavior configurable and reusable,
 and add verification for the shared engine before advertising the capability.

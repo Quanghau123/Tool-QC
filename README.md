@@ -59,6 +59,22 @@ shared framework. Vòng lặp chỉ dừng để báo người dùng khi đã x�
 hoặc gặp blocker môi trường/quyền cần người dùng xử lý. Agent không được thay đổi
 expected chỉ để ép testcase thành công.
 
+Mọi lần chạy đều giữ lại dữ liệu test để người dùng kiểm tra lại qua API hoặc database.
+Runner không thực thi các bước `cleanup`; nếu testcase có khai báo cleanup, console sẽ
+ghi rõ các bước đó đã được bỏ qua. Khi agent gặp lỗi testcase hoặc fixture, agent phải
+tự sửa và tự chạy lại đến khi đạt, không yêu cầu người dùng chạy từng lệnh trung gian.
+Agent chỉ dừng khi xác nhận lỗi backend hoặc gặp blocker quyền/môi trường bên ngoài.
+
+Trước khi gửi request, runner chạy preflight validation để phát hiện ID testcase
+trùng, biến chưa được khai báo, transport/executor mâu thuẫn, thiếu `expect`, cấu
+hình song song không hợp lệ và file tạm như `*.working.json` khi chạy toàn bộ dự
+án. Preflight thất bại trả exit code `3`; không có testcase phù hợp trả `2`.
+
+Assertion JSON hỗ trợ `equals`, `notEquals`, `exists`, `type`, `contains`,
+`matches`, `oneOf`, `count`, `greaterThan`, `greaterThanOrEqual`, `lessThan` và
+`lessThanOrEqual`. JSON path hỗ trợ index mảng và wildcard, ví dụ
+`$.data.pagedData.*.status`.
+
 ### Chạy smoke test
 
 Smoke test kiểm tra API và các dependency đã sẵn sàng, không thay đổi dữ liệu và

@@ -30,6 +30,9 @@ at a happy path or hand the user an intermediate testcase to run manually.
 6. Inspect console and HTML report. Let the reporting skill govern classification,
    automatic repairs, reruns, blockers, and final reporting.
 
+Preserve every fixture after execution. Do not run cleanup or delete created test data;
+the user must be able to inspect it through APIs and the database.
+
 ## Integrity rule
 
 Do not change expectations merely to match actual output. Change them only when current

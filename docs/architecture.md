@@ -11,8 +11,12 @@ AutoTest.Runner
   -> AutoTest.PostgreSql
   -> AutoTest.Mqtt
   -> AutoTest.Reporting.Html
+  -> AutoTest.TestValidation
 
 All modules depend on AutoTest.Abstractions (public contracts and execution results).
+
+`AutoTest.TestValidation` performs a no-network preflight before execution so malformed
+or ambiguous testcase contracts fail before any fixture or backend state is changed.
 ```
 
 `projects/<project-name>/` contains only configuration and declarative test cases.

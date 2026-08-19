@@ -20,6 +20,20 @@ public sealed record MqttWillSpec(string? Topic,string? Payload,int? Qos,bool? R
 public sealed record ExpectSpec(int? Status,int[]? StatusOneOf,int? MaxResponseTimeMs,Dictionary<string,AssertionSpec>? Json,MqttExpectSpec? Mqtt,DatabaseExpectSpec? Database);
 public sealed record MqttExpectSpec(string? Topic,string? Payload,string? PayloadContains);
 public sealed record DatabaseExpectSpec(string? ScalarEquals);
-public sealed class AssertionSpec { [JsonPropertyName("equals")] public JsonElement? ExpectedValue { get; init; } public bool? Exists { get; init; } public string? Type { get; init; } public string? Contains { get; init; } }
+public sealed class AssertionSpec
+{
+    [JsonPropertyName("equals")] public JsonElement? ExpectedValue { get; init; }
+    public JsonElement? NotEquals { get; init; }
+    public bool? Exists { get; init; }
+    public string? Type { get; init; }
+    public string? Contains { get; init; }
+    public string? Matches { get; init; }
+    public decimal? GreaterThan { get; init; }
+    public decimal? GreaterThanOrEqual { get; init; }
+    public decimal? LessThan { get; init; }
+    public decimal? LessThanOrEqual { get; init; }
+    public int? Count { get; init; }
+    public JsonElement[]? OneOf { get; init; }
+}
 public sealed record StepRunResult(string Name,bool Cleanup,bool Passed,string Method,string Path,string? Payload,string Expected,int? ActualStatus,string? ActualResponse,TimeSpan Duration,string? Error);
 public sealed record RunResult(string Id,string Name,bool Passed,TimeSpan Duration,string? Error,IReadOnlyList<StepRunResult> Steps);
