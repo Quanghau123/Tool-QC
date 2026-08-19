@@ -1,0 +1,8 @@
+interface:
+  display_name: "API Concurrency"
+  short_description: "Test races, contention, and idempotency"
+  default_prompt: "Use $api-test-concurrency to test API race conditions, resource contention, and idempotency."
+
+policy:
+  allow_implicit_invocation: true
+

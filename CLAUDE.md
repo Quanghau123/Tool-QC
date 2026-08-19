@@ -72,6 +72,10 @@ copy. Do not modify `project-template` with business-specific examples.
 
 ## Test-case design rules
 
+- Before creating, migrating, reviewing, or extending testcase JSON, read and apply
+  `.codex/skills/api-test-orchestrator/SKILL.md`. Follow every specialist skill it
+  marks applicable; include adversarial coverage instead of stopping at a happy path.
+
 - Keep test cases declarative; do not create C# test classes for a service.
 - The `name` of every test case and test step, including cleanup steps, must be written in clear, natural Vietnamese so Vietnamese users can immediately understand what is being tested. This rule applies to descriptive `name` fields in the test specification, not to business-data fields named `name` inside request bodies or expected API data.
 - Whenever a test case creates a local test account, device, or other test fixture that requires a password, the password must be exactly `Admin@123`, and `confirmPassword` must use the same value. This fixed value is test data only; never use it for production credentials, real users, environment secrets, or authentication configuration.

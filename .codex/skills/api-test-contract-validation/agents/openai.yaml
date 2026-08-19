@@ -1,0 +1,8 @@
+interface:
+  display_name: "API Contract Validation"
+  short_description: "Test boundaries, enums, and messages"
+  default_prompt: "Use $api-test-contract-validation to test API validation boundaries, enums, and message conventions."
+
+policy:
+  allow_implicit_invocation: true
+

@@ -1,0 +1,8 @@
+interface:
+  display_name: "API Test Orchestrator"
+  short_description: "Coordinate complete API testcase coverage"
+  default_prompt: "Use $api-test-orchestrator to design, run, and verify complete API test coverage."
+
+policy:
+  allow_implicit_invocation: true
+

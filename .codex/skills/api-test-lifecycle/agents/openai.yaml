@@ -1,0 +1,8 @@
+interface:
+  display_name: "API Lifecycle Testing"
+  short_description: "Test statuses, time, and blocked actions"
+  default_prompt: "Use $api-test-lifecycle to verify status and time-dependent API behavior."
+
+policy:
+  allow_implicit_invocation: true
+

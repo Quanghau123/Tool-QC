@@ -1,0 +1,8 @@
+interface:
+  display_name: "API Test Reporting"
+  short_description: "Run, classify, repair, and rerun tests"
+  default_prompt: "Use $api-test-reporting to run Tool-QC tests, classify failures, repair test errors, and rerun."
+
+policy:
+  allow_implicit_invocation: true
+

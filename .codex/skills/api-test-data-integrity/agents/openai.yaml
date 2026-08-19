@@ -1,0 +1,8 @@
+interface:
+  display_name: "API Data Integrity"
+  short_description: "Test persistence, rollback, and histories"
+  default_prompt: "Use $api-test-data-integrity to verify API persistence, transactions, aggregates, and histories."
+
+policy:
+  allow_implicit_invocation: true
+

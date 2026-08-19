@@ -1,0 +1,8 @@
+interface:
+  display_name: "API Query Testing"
+  short_description: "Test search, filters, sorting, and pages"
+  default_prompt: "Use $api-test-query to verify API search, filtering, sorting, pagination, and aggregates."
+
+policy:
+  allow_implicit_invocation: true
+

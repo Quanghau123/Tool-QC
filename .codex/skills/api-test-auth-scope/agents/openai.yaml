@@ -1,0 +1,8 @@
+interface:
+  display_name: "API Auth and Scope"
+  short_description: "Test permissions, roles, and data scope"
+  default_prompt: "Use $api-test-auth-scope to test authentication, authorization, and scope isolation."
+
+policy:
+  allow_implicit_invocation: true
+
