@@ -62,6 +62,8 @@ public sealed class RunnerEngine : IDisposable
             ["futureDay10Iso"] = ToUtcIso(now.AddDays(10)),
             ["futureDay15Iso"] = ToUtcIso(now.AddDays(15))
         };
+        for (int index = 1; index <= 32; index++)
+            variables[$"guid{index}"] = Guid.NewGuid().ToString();
 
         try
         {
@@ -97,6 +99,8 @@ public sealed class RunnerEngine : IDisposable
 
     private async Task RunStepAsync(StepSpec step, Dictionary<string, string> variables, CancellationToken cancellationToken, List<StepRunResult> results, bool assertions = true, bool cleanup = false)
     {
+        if (step.Request is null)
+            throw new InvalidDataException($"Thiếu request cho bước: {step.Name}");
         if (step.Request.Database is not null)
         {
             await RunDatabaseStepAsync(step, variables, cancellationToken, results, assertions, cleanup);
@@ -154,10 +158,11 @@ public sealed class RunnerEngine : IDisposable
             if (assertions)
             {
                 var expected = step.Expect ?? throw new InvalidDataException($"Thiếu cấu hình kết quả mong đợi cho bước: {step.Name}");
-                if (expected.Status is not { } expectedStatus)
-                    throw new InvalidDataException($"Thiếu mã trạng thái HTTP mong đợi cho bước: {step.Name}");
-                if (actualStatus != expectedStatus)
-                    throw new InvalidOperationException($"{step.Name}: mong đợi mã HTTP {expected.Status}, thực tế nhận {actualStatus}. Nội dung phản hồi: {Redact(responseText)}");
+                int[] acceptedStatuses = expected.StatusOneOf ?? (expected.Status is { } expectedStatus ? [expectedStatus] : []);
+                if (acceptedStatuses.Length == 0)
+                    throw new InvalidDataException($"Thiếu status hoặc statusOneOf cho bước: {step.Name}");
+                if (!acceptedStatuses.Contains(actualStatus.Value))
+                    throw new InvalidOperationException($"{step.Name}: mong đợi mã HTTP thuộc [{string.Join(", ", acceptedStatuses)}], thực tế nhận {actualStatus}. Nội dung phản hồi: {Redact(responseText)}");
                 if (expected.MaxResponseTimeMs is { } max && watch.ElapsedMilliseconds > max)
                     throw new InvalidOperationException($"Thời gian phản hồi vượt quá giới hạn {max} ms.");
                 AssertAndSave(step, expected, responseText, variables);
@@ -196,11 +201,16 @@ public sealed class RunnerEngine : IDisposable
     private async Task RunDatabaseStepAsync(StepSpec step, Dictionary<string, string> variables, CancellationToken cancellationToken, List<StepRunResult> results, bool assertions, bool cleanup)
     {
         var watch = Stopwatch.StartNew();
-        string commandText = step.Request.Database!.Command;
-        string expectedText = assertions ? "Lệnh PostgreSQL thực thi thành công" : "Bước dọn dữ liệu PostgreSQL";
+        RequestSpec request = step.Request ?? throw new InvalidDataException($"Thiếu request PostgreSQL cho bước: {step.Name}");
+        DatabaseRequestSpec database = request.Database ?? throw new InvalidDataException($"Thiếu cấu hình PostgreSQL cho bước: {step.Name}");
+        string commandText = database.Command;
+        DatabaseExpectSpec? databaseExpectation = assertions ? step.Expect?.Database : null;
+        string expectedText = databaseExpectation?.ScalarEquals is { } scalar
+            ? $"Giá trị PostgreSQL = {Templates.Resolve(scalar, variables, env)}"
+            : assertions ? "Lệnh PostgreSQL thực thi thành công" : "Bước dọn dữ liệu PostgreSQL";
         try
         {
-            var resolvedParameters = (step.Request.Database.Parameters ?? [])
+            var resolvedParameters = (database.Parameters ?? [])
                 .ToDictionary(x => x.Key, x => Templates.Resolve(x.Value, variables, env), StringComparer.OrdinalIgnoreCase);
             var parameterOrder = new List<string>();
             commandText = Regex.Replace(commandText, @"@([A-Za-z_][A-Za-z0-9_]*)", match =>
@@ -221,8 +231,20 @@ public sealed class RunnerEngine : IDisposable
             await using var command = new NpgsqlCommand(commandText, connection);
             foreach (string parameterName in parameterOrder)
                 command.Parameters.Add(new NpgsqlParameter { Value = resolvedParameters[parameterName] });
-            int affectedRows = await command.ExecuteNonQueryAsync(cancellationToken);
-            results.Add(new(step.Name, cleanup, true, "POSTGRESQL", "database", null, expectedText, null, $"Số dòng ảnh hưởng: {affectedRows}", watch.Elapsed, null));
+            if (databaseExpectation?.ScalarEquals is { } expectedScalarTemplate)
+            {
+                string expectedScalar = Templates.Resolve(expectedScalarTemplate, variables, env);
+                object? value = await command.ExecuteScalarAsync(cancellationToken);
+                string actualScalar = value is null or DBNull ? "null" : Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
+                if (!actualScalar.Equals(expectedScalar, StringComparison.Ordinal))
+                    throw new InvalidOperationException($"{step.Name}: mong đợi giá trị PostgreSQL '{expectedScalar}', thực tế '{actualScalar}'.");
+                results.Add(new(step.Name, cleanup, true, "POSTGRESQL", "database", null, expectedText, null, $"Giá trị thực tế: {actualScalar}", watch.Elapsed, null));
+            }
+            else
+            {
+                int affectedRows = await command.ExecuteNonQueryAsync(cancellationToken);
+                results.Add(new(step.Name, cleanup, true, "POSTGRESQL", "database", null, expectedText, null, $"Số dòng ảnh hưởng: {affectedRows}", watch.Elapsed, null));
+            }
         }
         catch (Exception exception)
         {
@@ -234,6 +256,51 @@ public sealed class RunnerEngine : IDisposable
 
     private async Task RunConfiguredStepAsync(StepSpec step, Dictionary<string, string> variables, CancellationToken cancellationToken, List<StepRunResult> results)
     {
+        if (step.ConcurrentRequests is { Count: > 0 })
+        {
+            if (step.Request is not null || step.ParallelRequests is not null || step.Retry is not null || step.Save is not null)
+                throw new InvalidDataException($"Bước '{step.Name}' dùng concurrentRequests không được khai báo request, parallelRequests, retry hoặc save ở cấp bước.");
+            if (step.ConcurrentRequests.Count > 1000)
+                throw new InvalidDataException($"Bước '{step.Name}' hỗ trợ tối đa 1000 request đồng thời.");
+            var requests = step.ConcurrentRequests.Select((item, index) =>
+            {
+                var requestStep = new StepSpec(
+                    $"{step.Name} — {item.Name} ({index + 1}/{step.ConcurrentRequests.Count})",
+                    item.Auth,
+                    item.AuthToken,
+                    item.Request,
+                    item.Expect,
+                    null,
+                    null,
+                    null,
+                    null);
+                var requestResults = new List<StepRunResult>();
+                return RunStepAsync(
+                    requestStep,
+                    new Dictionary<string, string>(variables, StringComparer.OrdinalIgnoreCase),
+                    cancellationToken,
+                    requestResults).ContinueWith(task =>
+                    {
+                        if (task.IsFaulted) throw task.Exception!.InnerException ?? task.Exception;
+                        return requestResults.Single();
+                    }, cancellationToken, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            }).ToArray();
+            try
+            {
+                results.AddRange(await Task.WhenAll(requests));
+            }
+            catch
+            {
+                foreach (var request in requests.Where(x => x.IsCompletedSuccessfully))
+                    results.Add(request.Result);
+                throw;
+            }
+            return;
+        }
+        if (step.ConcurrentRequests is { Count: 0 })
+            throw new InvalidDataException($"concurrentRequests của bước '{step.Name}' không được để rỗng.");
+        if (step.Request is null)
+            throw new InvalidDataException($"Thiếu request cho bước: {step.Name}");
         int parallelRequests = step.ParallelRequests ?? 1;
         if (parallelRequests < 1 || parallelRequests > 1000)
             throw new InvalidDataException($"Số request đồng thời của bước '{step.Name}' phải từ 1 đến 1000.");
@@ -306,7 +373,7 @@ public sealed class RunnerEngine : IDisposable
     private async Task RunMqttStepAsync(StepSpec step, Dictionary<string, string> variables, CancellationToken cancellationToken, List<StepRunResult> results, bool assertions, bool cleanup)
     {
         var watch = Stopwatch.StartNew();
-        MqttRequestSpec request = step.Request.Mqtt!;
+        MqttRequestSpec request = step.Request?.Mqtt ?? throw new InvalidDataException($"Thiếu cấu hình MQTT cho bước: {step.Name}");
         string action = request.Action.ToLowerInvariant();
         string topic = ResolveMqttTopic(request.Topic, variables);
         string payload = Templates.Resolve(request.Payload ?? string.Empty, variables, env);
@@ -424,6 +491,7 @@ public sealed class RunnerEngine : IDisposable
         if (expected is null) return "Thiếu cấu hình kết quả mong đợi";
         var details = new List<string>();
         if (expected.Status is { } status) details.Add($"Mã trạng thái HTTP = {status}");
+        if (expected.StatusOneOf is { Length: > 0 } statuses) details.Add($"Mã trạng thái HTTP thuộc [{string.Join(", ", statuses)}]");
         if (expected.MaxResponseTimeMs is { } max) details.Add($"Thời gian phản hồi không quá {max} ms");
         foreach (var item in expected.Json ?? [])
         {
@@ -451,6 +519,7 @@ public sealed class RunnerEngine : IDisposable
     {
         try
         {
+            if (step.Request is null) return false;
             if (step.Request.Path is { } path) Templates.Resolve(path, variables, env);
             if (step.AuthToken is { } authToken) Templates.Resolve(authToken, variables, env);
             if (step.Request.Mqtt is { } mqttRequest)

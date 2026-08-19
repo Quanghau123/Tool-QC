@@ -6,14 +6,16 @@ public sealed record AuthSpec(string Strategy,string? LoginPath,string? Method,J
 public sealed record SafetySpec(string[]? ProductionHosts);
 public sealed record SuiteSpec(string Project,List<CaseSpec> Cases);
 public sealed record CaseSpec(string Id,string Name,string[]? Tags,bool Destructive,Dictionary<string,string>? Variables,List<StepSpec> Steps,List<StepSpec>? Cleanup);
-public sealed record StepSpec(string Name,string? Auth,string? AuthToken,RequestSpec Request,ExpectSpec? Expect,Dictionary<string,string>? Save,RetrySpec? Retry,int? ParallelRequests);
+public sealed record StepSpec(string Name,string? Auth,string? AuthToken,RequestSpec? Request,ExpectSpec? Expect,Dictionary<string,string>? Save,RetrySpec? Retry,int? ParallelRequests,List<ConcurrentRequestSpec>? ConcurrentRequests);
 public sealed record RetrySpec(int? TimeoutMs,int? IntervalMs);
 public sealed record RequestSpec(string? Method,string? Path,JsonElement? Body,Dictionary<string,string>? Form,Dictionary<string,string>? Headers,MqttRequestSpec? Mqtt,DatabaseRequestSpec? Database);
+public sealed record ConcurrentRequestSpec(string Name,string? Auth,string? AuthToken,RequestSpec Request,ExpectSpec Expect);
 public sealed record DatabaseRequestSpec(string Command,Dictionary<string,string>? Parameters);
 public sealed record MqttRequestSpec(string Action,string? Topic,string? Payload,int? Qos,bool? Retain,int? TimeoutMs,string? Username,string? Password,string? ClientId,MqttWillSpec? Will);
 public sealed record MqttWillSpec(string? Topic,string? Payload,int? Qos,bool? Retain);
-public sealed record ExpectSpec(int? Status,int? MaxResponseTimeMs,Dictionary<string,AssertionSpec>? Json,MqttExpectSpec? Mqtt);
+public sealed record ExpectSpec(int? Status,int[]? StatusOneOf,int? MaxResponseTimeMs,Dictionary<string,AssertionSpec>? Json,MqttExpectSpec? Mqtt,DatabaseExpectSpec? Database);
 public sealed record MqttExpectSpec(string? Topic,string? Payload,string? PayloadContains);
+public sealed record DatabaseExpectSpec(string? ScalarEquals);
 public sealed class AssertionSpec
 {
  [JsonPropertyName("equals")]

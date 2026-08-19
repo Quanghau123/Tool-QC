@@ -206,6 +206,8 @@ Tạo dự án mới bằng cách sao chép `projects/project-template`. Engine 
 `${unique}` để sinh dữ liệu không trùng, lưu giá trị response bằng JSON path và dùng lại ở bước sau.
 Runner còn cung cấp `${nowIso}`, `${futureStartIso}` và `${futureEndIso}` để tạo
 thời gian ISO 8601 hiện tại, sau một giờ và sau hai giờ cho dữ liệu kiểm thử.
+Các biến `${guid1}` đến `${guid32}` là các GUID khác nhau trong phạm vi một case,
+phù hợp khi fixture cần ID riêng cho event, customer, history, transaction và request.
 Các biến `${futureDay1Iso}`, `${futureDay4Iso}`, `${futureDay5Iso}`,
 `${futureDay6Iso}`, `${futureDay8Iso}`, `${futureDay9Iso}`, `${futureDay10Iso}`
 và `${futureDay15Iso}` hỗ trợ các kịch bản kiểm tra khoảng ngày.
@@ -291,6 +293,51 @@ trợ `save` hoặc `retry`. Ví dụ tải đồng thời 100 request:
   "parallelRequests": 100,
   "request": { "method": "POST", "path": "/api/items/${itemId}/confirm" },
   "expect": { "status": 200 }
+}
+```
+
+Khi các request đồng thời cần path, payload hoặc kết quả mong đợi khác nhau, dùng
+`concurrentRequests`. Tất cả phần tử được khởi chạy trước khi chờ kết quả; mỗi phần
+tử có `request`, `authToken` và `expect` riêng. `statusOneOf` cho phép chấp nhận một
+tập status trong bài kiểm tra tranh chấp:
+
+```json
+{
+  "name": "Hai yêu cầu khác payload cùng tranh một tài nguyên",
+  "concurrentRequests": [
+    {
+      "name": "Yêu cầu A",
+      "auth": "admin",
+      "authToken": "${adminToken}",
+      "request": { "method": "POST", "path": "/api/items/${itemId}", "body": { "quantity": 2, "requestId": "${requestA}" } },
+      "expect": { "statusOneOf": [200, 400] }
+    },
+    {
+      "name": "Yêu cầu B",
+      "auth": "admin",
+      "authToken": "${adminToken}",
+      "request": { "method": "POST", "path": "/api/items/${itemId}", "body": { "quantity": 3, "requestId": "${requestB}" } },
+      "expect": { "statusOneOf": [200, 400] }
+    }
+  ]
+}
+```
+
+Tool-QC không thể tự chèn lỗi vào transaction của API black-box và không thể đếm
+EF SQL command nếu backend không xuất telemetry/log có correlation ID. Hai kiểm tra
+này cần hook chỉ bật ở môi trường test hoặc nguồn telemetry do backend cung cấp;
+nếu không có thì kết quả phải là `BLOCKED`, không được suy diễn là PASS.
+
+Với bước PostgreSQL dùng để đối chiếu dữ liệu, khai báo `expect.database.scalarEquals`
+để runner thực thi scalar query và in cả expected lẫn actual trong báo cáo. Không dùng
+`SELECT` chỉ nhằm kiểm tra câu lệnh chạy thành công vì `RowsAffected = -1` không chứng
+minh dữ liệu đúng:
+
+```json
+{
+  "name": "Đối chiếu số dòng được tạo",
+  "request": { "database": { "command": "SELECT COUNT(*) FROM item WHERE \"OwnerId\"=CAST(@ownerId AS uuid)", "parameters": { "ownerId": "${ownerId}" } } },
+  "expect": { "database": { "scalarEquals": "3" } }
 }
 ```
 
