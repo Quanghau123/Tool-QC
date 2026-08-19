@@ -5,6 +5,14 @@ description: Run Tool-QC testcases autonomously, inspect HTML reports, classify 
 
 # API Test Execution and Reporting
 
+## Evidence integrity
+
+Use current console output, reports, responses, and database results as the only authority
+for execution claims. Never create, edit, reuse from an old run, or infer an unobserved
+result. Never hide a failed step or silently relabel a blocker as PASS. Report `PASS`,
+`FAIL`, `NOT_RUN`, and `BLOCKED` separately. Build and JSON parsing are verification
+activities, not testcase PASS results. Redact only secrets and retain business evidence.
+
 ## Verification loop
 
 1. Parse affected JSON and confirm project names.

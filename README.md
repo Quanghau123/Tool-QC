@@ -65,6 +65,12 @@ ghi rõ các bước đó đã được bỏ qua. Khi agent gặp lỗi testcase
 tự sửa và tự chạy lại đến khi đạt, không yêu cầu người dùng chạy từng lệnh trung gian.
 Agent chỉ dừng khi xác nhận lỗi backend hoặc gặp blocker quyền/môi trường bên ngoài.
 
+Kết quả kiểm thử phải phản ánh đúng bằng chứng từ lần chạy hiện tại. Không được tạo giả,
+chỉnh sửa, suy diễn hoặc lấy kết quả cũ để báo PASS; build, parse JSON và review source
+không được xem là testcase đã chạy thành công. Báo cáo phải phân biệt `PASS`, `FAIL`,
+`NOT_RUN` và `BLOCKED`, đồng thời giữ bằng chứng cần thiết để tái hiện lỗi. Chỉ được che
+secret, không được làm thay đổi dữ liệu nghiệp vụ.
+
 Trước khi gửi request, runner chạy preflight validation để phát hiện ID testcase
 trùng, biến chưa được khai báo, transport/executor mâu thuẫn, thiếu `expect`, cấu
 hình song song không hợp lệ và file tạm như `*.working.json` khi chạy toàn bộ dự

@@ -144,6 +144,23 @@ Example:
 
 ## Safety rules
 
+### Test evidence integrity — mandatory
+
+- Every reported result must be truthful and directly derived from current execution
+  evidence: console output, generated report, response, database result, or build output.
+- Never fabricate, simulate, infer, reuse from an older run, or manually edit a PASS,
+  response, status, duration, database value, report, count, or error.
+- Never claim a testcase was run or passed when it was only written, parsed, built,
+  reviewed, or reasoned about. Report those activities separately.
+- Never change an expectation or fixture merely to turn unexpected backend behavior into
+  a PASS. Change it only when current source or an approved rule proves the test was wrong.
+- Never suppress or silently skip a failure. Distinguish `PASS`, `FAIL`, `NOT_RUN`, and
+  `BLOCKED`; a build success is not a testcase PASS.
+- Preserve reproducible evidence. Redact secrets only, without changing business values
+  or the meaning of the evidence.
+- If evidence is incomplete or contradictory, report that no conclusion can be made and
+  collect more evidence. Never convert uncertainty into success.
+
 - Production execution is denied by default. Never set `ALLOW_PRODUCTION=true`
   on the user's behalf.
 - Destructive execution is denied by default. Enable

@@ -39,6 +39,11 @@ Do not change expectations merely to match actual output. Change them only when 
 source or an explicitly approved business rule proves the testcase stale. Do not modify
 production backend code unless separately requested.
 
+All results must come from actual execution evidence. Never fabricate or infer a PASS,
+response, status, database value, report, duration, or count. Never describe build, JSON
+parsing, source review, or theoretical reasoning as a completed test run. Distinguish
+`PASS`, `FAIL`, `NOT_RUN`, and `BLOCKED`, and preserve evidence with secrets redacted.
+
 ## Deliverable
 
 Report the coverage matrix, files, run commands, totals, failure classifications,
