@@ -5,7 +5,11 @@ public sealed record ProjectSpec(string Name,string BaseUrlVariable,Dictionary<s
 public sealed record AuthSpec(string Strategy,string? LoginPath,string? Method,JsonElement? Body,string? TokenPath,string? Header,string? Prefix);
 public sealed record SafetySpec(string[]? ProductionHosts);
 public sealed record SuiteSpec(string Project,List<CaseSpec> Cases);
-public sealed record CaseSpec(string Id,string Name,string[]? Tags,bool Destructive,Dictionary<string,string>? Variables,List<StepSpec> Steps,List<StepSpec>? Cleanup);
+public sealed record CaseSpec(string Id,string Name,string[]? Tags,bool Destructive,Dictionary<string,string>? Variables,List<StepSpec> Steps,List<StepSpec>? Cleanup)
+{
+    [JsonIgnore]
+    public string SourceGroup { get; init; } = "_root";
+}
 public sealed record StepSpec(string Name,string? Auth,string? AuthToken,RequestSpec? Request,ExpectSpec? Expect,Dictionary<string,string>? Save,RetrySpec? Retry,int? ParallelRequests,List<ConcurrentRequestSpec>? ConcurrentRequests);
 public sealed record RetrySpec(int? TimeoutMs,int? IntervalMs);
 public sealed record RequestSpec(string? Method,string? Path,JsonElement? Body,Dictionary<string,string>? Form,Dictionary<string,string>? Headers,MqttRequestSpec? Mqtt,DatabaseRequestSpec? Database);

@@ -11,6 +11,11 @@ mới được mô tả tại [`docs/architecture.md`](docs/architecture.md).
 Dự án mới luôn được thêm tại `projects/<project-name>/`, không thêm business rule
 vào shared framework. Testcase nằm trong `projects/<project-name>/testcases/**/*.json`.
 
+Báo cáo được phân thư mục tương ứng với nhóm testcase để dễ tra cứu. Ví dụ,
+testcase trong `projects/ops-service/testcases/events/` sinh báo cáo tại
+`test-results/ops-service/events/`. Một lần chạy chứa nhiều nhóm sẽ được lưu tại
+`test-results/<project-name>/_combined/`.
+
 Khung kiểm thử API dùng chung cho nhiều dự án. Cấu hình kết nối tập trung trong `.env`; logic riêng của từng dịch vụ nằm trong `projects/<project-name>`.
 
 ## Cấu hình

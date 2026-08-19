@@ -14,6 +14,6 @@ public static class SpecLoader
 {
  private static readonly JsonSerializerOptions Options=new(){PropertyNameCaseInsensitive=true,AllowTrailingCommas=true};
  public static ProjectSpec Project(string path)=>Read<ProjectSpec>(path);
- public static IEnumerable<CaseSpec> Cases(string dir,string project){foreach(var path in Directory.EnumerateFiles(dir,"*.json",SearchOption.AllDirectories)){var suite=Read<SuiteSpec>(path);if(!suite.Project.Equals(project,StringComparison.OrdinalIgnoreCase))throw new InvalidDataException($"Project mismatch: {path}");foreach(var c in suite.Cases){if(string.IsNullOrWhiteSpace(c.Id)||c.Steps.Count==0)throw new InvalidDataException($"Invalid case: {path}");yield return c;}}}
+ public static IEnumerable<CaseSpec> Cases(string dir,string project){foreach(var path in Directory.EnumerateFiles(dir,"*.json",SearchOption.AllDirectories)){var suite=Read<SuiteSpec>(path);if(!suite.Project.Equals(project,StringComparison.OrdinalIgnoreCase))throw new InvalidDataException($"Project mismatch: {path}");var relative=Path.GetRelativePath(dir,path);var segments=relative.Split(Path.DirectorySeparatorChar,Path.AltDirectorySeparatorChar);var sourceGroup=segments.Length>1?segments[0]:"_root";foreach(var c in suite.Cases){if(string.IsNullOrWhiteSpace(c.Id)||c.Steps.Count==0)throw new InvalidDataException($"Invalid case: {path}");yield return c with { SourceGroup=sourceGroup };}}}
  private static T Read<T>(string path)=>JsonSerializer.Deserialize<T>(File.ReadAllText(path),Options)??throw new InvalidDataException($"Invalid JSON: {path}");
 }

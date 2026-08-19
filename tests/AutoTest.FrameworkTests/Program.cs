@@ -21,7 +21,18 @@ Equal("http", registry.Resolve(Step("GET", "/health", null, null)).Name, "HTTP e
 Equal("postgresql", registry.Resolve(Step(null, null, new("SELECT 1", null), null)).Name, "PostgreSQL executor");
 Equal("mqtt", registry.Resolve(Step(null, null, null, new("connect", null, null, null, null, null, null, null, null, null))).Name, "MQTT executor");
 
-Console.WriteLine("Framework tests passed: 4");
+string fixtureRoot = Path.Combine(Path.GetTempPath(), $"autotest-{Guid.NewGuid():N}");
+string eventsDirectory = Path.Combine(fixtureRoot, "events");
+Directory.CreateDirectory(eventsDirectory);
+string suitePath = Path.Combine(eventsDirectory, "sample.json");
+File.WriteAllText(suitePath, """
+{"project":"framework-test","cases":[{"id":"sample.case","name":"Kịch bản mẫu","destructive":false,"steps":[{"name":"Đọc dữ liệu mẫu","request":{"method":"GET","path":"/health"},"expect":{"status":200}}]}]}
+""");
+CaseSpec loadedCase = SpecLoader.Cases(fixtureRoot, "framework-test").Single();
+Equal("events", loadedCase.SourceGroup, "testcase source group");
+Directory.Delete(fixtureRoot, true);
+
+Console.WriteLine("Framework tests passed: 5");
 return 0;
 
 static StepSpec Step(string? method, string? path, DatabaseRequestSpec? database, MqttRequestSpec? mqtt)

@@ -17,6 +17,9 @@ var configuredReportDirectory=env.Get("TEST_RESULTS_DIR")??"test-results";
 var reportDirectory=Path.IsPathRooted(configuredReportDirectory)
     ? configuredReportDirectory
     : Path.GetFullPath(Path.Combine(root,configuredReportDirectory));
+var sourceGroups=cases.Select(test=>test.SourceGroup).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+var reportGroup=sourceGroups.Length==1?sourceGroups[0]:"_combined";
+reportDirectory=Path.Combine(reportDirectory,project.Name,reportGroup);
 IReportWriter reportWriter=new HtmlReportModule();
 var report=reportWriter.Write(reportDirectory,project,env.Get("TEST_ENV")??"unspecified",results,startedAt,tags);
 Console.WriteLine($"Tổng số: {cases.Count}, Thành công: {cases.Count-failed}, Thất bại: {failed}");
