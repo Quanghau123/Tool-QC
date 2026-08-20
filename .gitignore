@@ -1,6 +1,8 @@
 .env
 TestResults/
 test-results/
+integration-results/
+.build-verify/
 projects/*/testcases/
 bin/
 obj/

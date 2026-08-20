@@ -38,11 +38,21 @@ orchestration.
 Assertions owned by a transport stay in that transport module. Reports consume the
 common `RunResult` model and have no transport dependency.
 
-`AutoTest.HttpStub` là HTTP test double dùng chung: testcase cấu hình method/route/status,
-response headers/body và delay; module ghi lại request thật để assertion và báo cáo.
-Nó không biết tên project, endpoint hay contract nghiệp vụ của hệ thống cụ thể.
-`runner/AutoTest.HttpStub` tái sử dụng cùng ý tưởng dưới dạng process độc lập chạy liên
-tục, phù hợp khi ứng dụng nguồn có scheduler/background job tồn tại ngoài vòng đời suite.
+`runner/AutoTest.HttpStub` hiện là compatibility CLI cho Integration Host. Profile nằm tại
+`projects/<project>/integrations/<name>/integration.json`; HTTP là transport provider đầu
+tiên. Host quản lý start/status/stop, hỗ trợ chạy foreground hoặc background và lưu từng
+request/response thật vào `integration-results/`. Contract profile dùng trường `transport`
+để provider Redis Streams, Kafka hoặc công nghệ khác có thể được thêm độc lập mà không đổi
+testcase orchestration hay business profile hiện có.
+
+Mỗi transport mới phải sở hữu lifecycle, capture model và assertion riêng, nhưng xuất
+evidence về một cấu trúc chung gồm session, request/event nhận được, phản hồi/ack đã gửi và
+metadata đã che secret. Không thêm nhánh theo tên project trong shared host.
+
+HTTP implementation được chia thành `AutoTest.Integration.Abstractions`,
+`AutoTest.Integration.Http` và `AutoTest.Integration.Artifacts`. CLI chỉ parse command,
+quản lý ownership và compose provider. HTTP provider sở hữu route matching, response
+sequence, timeout/delay, payload limit và capture; artifact module sở hữu JSON/HTML.
 
 ## Compatibility
 

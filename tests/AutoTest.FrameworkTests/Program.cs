@@ -6,6 +6,9 @@ using AutoTest.PostgreSql;
 using AutoTest.HttpStub;
 using AutoTest.TestValidation;
 using System.Text.Json;
+using AutoTest.Integration.Abstractions;
+using AutoTest.Integration.Artifacts;
+using AutoTest.Integration.Http;
 
 Environment.SetEnvironmentVariable("FRAMEWORK_TEST_URL", "http://localhost");
 var environment = EnvironmentStore.Load(Path.GetTempFileName());
@@ -103,9 +106,23 @@ var resultSetExpectation = JsonSerializer.Deserialize<DatabaseExpectSpec>("""{"r
     new JsonSerializerOptions(JsonSerializerDefaults.Web));
 Equal("true", (resultSetExpectation?.ResultSet == true).ToString().ToLowerInvariant(),
     "database result-set contract");
+
+var sequenceRule = JsonSerializer.Deserialize<HttpIntegrationRule>("""{"method":"POST","path":"/sync","status":200,"response":null,"sequence":[{"status":500,"response":{"error":true}},{"status":200,"response":{"ok":true}}]}""",
+    new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+var integrationProfile = new IntegrationProfile("test", "http", "http://127.0.0.1:28999", [sequenceRule], true, 1024, 10);
+HttpProfileValidator.Validate(integrationProfile);
+Equal("A-1", JsonDocument.Parse(HttpTemplateRenderer.Render("\"${request:$.id}\"", JsonDocument.Parse("""{"id":"A-1"}""").RootElement)).RootElement.GetString()!, "HTTP integration template");
+Equal("true", JsonRuleMatcher.Matches(new() { ["$.id"] = JsonDocument.Parse("\"A-1\"").RootElement.Clone() }, JsonDocument.Parse("""{"id":"A-1"}""").RootElement).ToString().ToLowerInvariant(), "HTTP integration JSON matcher");
+string artifactRoot = Path.Combine(Path.GetTempPath(), $"integration-artifact-{Guid.NewGuid():N}");
+var artifactWriter = new IntegrationArtifactWriter(artifactRoot);
+var exchange = new CapturedExchange(1, Guid.NewGuid(), "POST", "/sync", new() { ["Authorization"] = "***" }, JsonDocument.Parse("""{"id":"A-1"}""").RootElement.Clone(), DateTimeOffset.Now, "sync", 200, JsonDocument.Parse("""{"ok":true}""").RootElement.Clone(), 12, 11, 3);
+Equal("true", (await artifactWriter.ExchangeAsync(exchange)).ToString().ToLowerInvariant(), "integration artifact write");
+await artifactWriter.IndexAsync([exchange]);
+Equal("true", File.Exists(Path.Combine(artifactRoot, "requests", "000001.json")).ToString().ToLowerInvariant(), "integration request artifact exists");
+Directory.Delete(artifactRoot, true);
 Directory.Delete(fixtureRoot, true);
 
-Console.WriteLine("Framework tests passed: 13");
+Console.WriteLine("Framework tests passed: 17");
 return 0;
 
 static StepSpec Step(string? method, string? path, DatabaseRequestSpec? database, MqttRequestSpec? mqtt)

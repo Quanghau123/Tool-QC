@@ -483,6 +483,54 @@ Response có thể lấy dữ liệu động từ request bằng chuỗi
 `${request:$.data.activities.0.transactionCode}`. Nhờ vậy service phản hồi đúng
 transaction của từng request giống hệ thống đối tác xử lý contract, không hard-code ID.
 
+### Integration Host dùng chung
+
+Cấu hình một integration tại:
+
+```text
+projects/<project>/integrations/<integration-name>/integration.json
+```
+
+Sau đó chỉ cần lệnh ngắn:
+
+```powershell
+.\toolqc.ps1 integration start ops-service point-exchange
+.\toolqc.ps1 integration status ops-service point-exchange
+.\toolqc.ps1 integration stop ops-service point-exchange
+.\toolqc.ps1 integration inspect ops-service point-exchange
+.\toolqc.ps1 integration list
+```
+
+`start` mặc định chạy foreground; `Ctrl+C` dừng host sạch. Chỉ khi cần chạy nền mới dùng:
+
+```powershell
+.\toolqc.ps1 integration start ops-service point-exchange -Background
+```
+
+Host lưu bằng chứng thật tại:
+
+```text
+integration-results/<project>/<integration>/<timestamp>/
+├── session.json
+├── index.html
+├── requests/000001.json
+└── responses/000001.json
+```
+
+Request artifact chứa method/path, payload, timestamp, rule đã khớp và header đã che
+secret. Response artifact chứa status và payload thực tế host trả cho backend. Vì dữ liệu
+được ghi ngay xuống đĩa, người dùng vẫn xem được sau khi host dừng.
+
+Profile hỗ trợ `maxRequestBodyBytes`, `maxInMemoryExchanges`, `matchJson` và `sequence`.
+`sequence` mô phỏng nhiều lần gọi liên tiếp, ví dụ lần đầu HTTP 500 và lần sau HTTP 200;
+response cuối cùng được lặp lại khi số request vượt độ dài sequence. Payload quá giới hạn
+trả HTTP 413 và vẫn được ghi bằng chứng. `status/stop` đối chiếu project, integration và
+instance token, nên không dừng nhầm process khác đang chiếm cùng cổng.
+
+Profile có trường `transport`. Hiện provider chạy được là `http`; thiết kế dành chỗ cho
+`redis-streams`, Kafka hoặc RabbitMQ dưới module transport riêng. Một dự án đồng bộ media
+qua HTTP chỉ cần thêm profile mới, không sửa shared code.
+
 Bước MQTT hỗ trợ `connect`, `publish`, `subscribe`, `roundtrip` và tài khoản động:
 
 ```json

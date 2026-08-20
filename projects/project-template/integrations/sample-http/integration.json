@@ -1,0 +1,22 @@
+{
+  "name": "sample-http",
+  "transport": "http",
+  "url": "http://127.0.0.1:2670",
+  "persistArtifacts": true,
+  "maxRequestBodyBytes": 10485760,
+  "maxInMemoryExchanges": 1000,
+  "routes": [
+    {
+      "method": "POST",
+      "path": "/api/sync",
+      "status": 200,
+      "name": "sample-success",
+      "response": {
+        "data": {
+          "transactionCode": "${request:$.data.transactionCode}",
+          "status": "accepted"
+        }
+      }
+    }
+  ]
+}

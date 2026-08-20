@@ -1,0 +1,38 @@
+{
+  "name": "http-fault-matrix",
+  "transport": "http",
+  "url": "http://127.0.0.1:2671",
+  "persistArtifacts": true,
+  "maxRequestBodyBytes": 1048576,
+  "maxInMemoryExchanges": 100,
+  "routes": [
+    {
+      "name": "retry-then-success",
+      "method": "POST",
+      "path": "/api/sync/retry",
+      "status": 200,
+      "response": { "status": "accepted" },
+      "sequence": [
+        { "status": 500, "response": { "message": "TEMPORARY_FAILURE" } },
+        { "status": 429, "response": { "message": "RATE_LIMITED" }, "headers": { "Retry-After": "1" } },
+        { "status": 200, "response": { "status": "accepted", "transactionCode": "${request:$.transactionCode}" } }
+      ]
+    },
+    {
+      "name": "payload-specific",
+      "method": "POST",
+      "path": "/api/sync/type",
+      "status": 202,
+      "matchJson": { "$.type": "media" },
+      "response": { "status": "media-accepted" }
+    },
+    {
+      "name": "timeout",
+      "method": "POST",
+      "path": "/api/sync/slow",
+      "status": 200,
+      "delayMs": 30000,
+      "response": { "status": "late" }
+    }
+  ]
+}
