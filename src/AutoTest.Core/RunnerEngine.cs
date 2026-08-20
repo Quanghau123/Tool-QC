@@ -4,6 +4,7 @@ using System.Text.Json;
 using AutoTest.Http;
 using AutoTest.PostgreSql;
 using AutoTest.Mqtt;
+using AutoTest.HttpStub;
 
 namespace AutoTest.Core;
 
@@ -33,6 +34,7 @@ public sealed class RunnerEngine : IDisposable
             new HttpStepExecutor(project, env),
             new PostgreSqlStepExecutor(),
             new MqttStepExecutor(env),
+            new HttpStubStepExecutor(env),
         });
     }
 

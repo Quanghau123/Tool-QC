@@ -78,13 +78,24 @@ public static class TestcaseValidator
             if (step.ConcurrentRequests is { Count: 0 })
                 issues.Add(new(location, "concurrentRequests không được để rỗng."));
             if (step.Request is null) { issues.Add(new(location, "Thiếu request.")); continue; }
-            int transportCount = (step.Request.Database is null ? 0 : 1) + (step.Request.Mqtt is null ? 0 : 1) + (step.Request.Method is null && step.Request.Path is null ? 0 : 1);
+            int transportCount = (step.Request.Database is null ? 0 : 1) + (step.Request.Mqtt is null ? 0 : 1) + (step.Request.HttpStub is null ? 0 : 1) + (step.Request.Method is null && step.Request.Path is null ? 0 : 1);
             if (transportCount != 1) issues.Add(new(location, "Mỗi bước phải khai báo đúng một transport HTTP, PostgreSQL hoặc MQTT."));
             int executorCount = executors.Count(executor => executor.CanExecute(step));
             if (executorCount != 1) issues.Add(new(location, $"Bước phải khớp đúng một executor, thực tế {executorCount}."));
             if (step.Request.Body is not null && step.Request.Form is not null) issues.Add(new(location, "Không được gửi đồng thời body JSON và form."));
             if (!cleanup && step.Expect is null) issues.Add(new(location, "Thiếu expect."));
             if (step.Expect is { Status: not null, StatusOneOf: { Length: > 0 } }) issues.Add(new(location, "Chỉ khai báo một trong status hoặc statusOneOf."));
+            if (step.Expect?.Database is { ScalarEquals: not null, ResultSet: true })
+                issues.Add(new(location, "Chỉ khai báo một trong database.scalarEquals hoặc database.resultSet."));
+            if (step.Request.HttpStub is { } stub)
+            {
+                if (string.IsNullOrWhiteSpace(stub.Action)) issues.Add(new(location, "HttpStub action không được rỗng."));
+                if (stub.Action.Equals("configure", StringComparison.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(stub.Path))
+                    issues.Add(new(location, "HttpStub configure bắt buộc có path."));
+                if (stub.Status is < 100 or > 599) issues.Add(new(location, "HttpStub status phải từ 100 đến 599."));
+                if (stub.DelayMs is < 0 or > 300000) issues.Add(new(location, "HttpStub delayMs phải từ 0 đến 300000."));
+                if (stub.TimeoutMs is < 1 or > 300000) issues.Add(new(location, "HttpStub timeoutMs phải từ 1 đến 300000."));
+            }
             if (step.ParallelRequests is < 1 or > 1000) issues.Add(new(location, "parallelRequests phải từ 1 đến 1000."));
             if (step.ParallelRequests is > 1 && step.Save is not null) issues.Add(new(location, "Không thể vừa chạy song song vừa save biến."));
             foreach (string template in EnumerateTemplates(step))
@@ -108,6 +119,13 @@ public static class TestcaseValidator
                 if (value is not null) yield return value;
         }
         foreach (string value in step.Request?.Database?.Parameters?.Values ?? Enumerable.Empty<string>()) yield return value;
+        if (step.Request?.HttpStub is { } stub)
+        {
+            if (stub.Method is not null) yield return stub.Method;
+            if (stub.Path is not null) yield return stub.Path;
+            if (stub.Response is { } response) yield return response.GetRawText();
+            foreach (string value in stub.ResponseHeaders?.Values ?? Enumerable.Empty<string>()) yield return value;
+        }
         foreach (AssertionSpec assertion in step.Expect?.Json?.Values ?? Enumerable.Empty<AssertionSpec>())
         {
             if (assertion.ExpectedValue is { } expected) yield return expected.GetRawText();

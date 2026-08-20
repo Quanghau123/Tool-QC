@@ -1,0 +1,26 @@
+{
+  "routes": [
+    {
+      "method": "POST",
+      "path": "/api/point-exchange-histories/bulk-sync",
+      "status": 200,
+      "response": {
+        "data": {
+          "success": true,
+          "code": "SYNC_COMPLETED",
+          "message": "Đồng bộ thành công từ hệ thống đối tác giả lập",
+          "summary": { "received": 1, "inserted": 1, "duplicated": 0, "failed": 0, "affectedRegistrations": 1 },
+          "items": [
+            {
+              "transactionCode": "${request:$.data.activities.0.transactionCode}",
+              "registrationSignedCode": "${request:$.data.activities.0.registrationSignedCode}",
+              "status": "inserted",
+              "code": null,
+              "message": "Đã ghi nhận"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

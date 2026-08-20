@@ -10,6 +10,7 @@ AutoTest.Runner
   -> AutoTest.Http
   -> AutoTest.PostgreSql
   -> AutoTest.Mqtt
+  -> AutoTest.HttpStub
   -> AutoTest.Reporting.Html
   -> AutoTest.TestValidation
 
@@ -36,6 +37,12 @@ orchestration.
 
 Assertions owned by a transport stay in that transport module. Reports consume the
 common `RunResult` model and have no transport dependency.
+
+`AutoTest.HttpStub` là HTTP test double dùng chung: testcase cấu hình method/route/status,
+response headers/body và delay; module ghi lại request thật để assertion và báo cáo.
+Nó không biết tên project, endpoint hay contract nghiệp vụ của hệ thống cụ thể.
+`runner/AutoTest.HttpStub` tái sử dụng cùng ý tưởng dưới dạng process độc lập chạy liên
+tục, phù hợp khi ứng dụng nguồn có scheduler/background job tồn tại ngoài vòng đời suite.
 
 ## Compatibility
 

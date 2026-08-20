@@ -9,5 +9,6 @@
     <ProjectReference Include="..\AutoTest.Http\AutoTest.Http.csproj" />
     <ProjectReference Include="..\AutoTest.PostgreSql\AutoTest.PostgreSql.csproj" />
     <ProjectReference Include="..\AutoTest.Mqtt\AutoTest.Mqtt.csproj" />
+    <ProjectReference Include="..\AutoTest.HttpStub\AutoTest.HttpStub.csproj" />
   </ItemGroup>
 </Project>

@@ -21,7 +21,7 @@ public sealed class HttpStepExecutor : ITestStepExecutor
         foreach (var header in project.DefaultHeaders ?? []) client.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
     }
     public string Name => "http";
-    public bool CanExecute(StepSpec step) => step.Request is { Database: null, Mqtt: null };
+    public bool CanExecute(StepSpec step) => step.Request is { Database: null, Mqtt: null, HttpStub: null };
     public async Task<StepRunResult> ExecuteAsync(StepExecutionContext context, CancellationToken cancellationToken)
     {
         StepSpec step=context.Step; RequestSpec request=step.Request!; var watch=Stopwatch.StartNew();

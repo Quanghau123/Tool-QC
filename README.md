@@ -4,7 +4,8 @@
 
 Shared framework được chia theo ranh giới mở rộng: `AutoTest.Abstractions` chứa
 contract chung, `AutoTest.Core` điều phối suite, các project `AutoTest.Http`,
-`AutoTest.PostgreSql`, `AutoTest.Mqtt` sở hữu transport và
+`AutoTest.PostgreSql`, `AutoTest.Mqtt` sở hữu transport,
+`AutoTest.HttpStub` giả lập dịch vụ HTTP bên ngoài và ghi request thật, còn
 `AutoTest.Reporting.Html` sở hữu báo cáo. Thiết kế dependency và quy tắc thêm tool
 mới được mô tả tại [`docs/architecture.md`](docs/architecture.md).
 
@@ -418,6 +419,69 @@ minh dữ liệu đúng:
   "expect": { "database": { "scalarEquals": "3" } }
 }
 ```
+
+Khi cần lưu bằng chứng nhiều dòng hoặc payload JSON thực tế vào báo cáo HTML, dùng
+`expect.database.resultSet`. Runner đọc toàn bộ result set và hiển thị JSON gồm
+`rowCount` và `rows`; giá trị cột `json/jsonb` được giữ dưới dạng JSON lồng nhau:
+
+```json
+{
+  "name": "Ghi payload outbox thực tế vào báo cáo",
+  "request": {
+    "database": {
+      "command": "SELECT \"TransactionCode\" AS \"transactionCode\", \"Payload\" AS \"actualPayload\" FROM bulk_sync_outbox WHERE \"EventId\"=CAST(@eventId AS uuid)",
+      "parameters": { "eventId": "${eventId}" }
+    }
+  },
+  "expect": { "database": { "resultSet": true } }
+}
+```
+
+Không khai báo đồng thời `scalarEquals` và `resultSet` trong cùng một bước.
+
+### Giả lập hệ thống HTTP bên ngoài
+
+`AutoTest.HttpStub` dùng chung cho mọi dự án và mọi kiểu đồng bộ HTTP. Module không
+hard-code route hoặc payload nghiệp vụ. Testcase tự start server, cấu hình response,
+sau đó inspect request thật mà ứng dụng đã gửi. Header nhạy cảm không được lưu vào report.
+
+Các action gồm `start`, `configure`, `reset`, `inspect`, `stop`. `delayMs` giả lập
+phản hồi chậm/timeout; `status`, `response` và `responseHeaders` giả lập response tùy ý.
+
+```json
+{
+  "name": "Cấu hình hệ thống đích trả thành công",
+  "request": { "httpStub": { "action": "configure", "method": "POST", "path": "/api/sync", "status": 200, "response": { "data": { "status": "inserted" } } } },
+  "expect": { "httpStub": {} }
+},
+{
+  "name": "Đối chiếu request ứng dụng đã gửi",
+  "request": { "httpStub": { "action": "inspect", "method": "POST", "path": "/api/sync", "timeoutMs": 10000 } },
+  "expect": { "httpStub": { "receivedCount": 1, "json": { "$.activities.0.transactionCode": { "exists": true } } } }
+}
+```
+
+Ứng dụng cần được cấu hình trỏ integration URL tới `HTTP_STUB_HOST:HTTP_STUB_PORT`;
+nếu backend nạp cấu hình lúc khởi động thì phải restart trước integration test.
+
+### Chạy HTTP Stub như một dự án đối tác độc lập
+
+Khi cần service giả lập chạy liên tục trước và trong suốt nhiều lần test, dùng runner
+độc lập thay vì action `httpStub.start` trong suite:
+
+```powershell
+dotnet run --project runner/AutoTest.HttpStub -- --config projects/ops-service/http-stubs/bulk-sync-inserted.json --url http://127.0.0.1:2669
+```
+
+Service giữ API mở đến khi nhấn `Ctrl+C`. Endpoint quản trị dùng để kiểm tra bằng chứng:
+
+- `GET /__autotest/health`: trạng thái sẵn sàng.
+- `GET /__autotest/requests`: toàn bộ request thật đã nhận, đã che header nhạy cảm.
+- `DELETE /__autotest/requests`: xóa request đã ghi trước một lượt test mới.
+
+Response có thể lấy dữ liệu động từ request bằng chuỗi
+`${request:$.data.activities.0.transactionCode}`. Nhờ vậy service phản hồi đúng
+transaction của từng request giống hệ thống đối tác xử lý contract, không hard-code ID.
 
 Bước MQTT hỗ trợ `connect`, `publish`, `subscribe`, `roundtrip` và tài khoản động:
 
