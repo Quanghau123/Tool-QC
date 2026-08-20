@@ -10,7 +10,7 @@ public static class TestcaseValidator
     private static readonly string[] TemporaryMarkers = [".working.json", ".bak.json", ".backup.json", ".tmp.json"];
     private static readonly HashSet<string> BuiltInVariables = new(StringComparer.OrdinalIgnoreCase)
     {
-        "unique", "timestamp", "timestampMs", "nowIso", "futureStartIso", "futureEndIso",
+        "unique", "timestamp", "timestampMs", "nowIso", "pastStartIso", "futureStartIso", "futureEndIso",
         "futureDay1Iso", "futureDay4Iso", "futureDay5Iso", "futureDay6Iso",
         "futureDay8Iso", "futureDay9Iso", "futureDay10Iso", "futureDay15Iso"
     };
@@ -59,6 +59,24 @@ public static class TestcaseValidator
         foreach (StepSpec step in steps)
         {
             string location = $"{caseId} / {step.Name}";
+            if (step.ConcurrentRequests is { Count: > 0 })
+            {
+                if (step.Request is not null || step.Save is not null || step.Retry is not null || step.ParallelRequests is not null)
+                    issues.Add(new(location, "concurrentRequests xung đột với request/save/retry/parallelRequests cấp bước."));
+                foreach (ConcurrentRequestSpec concurrent in step.ConcurrentRequests)
+                {
+                    StepSpec child = new(concurrent.Name, concurrent.Auth, concurrent.AuthToken,
+                        concurrent.Request, concurrent.Expect, null, null, null, null);
+                    var inheritedVariables = variables.ToDictionary(
+                        variable => variable,
+                        _ => string.Empty,
+                        StringComparer.OrdinalIgnoreCase);
+                    ValidateSteps(caseId, [child], inheritedVariables, executors, issues, cleanup);
+                }
+                continue;
+            }
+            if (step.ConcurrentRequests is { Count: 0 })
+                issues.Add(new(location, "concurrentRequests không được để rỗng."));
             if (step.Request is null) { issues.Add(new(location, "Thiếu request.")); continue; }
             int transportCount = (step.Request.Database is null ? 0 : 1) + (step.Request.Mqtt is null ? 0 : 1) + (step.Request.Method is null && step.Request.Path is null ? 0 : 1);
             if (transportCount != 1) issues.Add(new(location, "Mỗi bước phải khai báo đúng một transport HTTP, PostgreSQL hoặc MQTT."));
@@ -69,8 +87,6 @@ public static class TestcaseValidator
             if (step.Expect is { Status: not null, StatusOneOf: { Length: > 0 } }) issues.Add(new(location, "Chỉ khai báo một trong status hoặc statusOneOf."));
             if (step.ParallelRequests is < 1 or > 1000) issues.Add(new(location, "parallelRequests phải từ 1 đến 1000."));
             if (step.ParallelRequests is > 1 && step.Save is not null) issues.Add(new(location, "Không thể vừa chạy song song vừa save biến."));
-            if (step.ConcurrentRequests is not null && (step.Request.Method is not null || step.Request.Path is not null || step.Save is not null || step.Retry is not null || step.ParallelRequests is not null)) issues.Add(new(location, "concurrentRequests xung đột với request/save/retry/parallelRequests cấp bước."));
-
             foreach (string template in EnumerateTemplates(step))
                 foreach (string variable in Templates.Variables(template))
                     if (!variable.StartsWith("env:", StringComparison.OrdinalIgnoreCase) && !variables.Contains(variable))

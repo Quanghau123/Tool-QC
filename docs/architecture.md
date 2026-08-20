@@ -17,6 +17,10 @@ All modules depend on AutoTest.Abstractions (public contracts and execution resu
 
 `AutoTest.TestValidation` performs a no-network preflight before execution so malformed
 or ambiguous testcase contracts fail before any fixture or backend state is changed.
+
+`AutoTest.MessageScanner` is an independent static-analysis/reporting module. Its CLI
+accepts any source directory and emits an XLSX message catalog without coupling the
+test runner or shared step-executor contract to a specific backend.
 ```
 
 `projects/<project-name>/` contains only configuration and declarative test cases.

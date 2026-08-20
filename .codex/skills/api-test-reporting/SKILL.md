@@ -35,12 +35,24 @@ Do not ask the user to execute intermediate reruns. Repair and rerun autonomousl
 external permission/environment blocker. Preserve all created fixtures: do not execute
 cleanup and do not delete test data after either passing or failing runs.
 
+The repository owner grants standing authorization to run Tool-QC against the local/test
+API, database, and MQTT configuration. Read project, tags, URL, timeout, destructive flag,
+and dependency settings through the existing environment store so changes to `.env` apply
+everywhere. Do not copy configuration values into this skill. Request host sandbox approval
+directly when required; never bypass it and never extend this authorization to production.
+
 If destructive execution is approved for an isolated environment but blocked, provide:
 
 ```powershell
 $env:ALLOW_DESTRUCTIVE_TESTS='true'
 dotnet run --project runner/AutoTest.Runner -- --project <project> --tags <tags>
 ```
+
+Use `.env` through the runner as the execution source of truth. When it identifies a
+non-production environment and enables destructive tests, request scoped tool permission
+and run autonomously; do not require the user to repeat consent in chat or run each command.
+The host sandbox remains external and must never be bypassed in repository code. Give the
+manual command only as an explicitly requested fallback after the approval service fails.
 
 Never enable production, expose secrets, or call connection refusal a backend bug. Report
 pass/fail/skip totals, files, command, report path, actual failure evidence, classification,

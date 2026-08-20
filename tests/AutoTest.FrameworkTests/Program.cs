@@ -42,9 +42,30 @@ IReadOnlyList<ValidationIssue> invalidIssues = TestcaseValidator.Validate(fixtur
 Equal("true", (invalidIssues.Any(issue => issue.Message.Contains("File tạm", StringComparison.Ordinal)) &&
     invalidIssues.Any(issue => issue.Message.Contains("bị trùng", StringComparison.Ordinal))).ToString().ToLowerInvariant(),
     "invalid testcase preflight");
+
+var concurrentCase = loadedCase with
+{
+    Variables = new Dictionary<string, string> { ["savedEarlier"] = "fixture" },
+    Steps =
+    [
+        new StepSpec("Hai request dùng biến kế thừa", null, null, null, null, null, null, null,
+        [
+            new ConcurrentRequestSpec("Request A", null, null,
+                new RequestSpec("POST", "/items/${savedEarlier}", null, null, null, null, null),
+                new ExpectSpec(200, null, null, null, null, null)),
+            new ConcurrentRequestSpec("Request B", null, null,
+                new RequestSpec("POST", "/items/${savedEarlier}", null, null, null, null, null),
+                new ExpectSpec(200, null, null, null, null, null))
+        ])
+    ]
+};
+IReadOnlyList<ValidationIssue> concurrentIssues = TestcaseValidator.Validate(fixtureRoot,
+    new ProjectSpec("framework-test", "FRAMEWORK_TEST_URL", null, null, null),
+    [concurrentCase], registry.All, validateTemporaryFiles: false);
+Equal("0", concurrentIssues.Count.ToString(), "concurrent request inherits variables");
 Directory.Delete(fixtureRoot, true);
 
-Console.WriteLine("Framework tests passed: 7");
+Console.WriteLine("Framework tests passed: 8");
 return 0;
 
 static StepSpec Step(string? method, string? path, DatabaseRequestSpec? database, MqttRequestSpec? mqtt)

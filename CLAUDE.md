@@ -161,11 +161,45 @@ Example:
 - If evidence is incomplete or contradictory, report that no conclusion can be made and
   collect more evidence. Never convert uncertainty into success.
 
+### Standing authorization for local Tool-QC execution
+
+- The repository owner explicitly authorizes Codex/Claude agents working in this
+  repository to run the Tool-QC runner, connect to the local API, configured test
+  database, and configured MQTT broker for testcase verification without asking the user
+  to execute intermediate commands manually.
+- Resolve project, tags, result directory, base URL, timeouts, destructive permission,
+  database, and MQTT settings from operating-system environment variables and `.env`
+  through the existing `EnvironmentStore`. Environment variables remain authoritative
+  over `.env`. Never duplicate those values in agent instructions, skills, commands, or
+  testcase files.
+- This standing authorization applies only when `TEST_ENV` identifies a local/test
+  environment, `ALLOW_PRODUCTION` is false, and the configured hostname is not listed as
+  production. It does not authorize production execution or bypass safety guards.
+- When the execution platform requires sandbox/network approval, request that approval
+  directly for the scoped runner command and continue automatically after approval. Do
+  not ask the user to run the command by hand merely because approval is required.
+- A failure of the external approval service remains an `ENVIRONMENT_BLOCKER`; repository
+  configuration cannot bypass or disable the host application's sandbox.
+
 - Production execution is denied by default. Never set `ALLOW_PRODUCTION=true`
   on the user's behalf.
 - Destructive execution is denied by default. Enable
   `ALLOW_DESTRUCTIVE_TESTS=true` only when the user has identified an isolated
   test environment and explicitly wants state-changing cases run.
+- Treat the repository environment configuration as the single source of truth for
+  routine test execution. When `TEST_ENV` identifies a local/test environment,
+  `ALLOW_PRODUCTION=false`, and `ALLOW_DESTRUCTIVE_TESTS=true`, the agent must proceed
+  with the requested destructive tags without asking the user to repeat an authorization
+  sentence or run the command manually. Request the tool's scoped sandbox/network
+  permission itself and continue automatically after approval.
+- The agent must not copy `.env` values into source, testcase JSON, documentation, logs,
+  or command arguments. Read configuration through `EnvironmentStore`; operating-system
+  variables continue to override `.env`.
+- Repository configuration cannot bypass the host application's sandbox. If the external
+  approval service fails, classify it as `ENVIRONMENT_BLOCKER`, retry the same narrowly
+  scoped permission request when appropriate, and state that the blocker is external.
+  Do not ask the user to duplicate `.env` authorization in chat and do not implement a
+  code path that circumvents sandbox approval.
 - Before running, state the selected project, base URL hostname (never credentials),
   environment, tags, and whether destructive cases are enabled.
 - Never weaken production guards, secret redaction, or destructive-test guards to
@@ -263,9 +297,10 @@ user separately asks for a backend change.
 
 If tool execution is blocked by sandbox or network permissions, request approval
 for the narrowly scoped test command immediately and resume the same loop after
-approval. If destructive tests are blocked and the user has explicitly confirmed
-an isolated local/test environment, provide this PowerShell form (with the actual
-project and tags substituted) so authorization applies only to that process:
+approval. Do not delegate execution to the user while the repository configuration
+already authorizes the requested local/test run. Only provide a manual command when
+the host approval service remains unavailable and the user explicitly asks for a
+fallback. That fallback uses this PowerShell form:
 
 ```powershell
 $env:ALLOW_DESTRUCTIVE_TESTS='true'

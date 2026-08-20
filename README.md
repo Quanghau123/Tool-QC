@@ -27,7 +27,41 @@ Khung kiểm thử API dùng chung cho nhiều dự án. Cấu hình kết nối
 
 Biến môi trường hệ điều hành hoặc CI luôn ưu tiên hơn `.env`.
 
+Agent được ủy quyền chạy Tool-QC và kết nối API/database/MQTT của môi trường local/test để
+tự xác minh, sửa testcase/fixture và chạy lại. Mọi cấu hình vẫn lấy tập trung từ `.env`
+hoặc biến môi trường hệ điều hành; không sao chép URL, tag, timeout hay credential vào
+instruction và testcase. Quyền này không áp dụng cho production và không vô hiệu hóa cơ
+chế sandbox của ứng dụng chạy agent.
+
+Agent sử dụng cấu hình `.env` thông qua runner làm nguồn cấu hình duy nhất. Khi môi trường
+là local/test, production bị tắt và destructive test đã bật, agent tự yêu cầu quyền công
+cụ rồi chạy; người dùng không cần nhập lại câu xác nhận hoặc chạy từng lệnh. Quyền sandbox
+của ứng dụng Codex là lớp bên ngoài và không thể được source tự động vô hiệu hóa.
+
 ## Chạy
+
+### Quét message từ một source bất kỳ ra Excel
+
+Module `AutoTest.MessageScanner` quét đệ quy source, tự bỏ qua các thư mục build,
+dependency và version-control, thu thập các key dạng `Mes.<Module>.<...>`, loại trùng,
+phân nhóm theo module và xuất workbook `.xlsx`. Sheet `Messages` giữ đúng bốn cột
+`STT`, `Messages`, `Mes tiếng Việt`, `Mes tiếng Anh` như file mẫu; mỗi module còn có
+một sheet riêng. Nếu source chứa resource JSON, RESX hoặc `.properties` có hậu tố/thư
+mục ngôn ngữ `vi` và `en`, nội dung dịch tương ứng cũng được điền tự động.
+
+Chỉ cần cung cấp đường dẫn source:
+
+```powershell
+dotnet run --project runner/AutoTest.MessageScanner -- --source "D:\works\projects\ops-service"
+```
+
+Mặc định báo cáo nằm trong `message-results/`. Có thể chọn tên file:
+
+```powershell
+dotnet run --project runner/AutoTest.MessageScanner -- --source "D:\works\projects\ops-service" --output "message-results\ops-service-messages.xlsx"
+```
+
+Scanner chỉ đọc source, không build hoặc chạy project được quét và không đọc `.env`.
 
 ### Chuẩn bị trước khi chạy
 
@@ -254,7 +288,7 @@ Các biến `${guid1}` đến `${guid32}` là các GUID khác nhau trong phạm 
 phù hợp khi fixture cần ID riêng cho event, customer, history, transaction và request.
 Các biến `${futureDay1Iso}`, `${futureDay4Iso}`, `${futureDay5Iso}`,
 `${futureDay6Iso}`, `${futureDay8Iso}`, `${futureDay9Iso}`, `${futureDay10Iso}`
-và `${futureDay15Iso}` hỗ trợ các kịch bản kiểm tra khoảng ngày.
+`${pastStartIso}` hỗ trợ tạo Event đang Active; `${futureDay15Iso}` hỗ trợ các kịch bản kiểm tra khoảng ngày.
 
 Trong `testcases`, chia file theo module nghiệp vụ để dễ tìm và bảo trì. Mỗi module dùng
 một thư mục riêng, ví dụ `users/`, `devices/`, `booths/`; các kiểm tra dùng chung như

@@ -48,6 +48,7 @@ public sealed class RunnerEngine : IDisposable
             ["timestamp"] = now.ToUnixTimeSeconds().ToString(),
             ["timestampMs"] = now.ToUnixTimeMilliseconds().ToString(),
             ["nowIso"] = ToUtcIso(now),
+            ["pastStartIso"] = ToUtcIso(now.AddHours(-1)),
             ["futureStartIso"] = ToUtcIso(now.AddHours(1)),
             ["futureEndIso"] = ToUtcIso(now.AddHours(2)),
             ["futureDay1Iso"] = ToUtcIso(now.AddDays(1)),
