@@ -27,7 +27,7 @@ public sealed class HttpStepExecutor : ITestStepExecutor
         StepSpec step=context.Step; RequestSpec request=step.Request!; var watch=Stopwatch.StartNew();
         string method=request.Method??throw new InvalidDataException($"Thiếu phương thức HTTP cho bước: {step.Name}");
         string path=Templates.Resolve(request.Path??throw new InvalidDataException($"Thiếu đường dẫn HTTP cho bước: {step.Name}"),context.Variables,context.Environment);
-        string? payload=request.Body is { } body?Templates.Resolve(body.GetRawText(),context.Variables,context.Environment):null;
+        string? payload=request.RawBody is not null?Templates.Resolve(request.RawBody,context.Variables,context.Environment):request.Body is { } body?Templates.Resolve(body.GetRawText(),context.Variables,context.Environment):null;
         Dictionary<string,string>? form=request.Form?.ToDictionary(x=>x.Key,x=>Templates.Resolve(x.Value,context.Variables,context.Environment));
         string? reportPayload=payload??(form is null?null:JsonSerializer.Serialize(form)); int? status=null; string? responseText=null;
         string expected=DescribeExpected(step.Expect,context);
@@ -38,6 +38,7 @@ public sealed class HttpStepExecutor : ITestStepExecutor
                 if(token is not null) message.Headers.Authorization=new AuthenticationHeaderValue(context.Project.Authentication?.Prefix??"Bearer",token);
             }
             foreach(var header in request.Headers??[]) message.Headers.TryAddWithoutValidation(header.Key,Templates.Resolve(header.Value,context.Variables,context.Environment));
+            if(request.RawBody is not null&&request.Body is not null) throw new InvalidDataException($"Bước '{step.Name}' không thể gửi đồng thời body và rawBody.");
             if(payload is not null&&form is not null) throw new InvalidDataException($"Bước '{step.Name}' không thể gửi đồng thời body JSON và form.");
             if(payload is not null) message.Content=new StringContent(payload,Encoding.UTF8,"application/json");
             else if(form is not null){var content=new MultipartFormDataContent();foreach(var item in form)content.Add(new StringContent(item.Value),item.Key);message.Content=content;}

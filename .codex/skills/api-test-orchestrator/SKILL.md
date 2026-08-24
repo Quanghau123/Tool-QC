@@ -26,9 +26,28 @@ at a happy path or hand the user an intermediate testcase to run manually.
      availability, or behavior.
    - `../api-test-reporting/SKILL.md` — always required.
 4. Create isolated fixtures with unique IDs and no cross-case execution dependency.
-5. Parse affected JSON, build, announce run context, and run the smallest affected tag.
-6. Inspect console and HTML report. Let the reporting skill govern classification,
+5. Write every new or materially migrated suite as schema v2 and add a coverage
+   manifest to every case. Record the source files actually inspected and cite exact
+   testcase step names as evidence. Never use schema v1 for new work.
+6. Parse affected JSON, run preflight, build, announce run context, and run the smallest affected tag.
+7. Inspect console and HTML report. Let the reporting skill govern classification,
    automatic repairs, reruns, blockers, and final reporting.
+
+## Machine-enforced coverage manifest
+
+The suite root must contain `"schemaVersion": 2`. Every case must declare:
+
+- `sourceVerification` with non-empty backend source files and a valid ISO timestamp;
+- `contract`, `validation`, `authentication`, `scope`, `integrity`, `lifecycle`,
+  `concurrency`, and `reporting`;
+- status `covered`, `notApplicable`, or `blocked` for every item;
+- exact `evidenceSteps` for every covered item, or a concrete `reason` otherwise.
+
+Contract, validation, and reporting are always covered. Integrity is covered for
+mutation/destructive cases; authentication for protected APIs; scope for scoped routes;
+concurrency for parallel requests. A rejected mutation must be followed by database
+evidence proving no state changed. Do not run a suite until preflight accepts this
+manifest.
 
 Preserve every fixture after execution. Do not run cleanup or delete created test data;
 the user must be able to inspect it through APIs and the database.

@@ -4,5 +4,10 @@ test-results/
 integration-results/
 .build-verify/
 projects/*/testcases/
+!projects/project-template/testcases/
+projects/project-template/testcases/*
+!projects/project-template/testcases/system/
+projects/project-template/testcases/system/*
+!projects/project-template/testcases/system/health.json
 bin/
 obj/

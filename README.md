@@ -291,6 +291,28 @@ Các biến `${futureDay1Iso}`, `${futureDay4Iso}`, `${futureDay5Iso}`,
 `${futureDay6Iso}`, `${futureDay8Iso}`, `${futureDay9Iso}`, `${futureDay10Iso}`
 `${pastStartIso}` hỗ trợ tạo Event đang Active; `${futureDay15Iso}` hỗ trợ các kịch bản kiểm tra khoảng ngày.
 
+Các biến `${shortUniqueA}`, `${shortUniqueB}`, `${shortUniqueC}` là chuỗi chữ-số
+ngẫu nhiên dài đúng 6 ký tự, phù hợp với fixture có mã ngắn nhưng vẫn cần độc lập giữa các lần chạy.
+
+### Coverage manifest bắt buộc cho testcase mới
+
+Suite mới hoặc suite được migrate phải dùng `"schemaVersion": 2` (đây cũng là mặc
+định khi bỏ trường version). Mỗi case phải có
+`coverage` để preflight cưỡng chế đầy đủ các bước thiết kế, thay vì chỉ phụ thuộc vào
+checklist của người viết. Suite v1 chỉ được giữ cho testcase cũ chưa migrate.
+
+- `sourceVerification` ghi các file backend thực sự đã đối chiếu và thời điểm ISO.
+- Mỗi mục nhận `covered`, `notApplicable` hoặc `blocked`.
+- `covered` phải trỏ tới tên step có thật trong `evidenceSteps`.
+- `notApplicable`/`blocked` phải có `reason` cụ thể.
+- `contract`, `validation`, `reporting` luôn phải `covered`.
+- Mutation/destructive bắt buộc `integrity`; API có auth bắt buộc `authentication`;
+  route `${eventId}` bắt buộc `scope`; request song song bắt buộc `concurrency`.
+- HTTP không phải health không được chỉ assert status. Mutation dự kiến bị từ chối
+  phải có bước database phía sau chứng minh dữ liệu không đổi.
+
+Ví dụ đầy đủ nằm tại `projects/project-template/testcases/system/health.json`.
+
 Trong `testcases`, chia file theo module nghiệp vụ để dễ tìm và bảo trì. Mỗi module dùng
 một thư mục riêng, ví dụ `users/`, `devices/`, `booths/`; các kiểm tra dùng chung như
 health/readiness đặt trong `system/`. Runner tự tìm các file JSON trong toàn bộ thư mục con.
@@ -346,6 +368,18 @@ dạng `multipart/form-data`, ví dụ:
     "Password": "Admin@123",
     "Name": "Người dùng kiểm thử"
   }
+}
+```
+
+Để kiểm tra malformed JSON, dùng `rawBody`. Không được khai báo đồng thời `rawBody`
+với `body` hoặc `form`; runner vẫn gửi content type `application/json` nhưng giữ nguyên
+chuỗi sai cú pháp để xác minh API trả lỗi client và không phát sinh HTTP 500:
+
+```json
+"request": {
+  "method": "POST",
+  "path": "/api/items",
+  "rawBody": "{\"name\":"
 }
 ```
 
@@ -477,6 +511,9 @@ Service giữ API mở đến khi nhấn `Ctrl+C`. Endpoint quản trị dùng �
 
 - `GET /__autotest/health`: trạng thái sẵn sàng.
 - `GET /__autotest/requests`: toàn bộ request thật đã nhận, đã che header nhạy cảm.
+- `GET /__autotest/requests?transactionCode=<code>`: chỉ lấy request chứa đúng
+  `transactionCode` ở bất kỳ cấp JSON nào; dùng cách này để các testcase Hangfire
+  không đọc nhầm request retry của case khác.
 - `DELETE /__autotest/requests`: xóa request đã ghi trước một lượt test mới.
 
 Response có thể lấy dữ liệu động từ request bằng chuỗi
@@ -500,6 +537,24 @@ Sau đó chỉ cần lệnh ngắn:
 .\toolqc.ps1 integration inspect ops-service point-exchange
 .\toolqc.ps1 integration list
 ```
+
+T3 giả lập cho job điểm thưởng hoàn thiện hồ sơ có profile riêng:
+
+```powershell
+.\toolqc.ps1 integration start ops-service profile-completion-bonus
+.\toolqc.ps1 integration status ops-service profile-completion-bonus
+.\toolqc.ps1 integration inspect ops-service profile-completion-bonus
+.\toolqc.ps1 integration stop ops-service profile-completion-bonus
+dotnet run --project runner/AutoTest.Runner -- --project ops-service --tags profile-completion-bonus-sync
+```
+
+Host nhận `GET /api/integration/profile-completion-bonuses` tại URL khai báo trong
+`projects/ops-service/integrations/profile-completion-bonus/integration.json` và lưu
+request/response thật dưới `integration-results/ops-service/profile-completion-bonus/`.
+Khai báo `PROFILE_BONUS_STUB_BASE_URL` cho Tool-QC. Backend test phải được cấu hình
+`RegistrationIntegration` dùng scheme `http`, host của stub và route trên trước khi
+backend khởi động. Token chỉ đặt trong cấu hình môi trường backend; artifact che header
+Authorization.
 
 `start` mặc định chạy foreground; `Ctrl+C` dừng host sạch. Chỉ khi cần chạy nền mới dùng:
 

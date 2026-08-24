@@ -66,7 +66,7 @@ string eventsDirectory = Path.Combine(fixtureRoot, "events");
 Directory.CreateDirectory(eventsDirectory);
 string suitePath = Path.Combine(eventsDirectory, "sample.json");
 File.WriteAllText(suitePath, """
-{"project":"framework-test","cases":[{"id":"sample.case","name":"Kịch bản mẫu","tags":["smoke"],"destructive":false,"steps":[{"name":"Đọc dữ liệu mẫu","request":{"method":"GET","path":"/health"},"expect":{"status":200}}]}]}
+{"schemaVersion":1,"project":"framework-test","cases":[{"id":"sample.case","name":"Kịch bản mẫu","tags":["smoke"],"destructive":false,"steps":[{"name":"Đọc dữ liệu mẫu","request":{"method":"GET","path":"/health"},"expect":{"status":200}}]}]}
 """);
 CaseSpec loadedCase = SpecLoader.Cases(fixtureRoot, "framework-test").Single();
 Equal("events", loadedCase.SourceGroup, "testcase source group");
@@ -102,6 +102,56 @@ IReadOnlyList<ValidationIssue> concurrentIssues = TestcaseValidator.Validate(fix
     new ProjectSpec("framework-test", "FRAMEWORK_TEST_URL", null, null, null),
     [concurrentCase], registry.All, validateTemporaryFiles: false);
 Equal("0", concurrentIssues.Count.ToString(), "concurrent request inherits variables");
+
+string coverageDirectory = Path.Combine(fixtureRoot, "coverage");
+Directory.CreateDirectory(coverageDirectory);
+File.WriteAllText(Path.Combine(coverageDirectory, "valid.json"), """
+{
+  "schemaVersion": 2,
+  "project": "framework-test",
+  "cases": [{
+    "id": "coverage.valid",
+    "name": "Kiểm tra manifest coverage hợp lệ",
+    "tags": ["smoke"],
+    "destructive": false,
+    "steps": [{"name":"Đọc health","request":{"method":"GET","path":"/health"},"expect":{"status":200}}],
+    "coverage": {
+      "sourceVerification":{"files":["Controllers/HealthController.cs"],"verifiedAt":"2026-08-21T00:00:00Z","contractVersion":"test"},
+      "contract":{"status":"covered","evidenceSteps":["Đọc health"]},
+      "validation":{"status":"covered","evidenceSteps":["Đọc health"]},
+      "authentication":{"status":"notApplicable","reason":"Endpoint public."},
+      "scope":{"status":"notApplicable","reason":"Không có resource scope."},
+      "integrity":{"status":"notApplicable","reason":"Request chỉ đọc."},
+      "lifecycle":{"status":"notApplicable","reason":"Không phụ thuộc trạng thái."},
+      "concurrency":{"status":"notApplicable","reason":"Không có tài nguyên tranh chấp."},
+      "reporting":{"status":"covered","evidenceSteps":["Đọc health"]}
+    }
+  }]
+}
+""");
+CaseSpec validCoverageCase = SpecLoader.Cases(coverageDirectory, "framework-test").Single();
+IReadOnlyList<ValidationIssue> validCoverageIssues = TestcaseValidator.Validate(coverageDirectory,
+    new ProjectSpec("framework-test", "FRAMEWORK_TEST_URL", null, null, null),
+    [validCoverageCase], registry.All);
+Equal("0", validCoverageIssues.Count.ToString(), "schema v2 valid coverage manifest");
+
+CaseSpec missingCoverageCase = validCoverageCase with { Id = "coverage.missing", Coverage = null };
+IReadOnlyList<ValidationIssue> missingCoverageIssues = TestcaseValidator.Validate(coverageDirectory,
+    new ProjectSpec("framework-test", "FRAMEWORK_TEST_URL", null, null, null),
+    [missingCoverageCase], registry.All, validateTemporaryFiles: false);
+Equal("true", missingCoverageIssues.Any(issue => issue.Message.Contains("coverage manifest", StringComparison.OrdinalIgnoreCase)).ToString().ToLowerInvariant(),
+    "schema v2 rejects missing coverage manifest");
+
+CoverageSpec invalidEvidence = validCoverageCase.Coverage! with
+{
+    Contract = new CoverageItemSpec("covered", ["Step không tồn tại"], null)
+};
+CaseSpec invalidEvidenceCase = validCoverageCase with { Id = "coverage.invalid-evidence", Coverage = invalidEvidence };
+IReadOnlyList<ValidationIssue> invalidEvidenceIssues = TestcaseValidator.Validate(coverageDirectory,
+    new ProjectSpec("framework-test", "FRAMEWORK_TEST_URL", null, null, null),
+    [invalidEvidenceCase], registry.All, validateTemporaryFiles: false);
+Equal("true", invalidEvidenceIssues.Any(issue => issue.Message.Contains("step không tồn tại", StringComparison.OrdinalIgnoreCase)).ToString().ToLowerInvariant(),
+    "schema v2 rejects unknown evidence step");
 var resultSetExpectation = JsonSerializer.Deserialize<DatabaseExpectSpec>("""{"resultSet":true}""",
     new JsonSerializerOptions(JsonSerializerDefaults.Web));
 Equal("true", (resultSetExpectation?.ResultSet == true).ToString().ToLowerInvariant(),
@@ -122,7 +172,7 @@ Equal("true", File.Exists(Path.Combine(artifactRoot, "requests", "000001.json"))
 Directory.Delete(artifactRoot, true);
 Directory.Delete(fixtureRoot, true);
 
-Console.WriteLine("Framework tests passed: 17");
+Console.WriteLine("Framework tests passed: 20");
 return 0;
 
 static StepSpec Step(string? method, string? path, DatabaseRequestSpec? database, MqttRequestSpec? mqtt)

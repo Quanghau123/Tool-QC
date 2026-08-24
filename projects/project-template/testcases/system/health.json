@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 2,
+  "project": "replace-me",
+  "cases": [
+    {
+      "id": "system.health-contract",
+      "name": "Kiểm tra dịch vụ sẵn sàng và đúng contract health",
+      "tags": ["smoke", "system"],
+      "destructive": false,
+      "steps": [
+        {
+          "name": "Đọc trạng thái sẵn sàng của dịch vụ",
+          "request": {
+            "method": "GET",
+            "path": "/health"
+          },
+          "expect": {
+            "status": 200
+          }
+        }
+      ],
+      "coverage": {
+        "sourceVerification": {
+          "files": ["<thay-bang-controller-hoac-openapi-da-doc>"],
+          "verifiedAt": "2026-01-01T00:00:00Z",
+          "contractVersion": "replace-me"
+        },
+        "contract": {
+          "status": "covered",
+          "evidenceSteps": ["Đọc trạng thái sẵn sàng của dịch vụ"]
+        },
+        "validation": {
+          "status": "covered",
+          "evidenceSteps": ["Đọc trạng thái sẵn sàng của dịch vụ"]
+        },
+        "authentication": {
+          "status": "notApplicable",
+          "reason": "Health endpoint của template là public."
+        },
+        "scope": {
+          "status": "notApplicable",
+          "reason": "Health endpoint không có resource scope."
+        },
+        "integrity": {
+          "status": "notApplicable",
+          "reason": "Đây là request chỉ đọc và không thay đổi dữ liệu."
+        },
+        "lifecycle": {
+          "status": "notApplicable",
+          "reason": "Health endpoint không phụ thuộc vòng đời nghiệp vụ."
+        },
+        "concurrency": {
+          "status": "notApplicable",
+          "reason": "Template smoke không kiểm tra tài nguyên tranh chấp."
+        },
+        "reporting": {
+          "status": "covered",
+          "evidenceSteps": ["Đọc trạng thái sẵn sàng của dịch vụ"]
+        }
+      }
+    }
+  ]
+}

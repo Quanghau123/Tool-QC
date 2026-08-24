@@ -77,6 +77,17 @@ copy. Do not modify `project-template` with business-specific examples.
   marks applicable; include adversarial coverage instead of stopping at a happy path.
 
 - Keep test cases declarative; do not create C# test classes for a service.
+- Every newly created or materially migrated suite must declare `"schemaVersion": 2`.
+  Schema v2 requires a `coverage` manifest on every case. Preflight must fail instead
+  of running when the manifest or its evidence is incomplete. Schema v1 is reserved
+  only for unchanged legacy suites and must not be used for new work.
+- Before authoring steps, record `coverage.sourceVerification.files` and
+  `coverage.sourceVerification.verifiedAt` from the backend source actually inspected.
+  Never invent a source path or verification time.
+- Every coverage item must be explicitly `covered`, `notApplicable`, or `blocked`.
+  A covered item must cite exact testcase step names in `evidenceSteps`; an omitted
+  area is invalid. Contract, validation and reporting are always required. Auth,
+  scope, integrity and concurrency become required when preflight detects those risks.
 - The `name` of every test case and test step, including cleanup steps, must be written in clear, natural Vietnamese so Vietnamese users can immediately understand what is being tested. This rule applies to descriptive `name` fields in the test specification, not to business-data fields named `name` inside request bodies or expected API data.
 - Whenever a test case creates a local test account, device, or other test fixture that requires a password, the password must be exactly `Admin@123`, and `confirmPassword` must use the same value. This fixed value is test data only; never use it for production credentials, real users, environment secrets, or authentication configuration.
 - A case owns its data. Use `${unique}` to avoid collisions.
@@ -288,6 +299,10 @@ This loop is mandatory for every testcase task. Do not stop after a
 intermediate command manually. Edit and rerun autonomously. Stop only for a
 confirmed `BACKEND_BUG`, an external environment outage, or permission/configuration
 that only the user can provide. After that blocker is resolved, resume the same loop.
+
+For new/migrated testcase work, completion also requires schema-v2 preflight to pass.
+An agent checklist or prose claim is not evidence: the JSON coverage manifest must
+reference real step names, and the runner must accept it before execution.
 
 Never change an expected status, message, response field, or business assertion
 only to match an unexpected response. Such a change is allowed only after the

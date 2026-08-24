@@ -10,7 +10,7 @@ public static class TestcaseValidator
     private static readonly string[] TemporaryMarkers = [".working.json", ".bak.json", ".backup.json", ".tmp.json"];
     private static readonly HashSet<string> BuiltInVariables = new(StringComparer.OrdinalIgnoreCase)
     {
-        "unique", "timestamp", "timestampMs", "nowIso", "pastStartIso", "futureStartIso", "futureEndIso",
+        "unique", "shortUniqueA", "shortUniqueB", "shortUniqueC", "timestamp", "timestampMs", "nowIso", "pastStartIso", "futureStartIso", "futureEndIso",
         "futureDay1Iso", "futureDay4Iso", "futureDay5Iso", "futureDay6Iso",
         "futureDay8Iso", "futureDay9Iso", "futureDay10Iso", "futureDay15Iso"
     };
@@ -42,11 +42,73 @@ public static class TestcaseValidator
                 issues.Add(new(test.Id, "Testcase phải có ít nhất một tag."));
             if (test.Tags?.Any(string.IsNullOrWhiteSpace) == true)
                 issues.Add(new(test.Id, "Tag không được rỗng."));
+            if (test.SchemaVersion >= 2) ValidateCoverage(test, issues);
             ValidateSteps(test.Id, test.Steps, test.Variables, executors, issues, cleanup: false);
             ValidateSteps(test.Id, test.Cleanup ?? [], test.Variables, executors, issues, cleanup: true);
         }
         return issues;
     }
+
+    private static void ValidateCoverage(CaseSpec test, List<ValidationIssue> issues)
+    {
+        string location = $"{test.Id} / coverage";
+        if (test.Coverage is null) { issues.Add(new(location, "Thiếu coverage manifest bắt buộc.")); return; }
+        if (test.Coverage.SourceVerification is not { Files: { Length: > 0 } } source)
+            issues.Add(new(location, "sourceVerification.files phải liệt kê source backend đã đối chiếu."));
+        else
+        {
+            if (source.Files.Any(string.IsNullOrWhiteSpace)) issues.Add(new(location, "sourceVerification.files không được chứa đường dẫn rỗng."));
+            if (string.IsNullOrWhiteSpace(source.VerifiedAt) || !DateTimeOffset.TryParse(source.VerifiedAt, out _)) issues.Add(new(location, "sourceVerification.verifiedAt phải là ISO datetime hợp lệ."));
+        }
+
+        var items = new Dictionary<string, CoverageItemSpec?>
+        {
+            ["contract"] = test.Coverage.Contract, ["validation"] = test.Coverage.Validation,
+            ["authentication"] = test.Coverage.Authentication, ["scope"] = test.Coverage.Scope,
+            ["integrity"] = test.Coverage.Integrity, ["lifecycle"] = test.Coverage.Lifecycle,
+            ["concurrency"] = test.Coverage.Concurrency, ["reporting"] = test.Coverage.Reporting,
+        };
+        var stepNames = test.Steps.Select(x => x.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach ((string name, CoverageItemSpec? item) in items)
+        {
+            if (item is null) { issues.Add(new(location, $"Thiếu coverage.{name}.")); continue; }
+            string status = item.Status?.Trim().ToLowerInvariant() ?? "";
+            if (status is not ("covered" or "notapplicable" or "blocked")) { issues.Add(new(location, $"coverage.{name}.status chỉ nhận covered, notApplicable hoặc blocked.")); continue; }
+            if (status == "covered")
+            {
+                if (item.EvidenceSteps is not { Length: > 0 }) issues.Add(new(location, $"coverage.{name} covered nhưng thiếu evidenceSteps."));
+                else foreach (string step in item.EvidenceSteps.Where(step => !stepNames.Contains(step))) issues.Add(new(location, $"coverage.{name} tham chiếu step không tồn tại: {step}"));
+            }
+            else if (string.IsNullOrWhiteSpace(item.Reason)) issues.Add(new(location, $"coverage.{name} {item.Status} nhưng thiếu reason."));
+        }
+
+        bool mutates = test.Destructive || test.Steps.Any(IsMutation);
+        bool protectedApi = test.Steps.Any(step => step.Auth is not null || step.AuthToken is not null);
+        bool scopedApi = test.Steps.Any(step => step.Request?.Path?.Contains("${eventId}", StringComparison.OrdinalIgnoreCase) == true);
+        bool concurrency = test.Steps.Any(step => step.ParallelRequests is > 1 || step.ConcurrentRequests is { Count: > 1 });
+        RequireCovered(test.Coverage.Contract, "contract", location, issues);
+        RequireCovered(test.Coverage.Reporting, "reporting", location, issues);
+        RequireCovered(test.Coverage.Validation, "validation", location, issues);
+        if (mutates) RequireCovered(test.Coverage.Integrity, "integrity cho testcase mutation/destructive", location, issues);
+        if (protectedApi) RequireCovered(test.Coverage.Authentication, "authentication cho API protected", location, issues);
+        if (scopedApi) RequireCovered(test.Coverage.Scope, "scope cho route có eventId", location, issues);
+        if (concurrency) RequireCovered(test.Coverage.Concurrency, "concurrency cho bước chạy đồng thời", location, issues);
+
+        foreach (StepSpec step in test.Steps)
+        {
+            if (step.Request is null || step.ConcurrentRequests is { Count: > 0 }) continue;
+            if (step.Request.Method is not null && step.Expect is { Status: not null } && step.Expect.Json is null && step.Expect.Database is null && step.Expect.Mqtt is null && step.Expect.HttpStub is null && step.Request.Path?.Contains("health", StringComparison.OrdinalIgnoreCase) != true)
+                issues.Add(new($"{test.Id} / {step.Name}", "HTTP step chỉ assert status; phải assert payload hoặc database, trừ health endpoint."));
+            if (IsMutation(step) && step.Expect?.Status is >= 400 && !HasLaterDatabaseEvidence(test.Steps, step))
+                issues.Add(new($"{test.Id} / {step.Name}", "Mutation bị từ chối phải có bước database phía sau để chứng minh không đổi dữ liệu."));
+        }
+    }
+
+    private static void RequireCovered(CoverageItemSpec? item, string name, string location, List<ValidationIssue> issues)
+    { if (!string.Equals(item?.Status, "covered", StringComparison.OrdinalIgnoreCase)) issues.Add(new(location, $"Bắt buộc coverage {name} phải là covered.")); }
+    private static bool IsMutation(StepSpec step) => step.Request?.Database is not null || step.Request?.Mqtt is not null || step.Request?.HttpStub is not null || step.Request?.Method?.ToUpperInvariant() is "POST" or "PUT" or "PATCH" or "DELETE";
+    private static bool HasLaterDatabaseEvidence(IReadOnlyList<StepSpec> steps, StepSpec current)
+    { int index=-1; for(int i=0;i<steps.Count;i++)if(ReferenceEquals(steps[i],current)){index=i;break;} return index>=0 && steps.Skip(index+1).Any(step=>step.Request?.Database is not null && step.Expect?.Database is not null); }
 
     private static void ValidateSteps(string caseId, IReadOnlyList<StepSpec> steps,
         Dictionary<string, string>? caseVariables, IReadOnlyCollection<ITestStepExecutor> executors,
@@ -83,6 +145,8 @@ public static class TestcaseValidator
             int executorCount = executors.Count(executor => executor.CanExecute(step));
             if (executorCount != 1) issues.Add(new(location, $"Bước phải khớp đúng một executor, thực tế {executorCount}."));
             if (step.Request.Body is not null && step.Request.Form is not null) issues.Add(new(location, "Không được gửi đồng thời body JSON và form."));
+            if (step.Request.Body is not null && step.Request.RawBody is not null) issues.Add(new(location, "Không được gửi đồng thời body và rawBody."));
+            if (step.Request.Form is not null && step.Request.RawBody is not null) issues.Add(new(location, "Không được gửi đồng thời form và rawBody."));
             if (!cleanup && step.Expect is null) issues.Add(new(location, "Thiếu expect."));
             if (step.Expect is { Status: not null, StatusOneOf: { Length: > 0 } }) issues.Add(new(location, "Chỉ khai báo một trong status hoặc statusOneOf."));
             if (step.Expect?.Database is { ScalarEquals: not null, ResultSet: true })
@@ -111,6 +175,7 @@ public static class TestcaseValidator
         if (step.AuthToken is not null) yield return step.AuthToken;
         if (step.Request?.Path is not null) yield return step.Request.Path;
         if (step.Request?.Body is { } body) yield return body.GetRawText();
+        if (step.Request?.RawBody is not null) yield return step.Request.RawBody;
         foreach (string value in step.Request?.Form?.Values ?? Enumerable.Empty<string>()) yield return value;
         foreach (string value in step.Request?.Headers?.Values ?? Enumerable.Empty<string>()) yield return value;
         if (step.Request?.Mqtt is { } mqtt)

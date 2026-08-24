@@ -47,6 +47,9 @@ public sealed class RunnerEngine : IDisposable
         var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["unique"] = Guid.NewGuid().ToString("N"),
+            ["shortUniqueA"] = Guid.NewGuid().ToString("N")[..6],
+            ["shortUniqueB"] = Guid.NewGuid().ToString("N")[..6],
+            ["shortUniqueC"] = Guid.NewGuid().ToString("N")[..6],
             ["timestamp"] = now.ToUnixTimeSeconds().ToString(),
             ["timestampMs"] = now.ToUnixTimeMilliseconds().ToString(),
             ["nowIso"] = ToUtcIso(now),

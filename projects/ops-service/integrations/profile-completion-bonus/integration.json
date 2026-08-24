@@ -1,0 +1,22 @@
+{
+  "name": "profile-completion-bonus",
+  "transport": "http",
+  "url": "http://127.0.0.1:2670",
+  "persistArtifacts": true,
+  "maxRequestBodyBytes": 1048576,
+  "maxInMemoryExchanges": 2000,
+  "routes": [
+    {
+      "name": "profile-completion-bonus-empty-page",
+      "method": "GET",
+      "path": "/api/integration/profile-completion-bonuses",
+      "status": 200,
+      "response": {
+        "data": {
+          "items": [],
+          "pagination": { "limit": 1000, "returned": 0, "hasMore": false, "nextCursorId": 0 }
+        }
+      }
+    }
+  ]
+}

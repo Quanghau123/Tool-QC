@@ -49,7 +49,14 @@ public sealed class HttpIntegrationHost
             rules[Key(rule.Method, rule.Path)] = new(rule);
             return Results.Ok(new { configured = true, method = rule.Method.ToUpperInvariant(), rule.Path, rule.Status, rule.DelayMs });
         });
-        app.MapGet("/__autotest/requests", () => new { count = captured.Count, requests = captured.ToArray() });
+        app.MapGet("/__autotest/requests", (HttpContext context) =>
+        {
+            string transactionCode = context.Request.Query["transactionCode"].ToString();
+            CapturedExchange[] requests = string.IsNullOrWhiteSpace(transactionCode)
+                ? captured.ToArray()
+                : captured.Where(exchange => ContainsJsonString(exchange.RequestBody, "transactionCode", transactionCode)).ToArray();
+            return Results.Ok(new { count = requests.Length, requests });
+        });
         app.MapDelete("/__autotest/requests", () => { while (captured.TryDequeue(out _)) { } return Results.Ok(new { cleared = true }); });
         app.MapPost("/__autotest/shutdown", (HttpContext context, IHostApplicationLifetime lifetime) =>
         {
@@ -156,6 +163,19 @@ public sealed class HttpIntegrationHost
         return JsonRuleMatcher.Matches(state.Rule.MatchJson, body) ? state : null;
     }
     private static string Key(string method, string path) => $"{method.ToUpperInvariant()} {path}";
+    private static bool ContainsJsonString(object? value, string propertyName, string expected)
+    {
+        if (value is not JsonElement element) return false;
+        return element.ValueKind switch
+        {
+            JsonValueKind.Object => element.EnumerateObject().Any(property =>
+                (property.NameEquals(propertyName) && property.Value.ValueKind == JsonValueKind.String &&
+                 string.Equals(property.Value.GetString(), expected, StringComparison.Ordinal)) ||
+                ContainsJsonString(property.Value, propertyName, expected)),
+            JsonValueKind.Array => element.EnumerateArray().Any(item => ContainsJsonString(item, propertyName, expected)),
+            _ => false,
+        };
+    }
     private static async Task<string> ReadBoundedAsync(Stream stream, long maximumBytes, CancellationToken cancellationToken)
     {
         using var memory = new MemoryStream();
