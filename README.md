@@ -19,6 +19,10 @@ testcase trong `projects/ops-service/testcases/events/` sinh báo cáo tại
 
 Khung kiểm thử API dùng chung cho nhiều dự án. Cấu hình kết nối tập trung trong `.env`; logic riêng của từng dịch vụ nằm trong `projects/<project-name>`.
 
+Load test JMeter dùng shared launcher tại `scripts/jmeter/Invoke-JMeter.ps1`.
+Mỗi dự án giữ JMX, CSV adapter và properties riêng dưới `projects/<project-name>/load/`;
+shared launcher chỉ quản lý tiến trình JMeter và cấu trúc JTL/HTML chung.
+
 ## Cấu hình
 
 1. Sao chép `.env.example` thành `.env` nếu chưa có.
