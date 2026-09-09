@@ -1,13 +1,35 @@
+# Local configuration and secrets
 .env
+*.local.*
+*.tokens.ps1
+
+# Unified generated output
+.artifacts/
+
+# Legacy generated-output locations; retained so existing local runs stay ignored
 TestResults/
 test-results/
 integration-results/
+message-results/
+reports/
+
+# Temporary diagnostics and tool state
+*.log
 .build-verify/
-projects/*/testcases/
-!projects/project-template/testcases/
-projects/project-template/testcases/*
-!projects/project-template/testcases/system/
-projects/project-template/testcases/system/*
-!projects/project-template/testcases/system/health.json
+.dotnet-home/
+.dotnet_cli_home/
+
+# Testcase authoring scratch files; committed JSON testcases remain source code
+projects/*/testcases/**/*.working
+projects/*/testcases/**/*.working.json
+projects/*/testcases/**/*.tmp
+
+# Project-specific configurations and testcases are local-only.
+# Keep only the reusable project template under version control.
+projects/*/
+!projects/project-template/
+!projects/project-template/**
+
+# Build output
 bin/
 obj/

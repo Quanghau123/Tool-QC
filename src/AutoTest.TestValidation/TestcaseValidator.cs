@@ -140,8 +140,12 @@ public static class TestcaseValidator
             if (step.ConcurrentRequests is { Count: 0 })
                 issues.Add(new(location, "concurrentRequests không được để rỗng."));
             if (step.Request is null) { issues.Add(new(location, "Thiếu request.")); continue; }
-            int transportCount = (step.Request.Database is null ? 0 : 1) + (step.Request.Mqtt is null ? 0 : 1) + (step.Request.HttpStub is null ? 0 : 1) + (step.Request.Method is null && step.Request.Path is null ? 0 : 1);
-            if (transportCount != 1) issues.Add(new(location, "Mỗi bước phải khai báo đúng một transport HTTP, PostgreSQL hoặc MQTT."));
+            int transportCount = (step.Request.Database is null ? 0 : 1)
+                + (step.Request.Elasticsearch is null ? 0 : 1)
+                + (step.Request.Mqtt is null ? 0 : 1)
+                + (step.Request.HttpStub is null ? 0 : 1)
+                + (step.Request.Method is null && step.Request.Path is null ? 0 : 1);
+            if (transportCount != 1) issues.Add(new(location, "Mỗi bước phải khai báo đúng một transport HTTP, PostgreSQL, Elasticsearch, MQTT hoặc HttpStub."));
             int executorCount = executors.Count(executor => executor.CanExecute(step));
             if (executorCount != 1) issues.Add(new(location, $"Bước phải khớp đúng một executor, thực tế {executorCount}."));
             if (step.Request.Body is not null && step.Request.Form is not null) issues.Add(new(location, "Không được gửi đồng thời body JSON và form."));
@@ -159,6 +163,12 @@ public static class TestcaseValidator
                 if (stub.Status is < 100 or > 599) issues.Add(new(location, "HttpStub status phải từ 100 đến 599."));
                 if (stub.DelayMs is < 0 or > 300000) issues.Add(new(location, "HttpStub delayMs phải từ 0 đến 300000."));
                 if (stub.TimeoutMs is < 1 or > 300000) issues.Add(new(location, "HttpStub timeoutMs phải từ 1 đến 300000."));
+            }
+            if (step.Request.Elasticsearch is { } elasticsearch)
+            {
+                if (string.IsNullOrWhiteSpace(elasticsearch.Method)) issues.Add(new(location, "Elasticsearch method không được rỗng."));
+                if (string.IsNullOrWhiteSpace(elasticsearch.Path)) issues.Add(new(location, "Elasticsearch path không được rỗng."));
+                if (step.Expect?.Status is null) issues.Add(new(location, "Bước Elasticsearch phải khai báo expect.status."));
             }
             if (step.ParallelRequests is < 1 or > 1000) issues.Add(new(location, "parallelRequests phải từ 1 đến 1000."));
             if (step.ParallelRequests is > 1 && step.Save is not null) issues.Add(new(location, "Không thể vừa chạy song song vừa save biến."));

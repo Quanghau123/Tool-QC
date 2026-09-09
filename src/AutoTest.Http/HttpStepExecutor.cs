@@ -21,7 +21,7 @@ public sealed class HttpStepExecutor : ITestStepExecutor
         foreach (var header in project.DefaultHeaders ?? []) client.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
     }
     public string Name => "http";
-    public bool CanExecute(StepSpec step) => step.Request is { Database: null, Mqtt: null, HttpStub: null };
+    public bool CanExecute(StepSpec step) => step.Request is { Database: null, Elasticsearch: null, Mqtt: null, HttpStub: null };
     public async Task<StepRunResult> ExecuteAsync(StepExecutionContext context, CancellationToken cancellationToken)
     {
         StepSpec step=context.Step; RequestSpec request=step.Request!; var watch=Stopwatch.StartNew();
@@ -32,7 +32,8 @@ public sealed class HttpStepExecutor : ITestStepExecutor
         string? reportPayload=payload??(form is null?null:JsonSerializer.Serialize(form)); int? status=null; string? responseText=null;
         string expected=DescribeExpected(step.Expect,context);
         try {
-            using var message=new HttpRequestMessage(new HttpMethod(method),path);
+            string requestTarget=Uri.TryCreate(path,UriKind.Absolute,out Uri? absoluteUri)?absoluteUri.ToString():path;
+            using var message=new HttpRequestMessage(new HttpMethod(method),requestTarget);
             if(!string.IsNullOrWhiteSpace(step.Auth)) {
                 string? token=!string.IsNullOrWhiteSpace(step.AuthToken)?Templates.Resolve(step.AuthToken,context.Variables,context.Environment):await (context.ResolveAuthenticationToken?.Invoke(cancellationToken)??Task.FromResult<string?>(null));
                 if(token is not null) message.Headers.Authorization=new AuthenticationHeaderValue(context.Project.Authentication?.Prefix??"Bearer",token);

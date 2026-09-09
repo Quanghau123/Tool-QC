@@ -32,7 +32,7 @@ public sealed class SourceMessageScanner
     private static readonly HashSet<string> IgnoredDirectories = new(StringComparer.OrdinalIgnoreCase)
     {
         ".git", ".vs", ".idea", ".vscode", "bin", "obj", "node_modules", "packages",
-        "dist", "build", "coverage", "test-results", ".next", ".nuxt", "vendor"
+        "dist", "build", "coverage", "test-results", ".artifacts", ".next", ".nuxt", "vendor"
     };
 
     private static readonly HashSet<string> TextExtensions = new(StringComparer.OrdinalIgnoreCase)

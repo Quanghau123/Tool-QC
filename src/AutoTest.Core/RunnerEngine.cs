@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using AutoTest.Http;
 using AutoTest.PostgreSql;
+using AutoTest.Elasticsearch;
 using AutoTest.Mqtt;
 using AutoTest.HttpStub;
 
@@ -33,6 +34,7 @@ public sealed class RunnerEngine : IDisposable
         {
             new HttpStepExecutor(project, env),
             new PostgreSqlStepExecutor(),
+            new ElasticsearchStepExecutor(),
             new MqttStepExecutor(env),
             new HttpStubStepExecutor(env),
         });
@@ -271,7 +273,7 @@ public sealed class RunnerEngine : IDisposable
 
     private string Redact(string value)
     {
-        foreach (var key in new[] { "AUTH_TOKEN", "AUTH_PASSWORD", "DB_CONNECTION_STRING", "REDIS_CONNECTION_STRING", "MQTT_PASSWORD", "MQTT_AUTH_DB_PASSWORD" })
+        foreach (var key in new[] { "AUTH_TOKEN", "AUTH_PASSWORD", "DB_CONNECTION_STRING", "OFFLINE_DB_CONNECTION_STRING", "ONLINE_DB_CONNECTION_STRING", "OFFLINE_CMS_AUTH_PASSWORD", "ONLINE_CMS_AUTH_PASSWORD", "TEST_DEVICE_PASSWORD", "REDIS_CONNECTION_STRING", "MQTT_PASSWORD", "MQTT_AUTH_DB_PASSWORD" })
             if (env.Get(key) is { Length: > 0 } secret) value = value.Replace(secret, "***", StringComparison.Ordinal);
         return value;
     }

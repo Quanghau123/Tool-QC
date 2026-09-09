@@ -83,7 +83,7 @@ async Task RunAsync(string projectName, string integrationName, string configPat
 
 async Task<IntegrationProfile> ProfileAsync(string p, string i) => JsonSerializer.Deserialize<IntegrationProfile>(await File.ReadAllTextAsync(ProfilePath(p, i)), options) ?? throw new InvalidDataException("Không đọc được integration profile.");
 string ProfilePath(string p, string i) => Path.Combine(root, "projects", p, "integrations", i, "integration.json");
-string IntegrationDirectory(string p, string i) => Path.Combine(root, "integration-results", Safe(p), Safe(i));
+string IntegrationDirectory(string p, string i) => Path.Combine(root, ".artifacts", "integration-runs", Safe(p), Safe(i));
 string? CurrentToken(string directory) { string path = Path.Combine(directory, "current.json"); if (!File.Exists(path)) return null; using JsonDocument d = JsonDocument.Parse(File.ReadAllText(path)); return d.RootElement.GetProperty("instanceToken").GetString(); }
 string? CurrentSession(string directory) { string path = Path.Combine(directory, "current.json"); if (!File.Exists(path)) return null; using JsonDocument d = JsonDocument.Parse(File.ReadAllText(path)); return d.RootElement.GetProperty("sessionId").GetString(); }
 string FindRoot() { string? d = Directory.GetCurrentDirectory(); while (d is not null) { if (File.Exists(Path.Combine(d, "ApiAutoTest.sln"))) return d; d = Directory.GetParent(d)?.FullName; } throw new DirectoryNotFoundException("Không tìm thấy Tool-QC root."); }

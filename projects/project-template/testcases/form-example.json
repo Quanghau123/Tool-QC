@@ -1,0 +1,25 @@
+{
+  "project": "replace-me",
+  "cases": [
+    {
+      "id": "forms.submit-example",
+      "name": "Kiểm tra gửi dữ liệu biểu mẫu nhiều phần",
+      "tags": ["form-example"],
+      "destructive": true,
+      "steps": [
+        {
+          "name": "Gửi các trường văn bản bằng biểu mẫu nhiều phần",
+          "request": {
+            "method": "POST",
+            "path": "/api/items",
+            "form": {
+              "Code": "AUTO-${unique}",
+              "Name": "Dữ liệu kiểm thử ${unique}"
+            }
+          },
+          "expect": { "status": 200 }
+        }
+      ]
+    }
+  ]
+}

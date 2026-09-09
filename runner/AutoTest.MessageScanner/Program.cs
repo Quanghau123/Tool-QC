@@ -24,7 +24,8 @@ try
     string sourcePath = Path.GetFullPath(source);
     string output = Argument("--output") ?? Path.Combine(
         Directory.GetCurrentDirectory(),
-        "message-results",
+        ".artifacts",
+        "message-scans",
         $"{Path.GetFileName(sourcePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))}-messages-{DateTime.Now:yyyyMMdd-HHmmss}.xlsx");
 
     var result = new SourceMessageScanner().Scan(sourcePath);

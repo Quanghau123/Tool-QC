@@ -1,0 +1,16 @@
+{
+  "project": "replace-me",
+  "cases": [
+    {
+      "id": "integration.http-stub-example",
+      "name": "Minh họa giả lập hệ thống HTTP bên ngoài",
+      "tags": ["example-http-stub"],
+      "destructive": false,
+      "steps": [
+        { "name": "Khởi động HTTP stub", "request": { "httpStub": { "action": "start" } }, "expect": { "httpStub": {} } },
+        { "name": "Cấu hình endpoint đồng bộ mẫu", "request": { "httpStub": { "action": "configure", "method": "POST", "path": "/api/sync", "status": 200, "response": { "data": { "status": "inserted" } } } }, "expect": { "httpStub": {} } },
+        { "name": "Đối chiếu request đồng bộ mẫu", "request": { "httpStub": { "action": "inspect", "method": "POST", "path": "/api/sync", "timeoutMs": 1000 } }, "expect": { "httpStub": { "receivedCount": 1 } } }
+      ]
+    }
+  ]
+}

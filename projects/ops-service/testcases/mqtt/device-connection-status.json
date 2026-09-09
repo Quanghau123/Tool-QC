@@ -8,8 +8,8 @@
       "tags": ["mqtt", "integration", "devices"],
       "destructive": true,
       "variables": {
-        "eventCode": "AUTO-MQTT-EVENT-${unique}",
-        "deviceCode": "AUTO-MQTT-DEVICE-${unique}",
+        "eventCode": "${shortUniqueA}",
+        "deviceCode": "D${shortUniqueA}",
         "password": "Admin@123"
       },
       "steps": [
@@ -44,7 +44,7 @@
           "authToken": "${adminToken}",
           "request": {
             "method": "POST",
-            "path": "/api/Devices",
+            "path": "/api/Events/${eventId}/Devices",
             "body": {
               "functionTypes": [1],
               "eventId": "${eventId}",
@@ -68,7 +68,7 @@
           "request": {
             "method": "POST",
             "path": "/api/OnsiteOperations/Auth",
-            "body": { "code": "${deviceCode}", "password": "${password}" }
+            "body": { "code": "${eventCode}${deviceCode}", "password": "${password}" }
           },
           "expect": {
             "status": 200,
@@ -116,7 +116,7 @@
           "name": "Chờ API ghi nhận thiết bị đang kết nối",
           "auth": "admin",
           "authToken": "${adminToken}",
-          "request": { "method": "GET", "path": "/api/Devices/${deviceId}" },
+          "request": { "method": "GET", "path": "/api/Events/${eventId}/Devices/${deviceId}" },
           "expect": {
             "status": 200,
             "json": { "$.data.connectionStatus": { "equals": 1 } }
@@ -143,7 +143,7 @@
           "name": "Chờ API ghi nhận thiết bị đã ngắt kết nối",
           "auth": "admin",
           "authToken": "${adminToken}",
-          "request": { "method": "GET", "path": "/api/Devices/${deviceId}" },
+          "request": { "method": "GET", "path": "/api/Events/${eventId}/Devices/${deviceId}" },
           "expect": {
             "status": 200,
             "json": { "$.data.connectionStatus": { "equals": 2 } }
@@ -158,7 +158,7 @@
           "authToken": "${adminToken}",
           "request": {
             "method": "PUT",
-            "path": "/api/Devices/${deviceId}",
+            "path": "/api/Events/${eventId}/Devices/${deviceId}",
             "body": { "functionTypes": [1], "name": "Thiết bị kiểm thử MQTT ${unique}", "operationStatus": 4 }
           }
         },

@@ -22,6 +22,11 @@ or ambiguous testcase contracts fail before any fixture or backend state is chan
 `AutoTest.MessageScanner` is an independent static-analysis/reporting module. Its CLI
 accepts any source directory and emits an XLSX message catalog without coupling the
 test runner or shared step-executor contract to a specific backend.
+
+`AutoTest.LoadTesting` is the reusable load-diagnostic module. It owns timing records,
+statistics, `Server-Timing` parsing, masking/hashing, JSONL compatibility and Markdown
+comparison. A project-specific load adapter owns routes, payloads and fixtures; shared
+load code must not branch on a project name.
 ```
 
 `projects/<project-name>/` contains only configuration and declarative test cases.
@@ -41,7 +46,7 @@ common `RunResult` model and have no transport dependency.
 `runner/AutoTest.HttpStub` hiện là compatibility CLI cho Integration Host. Profile nằm tại
 `projects/<project>/integrations/<name>/integration.json`; HTTP là transport provider đầu
 tiên. Host quản lý start/status/stop, hỗ trợ chạy foreground hoặc background và lưu từng
-request/response thật vào `integration-results/`. Contract profile dùng trường `transport`
+request/response thật vào `.artifacts/integration-runs/`. Contract profile dùng trường `transport`
 để provider Redis Streams, Kafka hoặc công nghệ khác có thể được thêm độc lập mà không đổi
 testcase orchestration hay business profile hiện có.
 

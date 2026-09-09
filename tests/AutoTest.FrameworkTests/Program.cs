@@ -9,6 +9,7 @@ using System.Text.Json;
 using AutoTest.Integration.Abstractions;
 using AutoTest.Integration.Artifacts;
 using AutoTest.Integration.Http;
+using AutoTest.LoadTesting;
 
 Environment.SetEnvironmentVariable("FRAMEWORK_TEST_URL", "http://localhost");
 var environment = EnvironmentStore.Load(Path.GetTempFileName());
@@ -172,7 +173,17 @@ Equal("true", File.Exists(Path.Combine(artifactRoot, "requests", "000001.json"))
 Directory.Delete(artifactRoot, true);
 Directory.Delete(fixtureRoot, true);
 
-Console.WriteLine("Framework tests passed: 20");
+Equal("3000", LoadDiagnostics.Percentile(new double[] { 1000, 2000, 3000 }, .95).ToString("F0"), "load percentile nearest rank");
+Equal("123.4", LoadDiagnostics.ParseServerTiming(new[] { "lock_wait;dur=123.4, db;dur=45.6" })["lock_wait"].ToString("F1", System.Globalization.CultureInfo.InvariantCulture), "server timing parser");
+Equal("lock-rejected", LoadDiagnostics.Category(423, null), "HTTP 423 category");
+Equal("timeout", LoadDiagnostics.Category(0, nameof(TaskCanceledException)), "timeout category");
+Equal("12", LoadDiagnostics.HashIdentifier("customer-1").Length.ToString(), "identifier hash length");
+Equal("200", LoadDiagnostics.BarrierSkewMs(new[] { DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch.AddMilliseconds(200) }).ToString("F0"), "barrier skew");
+Equal("2,323 ms", LoadDiagnostics.FormatMilliseconds(2323), "milliseconds formatting");
+Equal("0", LoadDiagnostics.Percentile(Array.Empty<double>(), .95).ToString("F0"), "empty percentile");
+Equal("45.6", LoadDiagnostics.ParseServerTiming(new[] { "db;desc=database;dur=45.6" })["db"].ToString("F1", System.Globalization.CultureInfo.InvariantCulture), "server timing with description");
+
+Console.WriteLine("Framework tests passed: 29");
 return 0;
 
 static StepSpec Step(string? method, string? path, DatabaseRequestSpec? database, MqttRequestSpec? mqtt)

@@ -4,7 +4,7 @@
 
 Shared framework được chia theo ranh giới mở rộng: `AutoTest.Abstractions` chứa
 contract chung, `AutoTest.Core` điều phối suite, các project `AutoTest.Http`,
-`AutoTest.PostgreSql`, `AutoTest.Mqtt` sở hữu transport,
+`AutoTest.PostgreSql`, `AutoTest.Elasticsearch`, `AutoTest.Mqtt` sở hữu transport,
 `AutoTest.HttpStub` giả lập dịch vụ HTTP bên ngoài và ghi request thật, còn
 `AutoTest.Reporting.Html` sở hữu báo cáo. Thiết kế dependency và quy tắc thêm tool
 mới được mô tả tại [`docs/architecture.md`](docs/architecture.md).
@@ -14,8 +14,8 @@ vào shared framework. Testcase nằm trong `projects/<project-name>/testcases/*
 
 Báo cáo được phân thư mục tương ứng với nhóm testcase để dễ tra cứu. Ví dụ,
 testcase trong `projects/ops-service/testcases/events/` sinh báo cáo tại
-`test-results/ops-service/events/`. Một lần chạy chứa nhiều nhóm sẽ được lưu tại
-`test-results/<project-name>/_combined/`.
+`.artifacts/test-runs/ops-service/events/`. Một lần chạy chứa nhiều nhóm sẽ được lưu tại
+`.artifacts/test-runs/<project-name>/_combined/`.
 
 Khung kiểm thử API dùng chung cho nhiều dự án. Cấu hình kết nối tập trung trong `.env`; logic riêng của từng dịch vụ nằm trong `projects/<project-name>`.
 
@@ -27,6 +27,11 @@ Khung kiểm thử API dùng chung cho nhiều dự án. Cấu hình kết nối
 4. Chọn dự án bằng `ACTIVE_PROJECT`, hoặc truyền `--project` khi chạy.
 
 Biến môi trường hệ điều hành hoặc CI luôn ưu tiên hơn `.env`.
+
+Các bước Elasticsearch chỉ dùng để đọc/đối chiếu projection và không tạo dữ liệu nghiệp vụ.
+Cấu hình `ELASTICSEARCH_URL`, tùy chọn `ELASTICSEARCH_USERNAME`/`ELASTICSEARCH_PASSWORD`,
+và `ELASTICSEARCH_INDEX_PREFIX` trong `.env`; testcase gọi `_doc`, `_search` hoặc `_count`
+qua `request.elasticsearch` và vẫn dùng `expect.status`, `expect.json`, `save`, `retry` như HTTP.
 
 Agent được ủy quyền chạy Tool-QC và kết nối API/database/MQTT của môi trường local/test để
 tự xác minh, sửa testcase/fixture và chạy lại. Mọi cấu hình vẫn lấy tập trung từ `.env`
@@ -56,7 +61,7 @@ Chỉ cần cung cấp đường dẫn source:
 dotnet run --project runner/AutoTest.MessageScanner -- --source "D:\works\projects\ops-service"
 ```
 
-Mặc định báo cáo nằm trong `message-results/`. Có thể chọn tên file:
+Mặc định báo cáo nằm trong `.artifacts/message-scans/`. Có thể chọn tên file:
 
 ```powershell
 dotnet run --project runner/AutoTest.MessageScanner -- --source "D:\works\projects\ops-service" --output "message-results\ops-service-messages.xlsx"
@@ -250,9 +255,9 @@ dotnet run --project runner/AutoTest.Runner -- --project ops-service --tags even
 ```
 
 Sau khi chạy, xem tổng số thành công/thất bại trên terminal và mở file được in ở
-dòng `Báo cáo HTML:` trong thư mục `test-results/`.
+dòng `Báo cáo HTML:` trong thư mục `.artifacts/test-runs/`.
 
-Sau mỗi lần chạy, runner tự tạo báo cáo HTML có timestamp trong `test-results/` và in
+Sau mỗi lần chạy, runner tự tạo báo cáo HTML có timestamp trong `.artifacts/test-runs/` và in
 đường dẫn file ở dòng `Báo cáo HTML:`. Báo cáo gồm từng test case và từng bước, phương
 thức/đường dẫn/dữ liệu gửi đi, kết quả mong đợi, mã HTTP/phản hồi thực tế, thời gian và lỗi.
 Các trường nhạy cảm như password, token, authorization, secret và connection string
@@ -274,7 +279,7 @@ Build toàn bộ solution:
 dotnet build ApiAutoTest.sln
 ```
 
-Thư mục báo cáo mặc định là `test-results/` tương đối theo repository, không phụ thuộc
+Thư mục báo cáo mặc định là `.artifacts/test-runs/` tương đối theo repository, không phụ thuộc
 đường dẫn máy. Có thể cấu hình `TEST_RESULTS_DIR` bằng đường dẫn tương đối hoặc tuyệt đối.
 Thư mục báo cáo và `projects/*/testcases/` được ignore để không đẩy lên Git ngoài ý muốn.
 
@@ -550,7 +555,7 @@ dotnet run --project runner/AutoTest.Runner -- --project ops-service --tags prof
 
 Host nhận `GET /api/integration/profile-completion-bonuses` tại URL khai báo trong
 `projects/ops-service/integrations/profile-completion-bonus/integration.json` và lưu
-request/response thật dưới `integration-results/ops-service/profile-completion-bonus/`.
+request/response thật dưới `.artifacts/integration-runs/ops-service/profile-completion-bonus/`.
 Khai báo `PROFILE_BONUS_STUB_BASE_URL` cho Tool-QC. Backend test phải được cấu hình
 `RegistrationIntegration` dùng scheme `http`, host của stub và route trên trước khi
 backend khởi động. Token chỉ đặt trong cấu hình môi trường backend; artifact che header
@@ -565,7 +570,7 @@ Authorization.
 Host lưu bằng chứng thật tại:
 
 ```text
-integration-results/<project>/<integration>/<timestamp>/
+.artifacts/integration-runs/<project>/<integration>/<timestamp>/
 ├── session.json
 ├── index.html
 ├── requests/000001.json

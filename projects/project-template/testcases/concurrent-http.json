@@ -1,0 +1,28 @@
+{
+  "project": "replace-me",
+  "cases": [
+    {
+      "id": "concurrency.different-payloads-example",
+      "name": "Kiểm tra hai payload khác nhau được gửi đồng thời",
+      "tags": ["concurrency-example"],
+      "destructive": true,
+      "steps": [
+        {
+          "name": "Gửi đồng thời hai yêu cầu độc lập",
+          "concurrentRequests": [
+            {
+              "name": "Yêu cầu thứ nhất",
+              "request": { "method": "POST", "path": "/api/items", "body": { "code": "A-${unique}" } },
+              "expect": { "statusOneOf": [200, 409] }
+            },
+            {
+              "name": "Yêu cầu thứ hai",
+              "request": { "method": "POST", "path": "/api/items", "body": { "code": "B-${unique}" } },
+              "expect": { "statusOneOf": [200, 409] }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

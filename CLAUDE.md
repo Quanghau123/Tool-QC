@@ -155,6 +155,26 @@ Example:
 
 ## Safety rules
 
+### Sandbox/runtime fallback
+
+- If the host reports sandbox runtime errors such as `setup refresh had errors`,
+  `Failed to create unified exec process`, or a reset Node process, classify the
+  failure as an `ENVIRONMENT_BLOCKER` in the sandbox launcher. Do not repeatedly
+  retry the same broken in-sandbox process and do not change repository code or
+  safety settings to work around it.
+- Retry the exact read-only or narrowly scoped command once with the host's
+  outside-sandbox/escalated execution mode. This is the documented fallback for
+  a broken sandbox supervisor; it does not grant production access or authorize
+  destructive actions.
+- Keep all existing guards in force when running outside the sandbox:
+  `TEST_ENV` must be local/test, `ALLOW_PRODUCTION` must remain false, and
+  `ALLOW_DESTRUCTIVE_TESTS` may be enabled only under the authorization rules
+  below. Never copy `.env` values into command arguments or logs.
+- Before an outside-sandbox run, state the project, target hostname (without
+  credentials), environment, tags, and destructive status. If the escalated
+  approval/runtime also fails, stop and report an external environment blocker;
+  do not ask the user to weaken guards or implement a bypass.
+
 ### Test evidence integrity — mandatory
 
 - Every reported result must be truthful and directly derived from current execution

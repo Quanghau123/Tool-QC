@@ -1,0 +1,28 @@
+{
+  "project": "replace-me",
+  "cases": [
+    {
+      "id": "mqtt.lastwill-example",
+      "name": "Kiểm tra broker phát Last Will khi client ngắt bất thường",
+      "tags": ["mqtt-lastwill"],
+      "destructive": true,
+      "variables": {},
+      "steps": [
+        {
+          "name": "Ngắt client bất thường và chờ broker phát Last Will",
+          "request": {
+            "mqtt": {
+              "action": "lastwill",
+              "timeoutMs": 15000,
+              "username": "${env:MQTT_USERNAME}",
+              "password": "${env:MQTT_PASSWORD}",
+              "clientId": "${env:MQTT_CLIENT_ID}",
+              "will": { "topic": "example/status", "payload": "{\"connected\":false}", "qos": 1, "retain": true }
+            }
+          },
+          "expect": { "mqtt": { "topic": "example/status", "payload": "{\"connected\":false}" } }
+        }
+      ]
+    }
+  ]
+}
