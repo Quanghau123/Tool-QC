@@ -345,6 +345,9 @@ sealed class RunState(string id, string project, string[] caseIds, DateTimeOffse
     public string? ReportPath { get; private set; }
     public DateTimeOffset? FinishedAt { get; private set; }
     public string FailureType { get; private set; } = string.Empty;
+    public string FailureCategory { get; private set; } = string.Empty;
+    public string FailureMessage { get; private set; } = string.Empty;
+    public string FixHint { get; private set; } = string.Empty;
 
     public void Attach(Process value) { lock (gate) process = value; }
 
@@ -356,7 +359,10 @@ sealed class RunState(string id, string project, string[] caseIds, DateTimeOffse
             process.Kill(true);
             Status = "cancelled";
             FinishedAt = DateTimeOffset.Now;
-            FailureType = "CANCELLED";
+            FailureType = "TQC-RUN-010";
+            FailureCategory = "CANCELLED";
+            FailureMessage = "The workload was cancelled by the user.";
+            FixHint = "Run it again when the environment is ready or reduce the workload scope.";
             lines.Add("Workload đã được người dùng dừng.");
             Save();
             return true;
@@ -383,14 +389,18 @@ sealed class RunState(string id, string project, string[] caseIds, DateTimeOffse
             ExitCode = exitCode;
             FinishedAt = DateTimeOffset.Now;
             Status = exitCode == 0 ? "passed" : "failed";
-            FailureType = exitCode == 0 ? string.Empty : UiSupport.Classify(lines);
+            FailureDiagnosis diagnosis = exitCode == 0 ? new(string.Empty, string.Empty, string.Empty, string.Empty) : UiSupport.Diagnose(lines);
+            FailureType = diagnosis.Code;
+            FailureCategory = diagnosis.Category;
+            FailureMessage = diagnosis.Message;
+            FixHint = diagnosis.FixHint;
             Save();
         }
     }
 
     public void Fail(string message)
     {
-        lock (gate) { lines.Add(message); ExitCode = -1; FinishedAt = DateTimeOffset.Now; Status = "failed"; FailureType = UiSupport.Classify(lines); Save(); }
+        lock (gate) { lines.Add(message); ExitCode = -1; FinishedAt = DateTimeOffset.Now; Status = "failed"; FailureDiagnosis diagnosis = UiSupport.Diagnose(lines); FailureType = diagnosis.Code; FailureCategory = diagnosis.Category; FailureMessage = diagnosis.Message; FixHint = diagnosis.FixHint; Save(); }
     }
 
     public object Snapshot()
@@ -399,7 +409,9 @@ sealed class RunState(string id, string project, string[] caseIds, DateTimeOffse
             return CreateSnapshot();
     }
 
-    private RunSnapshot CreateSnapshot() => new(Id, Project, CaseIds, StartedAt, FinishedAt, Status, ExitCode, ReportPath, FailureType, lines.ToArray());
+    private RunSnapshot CreateSnapshot() => new(Id, Project, CaseIds, StartedAt, FinishedAt, Status, ExitCode, ReportPath, FailureType, FailureCategory, FailureMessage, FixHint, lines.ToArray());
     private void Save() => UiSupport.SaveHistory(historyDirectory, CreateSnapshot());
 }
+
+
 

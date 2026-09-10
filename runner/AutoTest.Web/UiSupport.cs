@@ -59,14 +59,33 @@ static class UiSupport
     public static void SaveHistory(string directory, RunSnapshot snapshot)
         => File.WriteAllText(HistoryPath(directory, snapshot.Id), JsonSerializer.Serialize(snapshot, Options));
 
-    public static string Classify(IEnumerable<string> lines)
+    // Phân loại lỗi để UI chỉ đúng nhóm code hoặc cấu hình cần kiểm tra trước.
+    public static FailureDiagnosis Diagnose(IEnumerable<string> lines)
     {
         string text = string.Join('\n', lines);
-        if (text.Contains("Preflight", StringComparison.OrdinalIgnoreCase)) return "TEST_SCRIPT_ERROR";
-        if (text.Contains("connection refused", StringComparison.OrdinalIgnoreCase) || text.Contains("No such host", StringComparison.OrdinalIgnoreCase) || text.Contains("timeout", StringComparison.OrdinalIgnoreCase)) return "ENVIRONMENT_ERROR";
-        if (text.Contains("mong đợi", StringComparison.OrdinalIgnoreCase) || text.Contains("không đúng", StringComparison.OrdinalIgnoreCase)) return "BACKEND_OR_CONTRACT_FAILURE";
-        return "RUNNER_ERROR";
+        if (ContainsAny(text, "Thiếu cấu hình bắt buộc"))
+            return new("TQC-ENV-001", "ENVIRONMENT", "Required environment configuration is missing.", "Open Configuration and provide the missing variable reported in the execution log.");
+        if (ContainsAny(text, "No such host", "Name or service not known"))
+            return new("TQC-ENV-002", "ENVIRONMENT", "The configured host name cannot be resolved.", "Verify the host name, DNS, VPN, and network routing in Configuration.");
+        if (ContainsAny(text, "connection refused", "actively refused"))
+            return new("TQC-ENV-003", "ENVIRONMENT", "The target service refused the connection.", "Verify that the service is running and that the configured host and port are correct.");
+        if (ContainsAny(text, "timeout", "timed out", "HttpClient.Timeout"))
+            return new("TQC-ENV-004", "ENVIRONMENT", "The operation exceeded the configured timeout.", "Check service health and network latency; increase the timeout only when the expected workload requires it.");
+        if (ContainsAny(text, "authentication failed", "Unauthorized", "HTTP 401"))
+            return new("TQC-AUTH-001", "AUTHENTICATION", "Authentication failed or the credential is no longer valid.", "Refresh the token or credentials and verify the configured authentication strategy.");
+        if (ContainsAny(text, "Preflight", "Thiếu request", "Không có executor", "Có nhiều executor", "Không tìm thấy biến"))
+            return new("TQC-TST-001", "TESTCASE", "The testcase failed preflight validation.", "Check testcase JSON, coverage, variables, and executor mapping in TestcaseValidator.cs and Execution.cs.");
+        if (ContainsAny(text, "mong đợi", "không đúng", "không thuộc tập", "không chứa", "HTTP 4", "HTTP 5"))
+            return new("TQC-API-001", "BACKEND_CONTRACT", "The backend result does not match the expected contract.", "Open the report and compare the failed step with the API response, database state, and backend contract.");
+        if (ContainsAny(text, "Build FAILED", "error CS", "Unhandled exception", "ObjectDisposedException", "NullReferenceException"))
+            return new("TQC-RUN-001", "RUNNER", "The Tool-QC runtime encountered an internal execution error.", "Follow the first Tool-QC stack frame and fix the referenced module under src/AutoTest.* or runner/AutoTest.*.");
+        return new("TQC-RUN-999", "RUNNER", "The execution failed with an unclassified Tool-QC error.", "Inspect the first error and stack trace; start at RunnerEngine.cs, then follow the referenced executor or runner module.");
     }
+
+    public static string Classify(IEnumerable<string> lines) => Diagnose(lines).Code;
+
+    private static bool ContainsAny(string text, params string[] values)
+        => values.Any(value => text.Contains(value, StringComparison.OrdinalIgnoreCase));
 
     public static void SaveMessageScan(string root, string scanId, string reportPath)
     {
@@ -102,4 +121,7 @@ static class UiSupport
 }
 
 sealed record ConnectionCheck(string Key, bool Success, string Message, long DurationMs);
-sealed record RunSnapshot(string Id, string Project, string[] CaseIds, DateTimeOffset StartedAt, DateTimeOffset? FinishedAt, string Status, int? ExitCode, string? ReportPath, string FailureType, string[] Lines);
+sealed record FailureDiagnosis(string Code, string Category, string Message, string FixHint);
+sealed record RunSnapshot(string Id, string Project, string[] CaseIds, DateTimeOffset StartedAt, DateTimeOffset? FinishedAt, string Status, int? ExitCode, string? ReportPath, string FailureType, string FailureCategory, string FailureMessage, string FixHint, string[] Lines);
+
+
