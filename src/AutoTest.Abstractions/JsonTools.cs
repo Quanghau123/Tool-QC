@@ -13,5 +13,17 @@ public static IReadOnlyList<JsonElement> SelectMany(JsonElement root,string path
  public static string Text(JsonElement v)=>v.ValueKind==JsonValueKind.String?v.GetString()!:v.GetRawText();
 }
 
+public static class JsonAssertionValues
+{
+ public static bool Equal(JsonElement actual,JsonElement expected,string resolvedExpected)
+ {
+  if(actual.ValueKind==JsonValueKind.Number&&expected.ValueKind==JsonValueKind.Number
+     &&decimal.TryParse(actual.GetRawText(),System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out decimal actualNumber)
+     &&decimal.TryParse(resolvedExpected,System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out decimal expectedNumber))
+   return actualNumber==expectedNumber;
+  return JsonPath.Text(actual)==resolvedExpected;
+ }
+}
+
 
 

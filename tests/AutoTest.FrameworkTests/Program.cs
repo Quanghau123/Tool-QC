@@ -15,6 +15,20 @@ Environment.SetEnvironmentVariable("FRAMEWORK_TEST_URL", "http://localhost");
 var environment = EnvironmentStore.Load(Path.GetTempFileName());
 var variables = new Dictionary<string, string> { ["id"] = "42" };
 Equal("items/42", Templates.Resolve("items/${id}", variables, environment), "template variable");
+using JsonDocument integerDocument = JsonDocument.Parse("12");
+using JsonDocument decimalDocument = JsonDocument.Parse("12.0");
+Equal("true", JsonAssertionValues.Equal(decimalDocument.RootElement, integerDocument.RootElement, "12").ToString().ToLowerInvariant(), "numeric assertion ignores JSON number scale");
+
+string commonEnvironmentPath = Path.GetTempFileName();
+string projectEnvironmentPath = Path.GetTempFileName();
+File.WriteAllText(commonEnvironmentPath, "SHARED_VALUE=common\nOVERRIDE_VALUE=common\n");
+File.WriteAllText(projectEnvironmentPath, "PROJECT_VALUE=project\nOVERRIDE_VALUE=project\n");
+var layeredEnvironment = EnvironmentStore.Load([commonEnvironmentPath, projectEnvironmentPath]);
+Equal("common", layeredEnvironment.Get("SHARED_VALUE")!, "common environment value");
+Equal("project", layeredEnvironment.Get("PROJECT_VALUE")!, "project environment value");
+Equal("project", layeredEnvironment.Get("OVERRIDE_VALUE")!, "project environment overrides common value");
+File.Delete(commonEnvironmentPath);
+File.Delete(projectEnvironmentPath);
 
 var registry = new StepExecutorRegistry(new ITestStepExecutor[]
 {

@@ -1,6 +1,6 @@
 param(
     [Parameter(Position=0, Mandatory=$true)][string]$Area,
-    [Parameter(Position=1, Mandatory=$true)][string]$Command,
+    [Parameter(Position=1)][string]$Command,
     [Parameter(Position=2)][string]$Project,
     [Parameter(Position=3)][string]$Name,
     [switch]$Background
@@ -8,7 +8,26 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
-if ($Area -ne 'integration') { throw "Chức năng chưa hỗ trợ: $Area" }
+if ($Area -eq 'test') {
+    $selectedProject = $Command
+    if ([string]::IsNullOrWhiteSpace($selectedProject)) {
+        $rootEnv = Join-Path $root '.env'
+        if (Test-Path -LiteralPath $rootEnv) {
+            $activeProjectLine = Get-Content -LiteralPath $rootEnv | Where-Object { $_ -match '^\s*ACTIVE_PROJECT\s*=' } | Select-Object -First 1
+            if ($activeProjectLine) { $selectedProject = ($activeProjectLine -split '=', 2)[1].Trim().Trim('"') }
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($selectedProject)) { $selectedProject = 'ops-service' }
+    $arguments = @('run', '--project', (Join-Path $root 'runner\AutoTest.Runner\AutoTest.Runner.csproj'), '-c', 'Release', '--', '--project', $selectedProject)
+    if (-not [string]::IsNullOrWhiteSpace($Project)) { $arguments += @('--tags', $Project) }
+    & dotnet @arguments
+    exit $LASTEXITCODE
+}
+if ($Area -eq 'build') {
+    & dotnet build (Join-Path $root 'ApiAutoTest.sln') -c Release
+    exit $LASTEXITCODE
+}
+if ($Area -ne 'integration') { throw "Chức năng chưa hỗ trợ: $Area. Dùng: test, build hoặc integration." }
 if ($Command -ne 'list' -and ([string]::IsNullOrWhiteSpace($Project) -or [string]::IsNullOrWhiteSpace($Name))) {
     throw 'Cách dùng: .\toolqc.ps1 integration <start|status|stop> <project> <integration> [--Background]'
 }

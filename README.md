@@ -25,12 +25,28 @@ shared launcher chỉ quản lý tiến trình JMeter và cấu trúc JTL/HTML c
 
 ## Cấu hình
 
-1. Sao chép `.env.example` thành `.env` nếu chưa có.
-2. Điền URL API và thông tin môi trường cần dùng.
+1. Sao chép `.env.example` thành `.env` để cấu hình dùng chung.
+2. Nếu dự án có cấu hình riêng, sao chép `projects/<project>/.env.example` thành `projects/<project>/.env`.
 3. Không commit `.env`; file đã được đưa vào `.gitignore`.
 4. Chọn dự án bằng `ACTIVE_PROJECT`, hoặc truyền `--project` khi chạy.
 
-Biến môi trường hệ điều hành hoặc CI luôn ưu tiên hơn `.env`.
+Thứ tự ưu tiên là biến môi trường hệ điều hành/CI, `projects/<project>/.env`, rồi `.env` ở thư mục gốc.
+
+Lệnh chạy ngắn:
+
+```powershell
+# Chạy tất cả testcase của dự án
+.\toolqc.ps1 test ops-service
+
+# Chạy dự án ACTIVE_PROJECT trong .env
+.\toolqc.ps1 test
+
+# Chạy một hoặc nhiều tag, phân cách bằng dấu phẩy
+.\toolqc.ps1 test ops-service redemption-atomic-stock-quantity
+
+# Build toàn bộ tool
+.\toolqc.ps1 build
+```
 
 Các bước Elasticsearch chỉ dùng để đọc/đối chiếu projection và không tạo dữ liệu nghiệp vụ.
 Cấu hình `ELASTICSEARCH_URL`, tùy chọn `ELASTICSEARCH_USERNAME`/`ELASTICSEARCH_PASSWORD`,

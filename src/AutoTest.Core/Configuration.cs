@@ -4,7 +4,9 @@ namespace AutoTest.Core;
 public sealed class EnvironmentStore : IEnvironmentStore
 {
  private readonly Dictionary<string,string> values=new(StringComparer.OrdinalIgnoreCase);
- public static EnvironmentStore Load(string path){var s=new EnvironmentStore();if(!File.Exists(path))return s;foreach(var raw in File.ReadLines(path)){var line=raw.Trim();if(line.Length==0||line.StartsWith('#'))continue;var i=line.IndexOf('=');if(i>0)s.values[line[..i].Trim()]=line[(i+1)..].Trim().Trim('"');}return s;}
+ public static EnvironmentStore Load(string path)=>Load([path]);
+ public static EnvironmentStore Load(IEnumerable<string> paths){var s=new EnvironmentStore();foreach(var path in paths)s.LoadFile(path);return s;}
+ private void LoadFile(string path){if(!File.Exists(path))return;foreach(var raw in File.ReadLines(path)){var line=raw.Trim();if(line.Length==0||line.StartsWith('#'))continue;var i=line.IndexOf('=');if(i>0)values[line[..i].Trim()]=line[(i+1)..].Trim().Trim('"');}}
  public string? Get(string key)=>Environment.GetEnvironmentVariable(key) is {Length:>0} v?v:values.GetValueOrDefault(key);
  public string Require(string key)=>Get(key) is {Length:>0} v?v:throw new InvalidOperationException($"Thiếu cấu hình bắt buộc: {key}");
  public bool Bool(string key,bool fallback=false)=>bool.TryParse(Get(key),out var v)?v:fallback;

@@ -9,11 +9,12 @@ using AutoTest.HttpStub;
 using AutoTest.TestValidation;
 var startedAt=DateTimeOffset.Now;
 var root=Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,"..","..","..","..",".."));
-var env=EnvironmentStore.Load(Path.Combine(root,".env"));
 string Arg(string key,string fallback){var i=Array.IndexOf(args,key);return i>=0&&i+1<args.Length?args[i+1]:fallback;}
-var projectName=Arg("--project",env.Get("ACTIVE_PROJECT")??"ops-service");
-var tags=Arg("--tags",env.Get("TEST_TAGS")??"").Split(',',StringSplitOptions.RemoveEmptyEntries|StringSplitOptions.TrimEntries);
+var rootEnvironment=EnvironmentStore.Load(Path.Combine(root,".env"));
+var projectName=Arg("--project",rootEnvironment.Get("ACTIVE_PROJECT")??"ops-service");
 var projectDir=Path.Combine(root,"projects",projectName);
+var env=EnvironmentStore.Load([Path.Combine(root,".env"),Path.Combine(projectDir,".env")]);
+var tags=Arg("--tags",env.Get("TEST_TAGS")??"").Split(',',StringSplitOptions.RemoveEmptyEntries|StringSplitOptions.TrimEntries);
 var project=SpecLoader.Project(Path.Combine(projectDir,"project.json"));
 var cases=SpecLoader.Cases(Path.Combine(projectDir,"testcases"),project.Name).Where(c=>tags.Length==0||c.Tags?.Intersect(tags,StringComparer.OrdinalIgnoreCase).Any()==true).ToList();
 if(cases.Count==0){Console.Error.WriteLine("Không tìm thấy kịch bản kiểm thử phù hợp.");return 2;}

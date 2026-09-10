@@ -83,11 +83,11 @@ public sealed class ElasticsearchStepExecutor : ITestStepExecutor
     {
         string actual = JsonPath.Text(value);
         string Resolve(JsonElement element) => Templates.Resolve(JsonPath.Text(element), context.Variables, context.Environment);
-        if (rule.ExpectedValue is JsonElement expected && actual != Resolve(expected)) throw new InvalidOperationException($"Giá trị của trường {path} không đúng như mong đợi. Thực tế: {actual}.");
-        if (rule.NotEquals is JsonElement notExpected && actual == Resolve(notExpected)) throw new InvalidOperationException($"Giá trị của trường {path} không được bằng {actual}.");
+        if (rule.ExpectedValue is JsonElement expected && !JsonAssertionValues.Equal(value, expected, Resolve(expected))) throw new InvalidOperationException($"Giá trị của trường {path} không đúng như mong đợi. Thực tế: {actual}.");
+        if (rule.NotEquals is JsonElement notExpected && JsonAssertionValues.Equal(value, notExpected, Resolve(notExpected))) throw new InvalidOperationException($"Giá trị của trường {path} không được bằng {actual}.");
         if (rule.Contains is string contains && !actual.Contains(Templates.Resolve(contains, context.Variables, context.Environment), StringComparison.Ordinal)) throw new InvalidOperationException($"Trường {path} không chứa nội dung mong đợi.");
         if (rule.Matches is string pattern && !Regex.IsMatch(actual, Templates.Resolve(pattern, context.Variables, context.Environment), RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1))) throw new InvalidOperationException($"Trường {path} không khớp biểu thức mong đợi.");
-        if (rule.OneOf is { Length: > 0 } options && !options.Select(Resolve).Contains(actual, StringComparer.Ordinal)) throw new InvalidOperationException($"Trường {path} không thuộc tập giá trị mong đợi.");
+        if (rule.OneOf is { Length: > 0 } options && !options.Any(option => JsonAssertionValues.Equal(value, option, Resolve(option)))) throw new InvalidOperationException($"Trường {path} không thuộc tập giá trị mong đợi.");
         if (rule.GreaterThan is not null || rule.GreaterThanOrEqual is not null || rule.LessThan is not null || rule.LessThanOrEqual is not null)
         {
             if (!decimal.TryParse(actual, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal number)) throw new InvalidOperationException($"Trường {path} không phải số để so sánh.");
