@@ -41,6 +41,16 @@ npm start
 Không cần chạy `npm install` vì UI không dùng package JavaScript bên ngoài. Lệnh PowerShell
 `.\toolqc.ps1` vẫn được giữ cho automation và các chức năng nâng cao.
 
+UI hỗ trợ chọn chính xác testcase theo ID, dừng workload đang chạy, xem lịch sử và báo cáo cũ, chỉnh cấu hình dự án và kiểm tra nhanh các URL đã cấu hình. Runner hỗ trợ `MAX_PARALLEL_CASES`, báo cáo JUnit, bước Redis và `expect.jsonSchema` cho JSON Schema cơ bản.
+
+Sinh testcase bản nháp từ controller .NET:
+
+```powershell
+.\toolqc.ps1 generate ops-service "D:\works\projects\ops-service"
+```
+
+Generator chỉ sinh bản nháp; các coverage chưa xác minh giữ trạng thái `blocked` để người kiểm thử hoàn thiện trước khi chạy.
+
 Các lệnh khác:
 
 ```powershell

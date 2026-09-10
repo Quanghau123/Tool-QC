@@ -10,6 +10,7 @@ using AutoTest.Integration.Abstractions;
 using AutoTest.Integration.Artifacts;
 using AutoTest.Integration.Http;
 using AutoTest.LoadTesting;
+using AutoTest.Redis;
 
 Environment.SetEnvironmentVariable("FRAMEWORK_TEST_URL", "http://localhost");
 var environment = EnvironmentStore.Load(Path.GetTempFileName());
@@ -38,6 +39,7 @@ var registry = new StepExecutorRegistry(new ITestStepExecutor[]
     new PostgreSqlStepExecutor(),
     new MqttStepExecutor(environment),
     new HttpStubStepExecutor(environment),
+    new RedisStepExecutor(),
 });
 Equal("http", registry.Resolve(Step("GET", "/health", null, null)).Name, "HTTP executor");
 Equal("postgresql", registry.Resolve(Step(null, null, new("SELECT 1", null), null)).Name, "PostgreSQL executor");
@@ -46,6 +48,19 @@ var stubStep = new StepSpec("stub", null, null,
     new RequestSpec(null, null, null, null, null, null, null, new("start", null, null, null, null, null, null, null)),
     null, null, null, null, null);
 Equal("http-stub", registry.Resolve(stubStep).Name, "HTTP stub executor");
+var redisStep = new StepSpec("redis", null, null,
+    new RequestSpec(null, null, null, null, null, null, null, null, null, null,
+        new RedisRequestSpec("get", "key")), null, null, null, null, null);
+Equal("redis", registry.Resolve(redisStep).Name, "Redis executor");
+string redisValidationDirectory = Path.Combine(Path.GetTempPath(), $"autotest-redis-validation-{Guid.NewGuid():N}");
+Directory.CreateDirectory(redisValidationDirectory);
+IReadOnlyList<ValidationIssue> redisIssues = TestcaseValidator.Validate(redisValidationDirectory,
+    new ProjectSpec("framework-test", "FRAMEWORK_TEST_URL", null, null, null),
+    [new CaseSpec("redis.case", "Redis", ["redis"], false, null, [redisStep with { Expect = new ExpectSpec(null, null, null, null, null, null, null, new RedisExpectSpec(Exists: true)) }], null,
+        new CoverageSpec(new SourceVerificationSpec(["source.cs"], DateTimeOffset.UtcNow.ToString("O"), null), new("covered", ["redis"], null), new("covered", ["redis"], null), new("notApplicable", null, "n/a"), new("notApplicable", null, "n/a"), new("notApplicable", null, "n/a"), new("notApplicable", null, "n/a"), new("notApplicable", null, "n/a"), new("covered", ["redis"], null)))],
+    registry.All, validateTemporaryFiles: false);
+Equal("0", redisIssues.Count.ToString(), "Redis testcase preflight");
+Directory.Delete(redisValidationDirectory, true);
 await using (var stubExecutor = new HttpStubStepExecutor(environment))
 {
     var stubVariables = new Dictionary<string, string>();
@@ -197,7 +212,19 @@ Equal("2,323 ms", LoadDiagnostics.FormatMilliseconds(2323), "milliseconds format
 Equal("0", LoadDiagnostics.Percentile(Array.Empty<double>(), .95).ToString("F0"), "empty percentile");
 Equal("45.6", LoadDiagnostics.ParseServerTiming(new[] { "db;desc=database;dur=45.6" })["db"].ToString("F1", System.Globalization.CultureInfo.InvariantCulture), "server timing with description");
 
-Console.WriteLine("Framework tests passed: 29");
+using (JsonDocument schemaDocument = JsonDocument.Parse("""{"type":"object","required":["id"],"properties":{"id":{"type":"integer"}}}"""))
+using (JsonDocument validDocument = JsonDocument.Parse("""{"id":12}"""))
+    AutoTest.Http.SimpleJsonSchema.Validate(validDocument.RootElement, schemaDocument.RootElement, "$");
+Equal("true", File.Exists(Path.Combine(AppContext.BaseDirectory, "AutoTest.FrameworkTests.dll")).ToString().ToLowerInvariant(), "framework assembly exists");
+
+string junitDirectory = Path.Combine(Path.GetTempPath(), $"autotest-junit-{Guid.NewGuid():N}");
+string junitPath = AutoTest.Reporting.Html.JUnitReportWriter.Write(junitDirectory,
+    new ProjectSpec("framework-test", "FRAMEWORK_TEST_URL", null, null, null),
+    [new RunResult("sample", "Mẫu", true, TimeSpan.FromMilliseconds(10), null, [])], DateTimeOffset.UtcNow);
+Equal("true", File.Exists(junitPath).ToString().ToLowerInvariant(), "JUnit report exists");
+Directory.Delete(junitDirectory, true);
+
+Console.WriteLine("Framework tests passed: 34");
 return 0;
 
 static StepSpec Step(string? method, string? path, DatabaseRequestSpec? database, MqttRequestSpec? mqtt)

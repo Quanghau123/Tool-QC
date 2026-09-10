@@ -8,6 +8,8 @@ builder.Logging.AddConsole();
 builder.WebHost.UseUrls(builder.Configuration["url"] ?? "http://127.0.0.1:5080");
 WebApplication app = builder.Build();
 string root = Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, "..", ".."));
+string historyDirectory = Path.Combine(root, ".artifacts", "ui-runs");
+Directory.CreateDirectory(historyDirectory);
 ConcurrentDictionary<string, RunState> runs = new(StringComparer.OrdinalIgnoreCase);
 
 app.UseDefaultFiles();
@@ -65,24 +67,56 @@ app.MapPut("/api/projects/{project}/environment", async (string project, Environ
     return Results.Ok(new { message = "Đã lưu cấu hình ghi đè cho dự án.", updated = updates.Count });
 });
 
+app.MapPost("/api/projects/{project}/environment/check", async (string project) =>
+{
+    string projectDir = SafeProjectDirectory(root, project);
+    return Results.Ok(await UiSupport.CheckConnectionsAsync(root, projectDir));
+});
+
+app.MapPost("/api/projects/{project}/generate", async (string project, GenerateRequest request) =>
+{
+    _ = SafeProjectDirectory(root, project);
+    if (string.IsNullOrWhiteSpace(request.SourcePath) || !Directory.Exists(request.SourcePath))
+        return Results.BadRequest(new { message = "Đường dẫn source không tồn tại." });
+    string output = Path.Combine(root, ".artifacts", "generated-testcases", project, $"source-draft-{DateTime.Now:yyyyMMdd-HHmmss}.json");
+    Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+    ProcessStartInfo info = new("dotnet") { WorkingDirectory = root, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+    foreach (string argument in new[] { "run", "--project", Path.Combine(root, "runner", "AutoTest.Generator", "AutoTest.Generator.csproj"), "-c", "Release", "--", "--source", request.SourcePath, "--project", project, "--output", output }) info.ArgumentList.Add(argument);
+    using Process process = new() { StartInfo = info }; process.Start();
+    string standardOutput = await process.StandardOutput.ReadToEndAsync(); string standardError = await process.StandardError.ReadToEndAsync(); await process.WaitForExitAsync();
+    return process.ExitCode == 0 ? Results.Ok(new { output, message = standardOutput.Trim() }) : Results.BadRequest(new { message = standardError.Trim() });
+});
+
 app.MapPost("/api/runs", (RunRequest request) =>
 {
     _ = SafeProjectDirectory(root, request.Project);
     string runId = Guid.NewGuid().ToString("N");
-    RunState state = new(runId, request.Project, request.Tags ?? [], DateTimeOffset.Now);
+    if (request.CaseIds is not { Length: > 0 })
+        return Results.BadRequest(new { message = "Hãy chọn ít nhất một testcase." });
+    RunState state = new(runId, request.Project, request.CaseIds, DateTimeOffset.Now, historyDirectory);
     runs[runId] = state;
     _ = Task.Run(() => RunAsync(root, state));
     return Results.Accepted($"/api/runs/{runId}", new { runId });
 });
 
 app.MapGet("/api/runs/{runId}", (string runId) =>
-    runs.TryGetValue(runId, out RunState? state) ? Results.Ok(state.Snapshot()) : Results.NotFound());
+    runs.TryGetValue(runId, out RunState? state) ? Results.Ok(state.Snapshot())
+        : UiSupport.ReadHistory(historyDirectory, runId) is { } saved ? Results.Ok(saved) : Results.NotFound());
+
+app.MapGet("/api/runs", () => UiSupport.ReadHistory(historyDirectory));
+
+app.MapDelete("/api/runs/{runId}", (string runId) =>
+    runs.TryGetValue(runId, out RunState? state) && state.Cancel()
+        ? Results.Ok(new { message = "Đã dừng workload." })
+        : Results.NotFound(new { message = "Không tìm thấy workload đang chạy." }));
 
 app.MapGet("/api/reports/{runId}", (string runId) =>
 {
-    if (!runs.TryGetValue(runId, out RunState? state) || string.IsNullOrWhiteSpace(state.ReportPath))
+    string? reportPath = runs.TryGetValue(runId, out RunState? state)
+        ? state.ReportPath : UiSupport.ReadHistory(historyDirectory, runId)?.ReportPath;
+    if (string.IsNullOrWhiteSpace(reportPath))
         return Results.NotFound();
-    string report = Path.GetFullPath(state.ReportPath);
+    string report = Path.GetFullPath(reportPath);
     string resultsRoot = Path.GetFullPath(Path.Combine(root, ".artifacts"));
     string configuredResultsRoot = Path.GetFullPath(Path.Combine(root, "test-results"));
     if (!report.StartsWith(resultsRoot, StringComparison.OrdinalIgnoreCase)
@@ -222,7 +256,7 @@ static async Task RunAsync(string root, RunState state)
             "run", "--project", Path.Combine(root, "runner", "AutoTest.Runner", "AutoTest.Runner.csproj"),
             "-c", "Release", "--no-build", "--", "--project", state.Project,
         ];
-        if (state.Tags.Length > 0) arguments.AddRange(["--tags", string.Join(',', state.Tags)]);
+        arguments.AddRange(["--case-ids", string.Join(',', state.CaseIds)]);
         ProcessStartInfo startInfo = new("dotnet")
         {
             WorkingDirectory = root,
@@ -233,6 +267,7 @@ static async Task RunAsync(string root, RunState state)
         };
         foreach (string argument in arguments) startInfo.ArgumentList.Add(argument);
         using Process process = new() { StartInfo = startInfo };
+        state.Attach(process);
         process.OutputDataReceived += (_, eventArgs) => state.AddLine(eventArgs.Data);
         process.ErrorDataReceived += (_, eventArgs) => state.AddLine(eventArgs.Data);
         process.Start();
@@ -247,24 +282,45 @@ static async Task RunAsync(string root, RunState state)
     }
 }
 
-sealed record RunRequest(string Project, string[]? Tags);
+sealed record RunRequest(string Project, string[]? CaseIds);
 sealed record TestItem(string Id, string Name, string[] Tags, bool Destructive, string Group, int StepCount);
 sealed record EnvironmentUpdate(Dictionary<string, string> Values);
+sealed record GenerateRequest(string SourcePath);
 sealed record EnvironmentDefinition(string Key, string Group, string Scope, string DefaultValue);
 sealed record EnvironmentGroup(string Name, EnvironmentVariable[] Variables);
 sealed record EnvironmentVariable(string Key, string Value, string Source, bool Secret, bool Configured);
 
-sealed class RunState(string id, string project, string[] tags, DateTimeOffset startedAt)
+sealed class RunState(string id, string project, string[] caseIds, DateTimeOffset startedAt, string historyDirectory)
 {
     private readonly object gate = new();
     private readonly List<string> lines = [];
     public string Id { get; } = id;
     public string Project { get; } = project;
-    public string[] Tags { get; } = tags;
+    private Process? process;
+    public string[] CaseIds { get; } = caseIds;
     public DateTimeOffset StartedAt { get; } = startedAt;
     public string Status { get; private set; } = "running";
     public int? ExitCode { get; private set; }
     public string? ReportPath { get; private set; }
+    public DateTimeOffset? FinishedAt { get; private set; }
+    public string FailureType { get; private set; } = string.Empty;
+
+    public void Attach(Process value) { lock (gate) process = value; }
+
+    public bool Cancel()
+    {
+        lock (gate)
+        {
+            if (Status != "running" || process is null || process.HasExited) return false;
+            process.Kill(true);
+            Status = "cancelled";
+            FinishedAt = DateTimeOffset.Now;
+            FailureType = "CANCELLED";
+            lines.Add("Workload đã được người dùng dừng.");
+            Save();
+            return true;
+        }
+    }
 
     public void AddLine(string? line)
     {
@@ -280,18 +336,29 @@ sealed class RunState(string id, string project, string[] tags, DateTimeOffset s
 
     public void Complete(int exitCode)
     {
-        lock (gate) { ExitCode = exitCode; Status = exitCode == 0 ? "passed" : "failed"; }
+        lock (gate)
+        {
+            if (Status == "cancelled") return;
+            ExitCode = exitCode;
+            FinishedAt = DateTimeOffset.Now;
+            Status = exitCode == 0 ? "passed" : "failed";
+            FailureType = exitCode == 0 ? string.Empty : UiSupport.Classify(lines);
+            Save();
+        }
     }
 
     public void Fail(string message)
     {
-        lock (gate) { lines.Add(message); ExitCode = -1; Status = "failed"; }
+        lock (gate) { lines.Add(message); ExitCode = -1; FinishedAt = DateTimeOffset.Now; Status = "failed"; FailureType = UiSupport.Classify(lines); Save(); }
     }
 
     public object Snapshot()
     {
         lock (gate)
-            return new { Id, Project, Tags, StartedAt, Status, ExitCode, ReportPath, lines = lines.ToArray() };
+            return CreateSnapshot();
     }
+
+    private RunSnapshot CreateSnapshot() => new(Id, Project, CaseIds, StartedAt, FinishedAt, Status, ExitCode, ReportPath, FailureType, lines.ToArray());
+    private void Save() => UiSupport.SaveHistory(historyDirectory, CreateSnapshot());
 }
 

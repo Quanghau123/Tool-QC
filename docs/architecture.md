@@ -11,6 +11,7 @@ AutoTest.Runner
   -> AutoTest.PostgreSql
   -> AutoTest.Mqtt
   -> AutoTest.HttpStub
+  -> AutoTest.Redis
   -> AutoTest.Reporting.Html
   -> AutoTest.TestValidation
 
@@ -63,3 +64,8 @@ sequence, timeout/delay, payload limit và capture; artifact module sở hữu J
 
 The current JSON contract and CLI remain version 1. Existing projects continue to
 live under `projects/<project-name>/testcases/**/*.json`.
+
+
+## Khả năng vận hành
+
+Web UI chỉ truyền danh sách testcase ID chính xác tới runner, lưu snapshot lịch sử dưới `.artifacts/ui-runs`, hỗ trợ dừng process tree và mở lại báo cáo. Runner có thể chạy case song song theo `MAX_PARALLEL_CASES` và xuất cả HTML/JUnit. `AutoTest.Generator` quét controller .NET để tạo bản nháp schema v2; các coverage chưa xác minh luôn ở trạng thái blocked.

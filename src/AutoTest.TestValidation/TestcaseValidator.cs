@@ -97,7 +97,7 @@ public static class TestcaseValidator
         foreach (StepSpec step in test.Steps)
         {
             if (step.Request is null || step.ConcurrentRequests is { Count: > 0 }) continue;
-            if (step.Request.Method is not null && step.Expect is { Status: not null } && step.Expect.Json is null && step.Expect.Database is null && step.Expect.Mqtt is null && step.Expect.HttpStub is null && step.Request.Path?.Contains("health", StringComparison.OrdinalIgnoreCase) != true)
+            if (step.Request.Method is not null && step.Expect is { Status: not null } && step.Expect.Json is null && step.Expect.JsonSchema is null && step.Expect.Database is null && step.Expect.Mqtt is null && step.Expect.HttpStub is null && step.Request.Path?.Contains("health", StringComparison.OrdinalIgnoreCase) != true)
                 issues.Add(new($"{test.Id} / {step.Name}", "HTTP step chỉ assert status; phải assert payload hoặc database, trừ health endpoint."));
             if (IsMutation(step) && step.Expect?.Status is >= 400 && !HasLaterDatabaseEvidence(test.Steps, step))
                 issues.Add(new($"{test.Id} / {step.Name}", "Mutation bị từ chối phải có bước database phía sau để chứng minh không đổi dữ liệu."));
@@ -106,7 +106,7 @@ public static class TestcaseValidator
 
     private static void RequireCovered(CoverageItemSpec? item, string name, string location, List<ValidationIssue> issues)
     { if (!string.Equals(item?.Status, "covered", StringComparison.OrdinalIgnoreCase)) issues.Add(new(location, $"Bắt buộc coverage {name} phải là covered.")); }
-    private static bool IsMutation(StepSpec step) => step.Request?.Database is not null || step.Request?.Mqtt is not null || step.Request?.HttpStub is not null || step.Request?.Method?.ToUpperInvariant() is "POST" or "PUT" or "PATCH" or "DELETE";
+    private static bool IsMutation(StepSpec step) => step.Request?.Database is not null || step.Request?.Mqtt is not null || step.Request?.HttpStub is not null || step.Request?.Redis?.Command.ToLowerInvariant() is "set" or "delete" || step.Request?.Method?.ToUpperInvariant() is "POST" or "PUT" or "PATCH" or "DELETE";
     private static bool HasLaterDatabaseEvidence(IReadOnlyList<StepSpec> steps, StepSpec current)
     { int index=-1; for(int i=0;i<steps.Count;i++)if(ReferenceEquals(steps[i],current)){index=i;break;} return index>=0 && steps.Skip(index+1).Any(step=>step.Request?.Database is not null && step.Expect?.Database is not null); }
 
@@ -144,8 +144,9 @@ public static class TestcaseValidator
                 + (step.Request.Elasticsearch is null ? 0 : 1)
                 + (step.Request.Mqtt is null ? 0 : 1)
                 + (step.Request.HttpStub is null ? 0 : 1)
+                + (step.Request.Redis is null ? 0 : 1)
                 + (step.Request.Method is null && step.Request.Path is null ? 0 : 1);
-            if (transportCount != 1) issues.Add(new(location, "Mỗi bước phải khai báo đúng một transport HTTP, PostgreSQL, Elasticsearch, MQTT hoặc HttpStub."));
+            if (transportCount != 1) issues.Add(new(location, "Mỗi bước phải khai báo đúng một transport HTTP, PostgreSQL, Elasticsearch, MQTT, Redis hoặc HttpStub."));
             int executorCount = executors.Count(executor => executor.CanExecute(step));
             if (executorCount != 1) issues.Add(new(location, $"Bước phải khớp đúng một executor, thực tế {executorCount}."));
             if (step.Request.Body is not null && step.Request.Form is not null) issues.Add(new(location, "Không được gửi đồng thời body JSON và form."));
@@ -169,6 +170,14 @@ public static class TestcaseValidator
                 if (string.IsNullOrWhiteSpace(elasticsearch.Method)) issues.Add(new(location, "Elasticsearch method không được rỗng."));
                 if (string.IsNullOrWhiteSpace(elasticsearch.Path)) issues.Add(new(location, "Elasticsearch path không được rỗng."));
                 if (step.Expect?.Status is null) issues.Add(new(location, "Bước Elasticsearch phải khai báo expect.status."));
+            }
+            if (step.Request.Redis is { } redis)
+            {
+                string command = redis.Command?.Trim().ToLowerInvariant() ?? string.Empty;
+                if (command is not ("get" or "hget" or "set" or "delete" or "exists")) issues.Add(new(location, "Redis command chỉ hỗ trợ get, hget, set, delete hoặc exists."));
+                if (string.IsNullOrWhiteSpace(redis.Key)) issues.Add(new(location, "Redis key không được rỗng."));
+                if (command == "hget" && string.IsNullOrWhiteSpace(redis.Field)) issues.Add(new(location, "Redis hget bắt buộc có field."));
+                if (!cleanup && step.Expect?.Redis is null) issues.Add(new(location, "Bước Redis phải khai báo expect.redis."));
             }
             if (step.ParallelRequests is < 1 or > 1000) issues.Add(new(location, "parallelRequests phải từ 1 đến 1000."));
             if (step.ParallelRequests is > 1 && step.Save is not null) issues.Add(new(location, "Không thể vừa chạy song song vừa save biến."));

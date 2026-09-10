@@ -26,14 +26,16 @@ public sealed record SourceVerificationSpec(string[]? Files,string? VerifiedAt,s
 public sealed record CoverageItemSpec(string Status,string[]? EvidenceSteps,string? Reason);
 public sealed record StepSpec(string Name,string? Auth,string? AuthToken,RequestSpec? Request,ExpectSpec? Expect,Dictionary<string,string>? Save,RetrySpec? Retry,int? ParallelRequests,List<ConcurrentRequestSpec>? ConcurrentRequests);
 public sealed record RetrySpec(int? TimeoutMs,int? IntervalMs);
-public sealed record RequestSpec(string? Method,string? Path,JsonElement? Body,Dictionary<string,string>? Form,Dictionary<string,string>? Headers,MqttRequestSpec? Mqtt,DatabaseRequestSpec? Database,HttpStubRequestSpec? HttpStub = null,string? RawBody = null,ElasticsearchRequestSpec? Elasticsearch = null);
+public sealed record RequestSpec(string? Method,string? Path,JsonElement? Body,Dictionary<string,string>? Form,Dictionary<string,string>? Headers,MqttRequestSpec? Mqtt,DatabaseRequestSpec? Database,HttpStubRequestSpec? HttpStub = null,string? RawBody = null,ElasticsearchRequestSpec? Elasticsearch = null,RedisRequestSpec? Redis = null);
 public sealed record ConcurrentRequestSpec(string Name,string? Auth,string? AuthToken,RequestSpec Request,ExpectSpec Expect);
 public sealed record DatabaseRequestSpec(string Command,Dictionary<string,string>? Parameters,string? ConnectionStringVariable=null);
 public sealed record ElasticsearchRequestSpec(string Method,string Path,JsonElement? Body=null,string? UrlVariable=null,string? UsernameVariable=null,string? PasswordVariable=null);
+public sealed record RedisRequestSpec(string Command,string Key,string? Field=null,string? Value=null,string? ConnectionStringVariable=null);
 public sealed record MqttRequestSpec(string Action,string? Topic,string? Payload,int? Qos,bool? Retain,int? TimeoutMs,string? Username,string? Password,string? ClientId,MqttWillSpec? Will);
 public sealed record MqttWillSpec(string? Topic,string? Payload,int? Qos,bool? Retain);
 public sealed record HttpStubRequestSpec(string Action,string? Method,string? Path,int? Status,JsonElement? Response,Dictionary<string,string>? ResponseHeaders,int? DelayMs,int? TimeoutMs);
-public sealed record ExpectSpec(int? Status,int[]? StatusOneOf,int? MaxResponseTimeMs,Dictionary<string,AssertionSpec>? Json,MqttExpectSpec? Mqtt,DatabaseExpectSpec? Database,HttpStubExpectSpec? HttpStub = null);
+public sealed record ExpectSpec(int? Status,int[]? StatusOneOf,int? MaxResponseTimeMs,Dictionary<string,AssertionSpec>? Json,MqttExpectSpec? Mqtt,DatabaseExpectSpec? Database,HttpStubExpectSpec? HttpStub = null,RedisExpectSpec? Redis = null,JsonElement? JsonSchema = null);
+public sealed record RedisExpectSpec(string? ValueEquals=null,bool? Exists=null,long? TtlGreaterThan=null);
 public sealed record MqttExpectSpec(string? Topic,string? Payload,string? PayloadContains);
 public sealed record DatabaseExpectSpec(string? ScalarEquals, bool? ResultSet);
 public sealed record HttpStubExpectSpec(int? ReceivedCount,string? Method,string? Path,Dictionary<string,AssertionSpec>? Json);

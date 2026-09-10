@@ -6,6 +6,7 @@ using AutoTest.PostgreSql;
 using AutoTest.Elasticsearch;
 using AutoTest.Mqtt;
 using AutoTest.HttpStub;
+using AutoTest.Redis;
 
 namespace AutoTest.Core;
 
@@ -37,6 +38,7 @@ public sealed class RunnerEngine : IDisposable
             new ElasticsearchStepExecutor(),
             new MqttStepExecutor(env),
             new HttpStubStepExecutor(env),
+            new RedisStepExecutor(),
         });
     }
 

@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "project": "replace-me",
+  "cases": [
+    {
+      "id": "redis.read-cache-example",
+      "name": "Đọc và xác minh giá trị cache Redis mẫu",
+      "tags": ["redis", "example"],
+      "destructive": false,
+      "coverage": {
+        "sourceVerification": {
+          "files": ["Thay bằng đường dẫn source sử dụng Redis"],
+          "verifiedAt": "2026-09-10T00:00:00+07:00",
+          "contractVersion": "template"
+        },
+        "contract": { "status": "covered", "evidenceSteps": ["Đọc cache Redis mẫu"] },
+        "validation": { "status": "covered", "evidenceSteps": ["Đọc cache Redis mẫu"] },
+        "authentication": { "status": "notApplicable", "reason": "Redis dùng connection string của môi trường" },
+        "scope": { "status": "notApplicable", "reason": "Key mẫu không có scope nghiệp vụ" },
+        "integrity": { "status": "notApplicable", "reason": "Chỉ đọc cache" },
+        "lifecycle": { "status": "notApplicable", "reason": "Không có lifecycle" },
+        "concurrency": { "status": "notApplicable", "reason": "Không chạy đồng thời" },
+        "reporting": { "status": "covered", "evidenceSteps": ["Đọc cache Redis mẫu"] }
+      },
+      "steps": [
+        {
+          "name": "Đọc cache Redis mẫu",
+          "request": { "redis": { "command": "get", "key": "replace-me" } },
+          "expect": { "redis": { "exists": true } }
+        }
+      ]
+    }
+  ]
+}

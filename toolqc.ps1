@@ -18,6 +18,11 @@ if ($Area -eq 'ui') {
     & dotnet run --project (Join-Path $root 'runner\AutoTest.Web\AutoTest.Web.csproj') -c Release -- --url $url
     exit $LASTEXITCODE
 }
+if ($Area -eq 'generate') {
+    if ([string]::IsNullOrWhiteSpace($Command) -or [string]::IsNullOrWhiteSpace($Project)) { throw 'Cách dùng: .\toolqc.ps1 generate <project> <source-path>' }
+    & dotnet run --project (Join-Path $root 'runner\AutoTest.Generator\AutoTest.Generator.csproj') -c Release -- --project $Command --source $Project
+    exit $LASTEXITCODE
+}
 if ($Area -eq 'test') {
     $selectedProject = $Command
     if ([string]::IsNullOrWhiteSpace($selectedProject)) {
@@ -37,7 +42,7 @@ if ($Area -eq 'build') {
     & dotnet build (Join-Path $root 'ApiAutoTest.sln') -c Release
     exit $LASTEXITCODE
 }
-if ($Area -ne 'integration') { throw "Chức năng chưa hỗ trợ: $Area. Dùng: test, build hoặc integration." }
+if ($Area -ne 'integration') { throw "Chức năng chưa hỗ trợ: $Area. Dùng: ui, test, build, generate hoặc integration." }
 if ($Command -ne 'list' -and ([string]::IsNullOrWhiteSpace($Project) -or [string]::IsNullOrWhiteSpace($Name))) {
     throw 'Cách dùng: .\toolqc.ps1 integration <start|status|stop> <project> <integration> [--Background]'
 }
