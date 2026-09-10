@@ -40,6 +40,31 @@ app.MapGet("/api/projects/{project}/tests", (string project) =>
         .ToArray();
 });
 
+app.MapGet("/api/projects/{project}/environment", (string project) =>
+{
+    string projectDir = SafeProjectDirectory(root, project);
+    return ReadEnvironmentConfiguration(root, projectDir);
+});
+
+app.MapPut("/api/projects/{project}/environment", async (string project, EnvironmentUpdate request) =>
+{
+    string projectDir = SafeProjectDirectory(root, project);
+    HashSet<string> allowed = ReadEnvironmentConfiguration(root, projectDir)
+        .SelectMany(group => group.Variables)
+        .Select(variable => variable.Key)
+        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    Dictionary<string, string> updates = new(StringComparer.OrdinalIgnoreCase);
+    foreach ((string key, string value) in request.Values)
+    {
+        if (!allowed.Contains(key) || !IsValidEnvironmentKey(key))
+            return Results.BadRequest(new { message = $"Biến môi trường không hợp lệ: {key}" });
+        updates[key] = value ?? string.Empty;
+    }
+    WriteEnvironmentOverrides(Path.Combine(projectDir, ".env"), updates);
+    await Task.CompletedTask;
+    return Results.Ok(new { message = "Đã lưu cấu hình ghi đè cho dự án.", updated = updates.Count });
+});
+
 app.MapPost("/api/runs", (RunRequest request) =>
 {
     _ = SafeProjectDirectory(root, request.Project);
@@ -108,6 +133,87 @@ static IEnumerable<TestItem> ReadTests(string directory, string project)
     }
 }
 
+static EnvironmentGroup[] ReadEnvironmentConfiguration(string root, string projectDir)
+{
+    string rootExample = Path.Combine(root, ".env.example");
+    string projectExample = Path.Combine(projectDir, ".env.example");
+    Dictionary<string, EnvironmentDefinition> definitions = new(StringComparer.OrdinalIgnoreCase);
+    ReadDefinitions(rootExample, "Dùng chung", definitions);
+    ReadDefinitions(projectExample, "Dự án", definitions);
+    Dictionary<string, string> rootValues = ReadEnvironmentFile(Path.Combine(root, ".env"));
+    Dictionary<string, string> projectValues = ReadEnvironmentFile(Path.Combine(projectDir, ".env"));
+
+    return definitions.Values
+        .GroupBy(definition => $"{definition.Scope} · {definition.Group}")
+        .Select(group => new EnvironmentGroup(
+            group.Key,
+            group.Select(definition =>
+            {
+                string? systemValue = Environment.GetEnvironmentVariable(definition.Key);
+                string source;
+                string value;
+                if (!string.IsNullOrEmpty(systemValue)) { source = "Hệ thống"; value = systemValue; }
+                else if (projectValues.TryGetValue(definition.Key, out string? projectValue)) { source = "Dự án .env"; value = projectValue; }
+                else if (rootValues.TryGetValue(definition.Key, out string? rootValue)) { source = ".env dùng chung"; value = rootValue; }
+                else { source = "Chưa cấu hình"; value = definition.DefaultValue; }
+                bool secret = IsSecret(definition.Key);
+                return new EnvironmentVariable(definition.Key, secret ? Mask(value) : value, source, secret, !string.IsNullOrWhiteSpace(value));
+            }).OrderBy(variable => variable.Key).ToArray()))
+        .OrderBy(group => group.Name)
+        .ToArray();
+}
+
+static void ReadDefinitions(string path, string scope, Dictionary<string, EnvironmentDefinition> definitions)
+{
+    if (!File.Exists(path)) return;
+    string group = "Khác";
+    foreach (string raw in File.ReadLines(path))
+    {
+        string line = raw.Trim();
+        if (line.StartsWith('#')) { group = line.TrimStart('#').Trim(); continue; }
+        int separator = line.IndexOf('=');
+        if (separator <= 0) continue;
+        string key = line[..separator].Trim();
+        definitions[key] = new(key, group, scope, line[(separator + 1)..].Trim().Trim('"'));
+    }
+}
+
+static Dictionary<string, string> ReadEnvironmentFile(string path)
+{
+    Dictionary<string, string> values = new(StringComparer.OrdinalIgnoreCase);
+    if (!File.Exists(path)) return values;
+    foreach (string raw in File.ReadLines(path))
+    {
+        string line = raw.Trim();
+        int separator = line.IndexOf('=');
+        if (separator <= 0 || line.StartsWith('#')) continue;
+        values[line[..separator].Trim()] = line[(separator + 1)..].Trim().Trim('"');
+    }
+    return values;
+}
+
+static void WriteEnvironmentOverrides(string path, IReadOnlyDictionary<string, string> updates)
+{
+    List<string> lines = File.Exists(path) ? File.ReadAllLines(path).ToList() : [];
+    foreach ((string key, string value) in updates)
+    {
+        int index = lines.FindIndex(line => line.TrimStart().StartsWith(key + "=", StringComparison.OrdinalIgnoreCase));
+        string serialized = $"{key}={value.Replace("\r", string.Empty).Replace("\n", string.Empty)}";
+        if (index >= 0) lines[index] = serialized;
+        else { if (lines.Count > 0 && lines[^1].Length > 0) lines.Add(string.Empty); lines.Add(serialized); }
+    }
+    File.WriteAllLines(path, lines, new System.Text.UTF8Encoding(false));
+}
+
+static bool IsValidEnvironmentKey(string key)
+    => key.Length > 0 && key.All(character => char.IsAsciiLetterOrDigit(character) || character == '_');
+
+static bool IsSecret(string key)
+    => new[] { "PASSWORD", "TOKEN", "SECRET", "CONNECTION_STRING", "ACCESS_KEY", "PRIVATE_KEY" }
+        .Any(marker => key.Contains(marker, StringComparison.OrdinalIgnoreCase));
+
+static string Mask(string value) => string.IsNullOrEmpty(value) ? string.Empty : "••••••••";
+
 static async Task RunAsync(string root, RunState state)
 {
     try
@@ -143,6 +249,10 @@ static async Task RunAsync(string root, RunState state)
 
 sealed record RunRequest(string Project, string[]? Tags);
 sealed record TestItem(string Id, string Name, string[] Tags, bool Destructive, string Group, int StepCount);
+sealed record EnvironmentUpdate(Dictionary<string, string> Values);
+sealed record EnvironmentDefinition(string Key, string Group, string Scope, string DefaultValue);
+sealed record EnvironmentGroup(string Name, EnvironmentVariable[] Variables);
+sealed record EnvironmentVariable(string Key, string Value, string Source, bool Secret, bool Configured);
 
 sealed class RunState(string id, string project, string[] tags, DateTimeOffset startedAt)
 {
@@ -184,3 +294,4 @@ sealed class RunState(string id, string project, string[] tags, DateTimeOffset s
             return new { Id, Project, Tags, StartedAt, Status, ExitCode, ReportPath, lines = lines.ToArray() };
     }
 }
+

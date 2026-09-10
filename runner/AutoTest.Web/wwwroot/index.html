@@ -8,8 +8,9 @@
 </head>
 <body>
   <header><div><strong>Tool-QC</strong><span>Test Console</span></div><span id="connection">Sẵn sàng</span></header>
-  <main>
-    <aside>
+  <nav class="main-tabs" aria-label="Chức năng chính"><button class="nav-active" data-view="testsView"><span class="tab-icon">✓</span><span><b>Testcases</b><small>Chọn và chạy kiểm thử</small></span></button><button data-view="environmentView"><span class="tab-icon">⚙</span><span><b>Cấu hình môi trường</b><small>API, database và dịch vụ</small></span></button></nav>
+  <main id="mainLayout">
+    <aside id="testSidebar">
       <label>Dự án<select id="project"></select></label>
       <label>Tìm testcase<input id="search" placeholder="Tên, ID hoặc tag"></label>
       <label>Nhóm<select id="group"><option value="">Tất cả</option></select></label>
@@ -18,7 +19,7 @@
       <button id="selectVisible">Chọn tất cả đang hiển thị</button>
       <button id="clear">Bỏ chọn</button>
     </aside>
-    <section>
+    <section id="testsView">
       <div class="toolbar"><h1>Testcases</h1><span id="count"></span></div>
       <div class="folder-actions">
         <button id="expandAll">Mở tất cả thư mục</button>
@@ -26,10 +27,19 @@
       </div>
       <div id="tests" class="tests"></div>
     </section>
-    <section class="run-panel">
-      <div class="toolbar"><h1>Kết quả chạy</h1><a id="report" target="_blank" hidden>Mở báo cáo HTML</a></div>
+    <section id="environmentView" hidden>
+      <div class="toolbar"><div><h1>Cấu hình môi trường</h1><p>Giá trị lưu tại `.env` của dự án và ghi đè cấu hình dùng chung.</p></div><button id="saveEnvironment" class="primary compact">Lưu thay đổi</button></div>
+      <div class="environment-note">Secret và connection string luôn được che. Để thay đổi, nhập giá trị mới; để trống nghĩa là giữ nguyên.</div>
+      <div id="environmentGroups"></div>
+    </section>
+    <section id="runPanel" class="run-panel">
+      <div class="toolbar"><h1>Kết quả chạy</h1><div class="report-actions"><button id="showReport" hidden>Xem báo cáo trong UI</button><a id="report" target="_blank" hidden>Mở tab mới</a></div></div>
       <div id="runStatus" class="status idle">Chưa chạy</div>
       <pre id="console">Chọn testcase và nhấn “Chạy testcase đã chọn”.</pre>
+      <div id="reportPanel" class="report-panel" hidden>
+        <div class="report-panel-header"><strong>Báo cáo chi tiết</strong><button id="closeReport">Đóng báo cáo</button></div>
+        <iframe id="reportFrame" title="Báo cáo testcase"></iframe>
+      </div>
     </section>
   </main>
   <script src="app.js"></script>
