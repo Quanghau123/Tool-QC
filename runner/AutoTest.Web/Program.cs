@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using AutoTest.MessageScanner;
 
+// Backend UI: khai báo endpoint, khởi chạy runner nền và trả artifact cho trình duyệt.
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();

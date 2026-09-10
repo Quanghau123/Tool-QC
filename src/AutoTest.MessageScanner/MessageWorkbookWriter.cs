@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 
 namespace AutoTest.MessageScanner;
 
+// Xuất kết quả cào message thành Excel mà không phụ thuộc Microsoft Office.
 public sealed class MessageWorkbookWriter
 {
     public string Write(string outputPath, MessageScanResult result)

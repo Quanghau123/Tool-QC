@@ -1,11 +1,13 @@
 using System.Text.Json;using System.Text.RegularExpressions;using AutoTest.Abstractions;
 namespace AutoTest.Abstractions;
+// Nội suy biến testcase và biến môi trường dùng chung cho mọi transport.
 public static partial class Templates
 {
  [GeneratedRegex(@"\$\{(?<name>[A-Za-z0-9_.:-]+)\}")]private static partial Regex Pattern();
  public static string Resolve(string input,IReadOnlyDictionary<string,string> vars,IEnvironmentStore env)=>Pattern().Replace(input,m=>{var key=m.Groups["name"].Value;if(key.StartsWith("env:",StringComparison.OrdinalIgnoreCase))return env.Require(key[4..]);return vars.TryGetValue(key,out var v)?v:throw new InvalidOperationException($"Không tìm thấy biến: {key}");});
  public static IReadOnlyList<string> Variables(string input)=>Pattern().Matches(input).Select(match=>match.Groups["name"].Value).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 }
+// Nhóm JSON path và chuyển đổi giá trị phục vụ save/assertion.
 public static class JsonPath
 {
 public static (bool Found,JsonElement Value) Select(JsonElement root,string path){var values=SelectMany(root,path);return values.Count==0?(false,default):(true,values[0]);}
@@ -24,6 +26,3 @@ public static class JsonAssertionValues
   return JsonPath.Text(actual)==resolvedExpected;
  }
 }
-
-
-

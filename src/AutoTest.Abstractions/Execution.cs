@@ -7,6 +7,7 @@ public interface ITestStepExecutor : IAsyncDisposable
     Task<StepRunResult> ExecuteAsync(StepExecutionContext context, CancellationToken cancellationToken);
 }
 
+// Contract truyền dữ liệu giữa core và executor; thêm transport mới cần kiểm tra nhóm này.
 public sealed record StepExecutionContext(
     StepSpec Step,
     ProjectSpec Project,
@@ -37,6 +38,7 @@ public sealed class StepExecutorRegistry : IAsyncDisposable
 {
     private readonly IReadOnlyList<ITestStepExecutor> executors;
     public StepExecutorRegistry(IEnumerable<ITestStepExecutor> executors) => this.executors = executors.ToArray();
+    // Bảo đảm một step chỉ khớp đúng một executor, tránh chạy nhầm transport.
     public ITestStepExecutor Resolve(StepSpec step)
     {
         ITestStepExecutor[] matches = executors.Where(executor => executor.CanExecute(step)).ToArray();

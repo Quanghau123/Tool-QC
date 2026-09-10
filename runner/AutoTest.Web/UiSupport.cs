@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
+// Tiện ích backend UI: kiểm tra kết nối, lịch sử chạy và quản lý artifact an toàn.
 static class UiSupport
 {
     private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web) { WriteIndented = true };

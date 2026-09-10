@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Text.Json;
 namespace AutoTest.Mqtt;
 
+// Transport MQTT: điều phối connect, publish, subscribe, roundtrip và Last Will.
 public sealed class MqttStepExecutor : ITestStepExecutor
 {
     private readonly MqttTestClient client;
@@ -17,5 +18,3 @@ public sealed class MqttStepExecutor : ITestStepExecutor
     private static string R(StepExecutionContext c,string v)=>c.Redact?.Invoke(v)??v;
     public ValueTask DisposeAsync()=>client.DisposeAsync();
 }
-
-

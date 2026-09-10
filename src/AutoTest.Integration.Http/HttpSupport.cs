@@ -3,6 +3,7 @@ using AutoTest.Integration.Abstractions;
 
 namespace AutoTest.Integration.Http;
 
+// Kiểm tra profile integration trước khi mở port hoặc nhận request.
 public static class HttpProfileValidator
 {
     public static void Validate(IntegrationProfile profile)

@@ -1,5 +1,6 @@
 using System.Text.Json;
 namespace AutoTest.Http;
+// Validator JSON Schema tối giản; mở rộng tại đây khi cần thêm keyword schema.
 public static class SimpleJsonSchema
 {
     public static void Validate(JsonElement value,JsonElement schema,string path)

@@ -17,6 +17,7 @@ public sealed record MessageScanResult(
     int ScannedFileCount,
     IReadOnlyList<string> SkippedFiles);
 
+// Quét source tìm message và bản dịch; lỗi thiếu key/module/source file kiểm tra tại đây.
 public sealed class SourceMessageScanner
 {
     private static readonly Regex MessageRegex = new(

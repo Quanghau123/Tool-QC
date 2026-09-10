@@ -4,6 +4,7 @@ using System.Text;
 
 namespace AutoTest.LoadTesting;
 
+// Tính thống kê load test như percentile và server timing; lỗi số liệu tổng hợp kiểm tra tại đây.
 public static class LoadDiagnostics
 {
     public static double Percentile(IEnumerable<double> values, double percentile)

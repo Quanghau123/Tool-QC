@@ -10,6 +10,7 @@ using AutoTest.Redis;
 
 namespace AutoTest.Core;
 
+// Nhóm điều phối chính: lỗi thứ tự step, biến, auth, retry hoặc cleanup bắt đầu kiểm tra từ đây.
 public sealed class RunnerEngine : IDisposable
 {
     private readonly ProjectSpec project;
@@ -18,6 +19,7 @@ public sealed class RunnerEngine : IDisposable
     private readonly StepExecutorRegistry executorRegistry;
     private string? token;
 
+    // Khởi tạo các transport dùng chung và chặn URL không an toàn trước khi chạy.
     public RunnerEngine(ProjectSpec project, EnvironmentStore env)
     {
         this.project = project;
@@ -42,6 +44,7 @@ public sealed class RunnerEngine : IDisposable
         });
     }
 
+    // Chạy trọn một testcase và gom kết quả từng bước cho báo cáo.
     public async Task<RunResult> RunAsync(CaseSpec test, CancellationToken cancellationToken = default)
     {
         var watch = Stopwatch.StartNew();
@@ -94,6 +97,7 @@ public sealed class RunnerEngine : IDisposable
         }
     }
 
+    // Chọn đúng executor; lỗi transport hoặc assertion của một step hội tụ tại đây.
     private async Task RunStepAsync(StepSpec step, Dictionary<string, string> variables, CancellationToken cancellationToken, List<StepRunResult> results, bool assertions = true, bool cleanup = false)
     {
         if (step.Request is null)

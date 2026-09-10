@@ -4,6 +4,7 @@ using AutoTest.Abstractions;
 
 namespace AutoTest.HttpStub;
 
+// Executor điều khiển HTTP stub: start, configure, verify, reset và stop.
 public sealed class HttpStubStepExecutor : ITestStepExecutor
 {
     private readonly HttpStubServer server;

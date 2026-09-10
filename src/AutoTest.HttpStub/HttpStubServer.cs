@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging;
 
 namespace AutoTest.HttpStub;
 
+// HTTP stub trong testcase: lưu rule, nhận request và ghi exchange để đối chiếu.
 internal sealed class HttpStubServer : IAsyncDisposable
 {
     private readonly IEnvironmentStore environment;

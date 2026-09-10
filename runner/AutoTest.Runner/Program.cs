@@ -8,6 +8,7 @@ using AutoTest.Elasticsearch;
 using AutoTest.HttpStub;
 using AutoTest.TestValidation;
 using AutoTest.Redis;
+// CLI runner: nạp project, preflight, chạy testcase song song và xuất báo cáo.
 var startedAt=DateTimeOffset.Now;
 var root=Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,"..","..","..","..",".."));
 string Arg(string key,string fallback){var i=Array.IndexOf(args,key);return i>=0&&i+1<args.Length?args[i+1]:fallback;}

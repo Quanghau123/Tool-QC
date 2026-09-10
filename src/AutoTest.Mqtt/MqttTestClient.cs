@@ -7,6 +7,7 @@ namespace AutoTest.Mqtt;
 
 internal sealed record MqttReceivedMessage(string Topic, string Payload);
 
+// Client MQTT mức thấp: lỗi connection, subscription, timeout hoặc packet kiểm tra tại đây.
 internal sealed class MqttTestClient : IAsyncDisposable
 {
     private readonly IEnvironmentStore environment;

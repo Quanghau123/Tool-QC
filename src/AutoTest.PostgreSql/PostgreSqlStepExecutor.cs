@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 namespace AutoTest.PostgreSql;
 
+// Transport PostgreSQL: chạy fixture/assertion và đưa result set vào báo cáo.
 public sealed class PostgreSqlStepExecutor : ITestStepExecutor
 {
     public string Name => "postgresql";

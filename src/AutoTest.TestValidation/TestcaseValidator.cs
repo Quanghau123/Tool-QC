@@ -5,6 +5,7 @@ namespace AutoTest.TestValidation;
 
 public sealed record ValidationIssue(string Location, string Message);
 
+// Preflight trước network call; lỗi contract, coverage, biến hoặc executor sửa trong nhóm này.
 public static class TestcaseValidator
 {
     private static readonly string[] TemporaryMarkers = [".working.json", ".bak.json", ".backup.json", ".tmp.json"];

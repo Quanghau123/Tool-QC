@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AutoTest.Abstractions;
 namespace AutoTest.Core;
+// Nhóm cấu hình: đọc .env và ưu tiên biến môi trường hệ điều hành.
 public sealed class EnvironmentStore : IEnvironmentStore
 {
  private readonly Dictionary<string,string> values=new(StringComparer.OrdinalIgnoreCase);
@@ -12,6 +13,7 @@ public sealed class EnvironmentStore : IEnvironmentStore
  public bool Bool(string key,bool fallback=false)=>bool.TryParse(Get(key),out var v)?v:fallback;
  public int Int(string key,int fallback=0)=>int.TryParse(Get(key),out var v)?v:fallback;
 }
+// Nhóm nạp đặc tả: lỗi project.json, testcase JSON hoặc project mismatch kiểm tra tại đây.
 public static class SpecLoader
 {
  private static readonly JsonSerializerOptions Options=new(){PropertyNameCaseInsensitive=true,AllowTrailingCommas=true};

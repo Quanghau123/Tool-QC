@@ -1,3 +1,4 @@
+// CLI Integration Host: start/status/inspect/stop process giả lập chạy nền.
 using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Text.Json;

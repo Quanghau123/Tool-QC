@@ -5,6 +5,7 @@ using AutoTest.Abstractions;
 
 namespace AutoTest.Reporting.Html;
 
+// Xuất JUnit cho CI; lỗi XML hoặc mapping trạng thái testcase kiểm tra tại đây.
 public static class JUnitReportWriter
 {
     public static string Write(string directory, ProjectSpec project, IReadOnlyList<RunResult> results, DateTimeOffset startedAt)

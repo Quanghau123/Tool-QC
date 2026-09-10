@@ -3,6 +3,7 @@ using System.Text.Json;
 
 namespace AutoTest.LoadTesting;
 
+// Sinh báo cáo chẩn đoán hiệu năng từ các timing record đã được làm sạch.
 public static class LoadReportWriter
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);

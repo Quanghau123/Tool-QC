@@ -4,6 +4,7 @@ using StackExchange.Redis;
 
 namespace AutoTest.Redis;
 
+// Transport Redis: xử lý get/hget/set/delete/exists và kiểm tra value hoặc TTL.
 public sealed class RedisStepExecutor : ITestStepExecutor
 {
     public string Name => "redis";

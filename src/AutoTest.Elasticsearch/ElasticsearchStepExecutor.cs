@@ -8,6 +8,7 @@ using AutoTest.Abstractions;
 
 namespace AutoTest.Elasticsearch;
 
+// Transport Elasticsearch: gọi REST cluster, assertion JSON và lưu dữ liệu projection.
 public sealed class ElasticsearchStepExecutor : ITestStepExecutor
 {
     public string Name => "elasticsearch";

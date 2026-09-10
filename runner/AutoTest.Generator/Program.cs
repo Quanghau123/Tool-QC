@@ -1,3 +1,4 @@
+// CLI generator: quét controller/source và tạo testcase nháp để người dùng duyệt.
 using System.Text.Json;
 using System.Text.RegularExpressions;
 

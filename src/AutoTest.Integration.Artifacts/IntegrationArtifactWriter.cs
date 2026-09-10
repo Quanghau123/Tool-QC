@@ -4,6 +4,7 @@ using AutoTest.Integration.Abstractions;
 
 namespace AutoTest.Integration.Artifacts;
 
+// Lưu request/response của Integration Host và sinh artifact phục vụ điều tra.
 public sealed class IntegrationArtifactWriter
 {
     private readonly JsonSerializerOptions options = new(JsonSerializerDefaults.Web) { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };

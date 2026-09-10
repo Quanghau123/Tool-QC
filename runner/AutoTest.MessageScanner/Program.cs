@@ -1,3 +1,4 @@
+// CLI cào message: nhận đường dẫn source và xuất workbook Excel.
 using AutoTest.MessageScanner;
 
 string? Argument(string key)

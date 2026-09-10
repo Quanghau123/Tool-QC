@@ -11,6 +11,7 @@ using Microsoft.Extensions.Hosting;
 
 namespace AutoTest.Integration.Http;
 
+// Integration Host HTTP: route giả lập, sequence, delay, capture và shutdown hội tụ tại đây.
 public sealed class HttpIntegrationHost
 {
     private readonly IntegrationProfile profile;

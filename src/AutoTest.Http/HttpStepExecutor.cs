@@ -10,6 +10,7 @@ using System.Text.RegularExpressions;
 namespace AutoTest.Http;
 
 /// <summary>HTTP module marker and executor boundary. The compatibility engine currently delegates here incrementally.</summary>
+// Transport HTTP: dựng request, auth, đo thời gian, assertion JSON và lưu biến response.
 public sealed class HttpStepExecutor : ITestStepExecutor
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true, Encoder = JavaScriptEncoder.Create(UnicodeRanges.All) };
