@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
+using AutoTest.MessageScanner;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
@@ -85,6 +86,44 @@ app.MapPost("/api/projects/{project}/generate", async (string project, GenerateR
     using Process process = new() { StartInfo = info }; process.Start();
     string standardOutput = await process.StandardOutput.ReadToEndAsync(); string standardError = await process.StandardError.ReadToEndAsync(); await process.WaitForExitAsync();
     return process.ExitCode == 0 ? Results.Ok(new { output, message = standardOutput.Trim() }) : Results.BadRequest(new { message = standardError.Trim() });
+});
+
+app.MapPost("/api/message-scans", (MessageScanRequest request) =>
+{
+    if (string.IsNullOrWhiteSpace(request.SourcePath) || !Directory.Exists(request.SourcePath))
+        return Results.BadRequest(new { message = "Đường dẫn source không tồn tại." });
+
+    string sourcePath = Path.GetFullPath(request.SourcePath);
+    MessageScanResult scan = new SourceMessageScanner().Scan(sourcePath);
+    string scanId = Guid.NewGuid().ToString("N");
+    string output = Path.Combine(root, ".artifacts", "message-scans",
+        $"{Path.GetFileName(sourcePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))}-messages-{DateTime.Now:yyyyMMdd-HHmmss}.xlsx");
+    string report = new MessageWorkbookWriter().Write(output, scan);
+    UiSupport.SaveMessageScan(root, scanId, report);
+
+    return Results.Ok(new
+    {
+        scanId,
+        sourceDirectory = scan.SourceDirectory,
+        scan.ScannedFileCount,
+        messageCount = scan.Messages.Count,
+        moduleCount = scan.Messages.Select(message => message.Module).Distinct(StringComparer.OrdinalIgnoreCase).Count(),
+        skippedFileCount = scan.SkippedFiles.Count,
+        modules = scan.Messages.GroupBy(message => message.Module).OrderBy(group => group.Key).Select(group => new
+        {
+            name = group.Key,
+            count = group.Count(),
+            messages = group.Select(message => new { key = message.Key, vietnamese = message.Vietnamese, english = message.English, sourceFiles = message.SourceFiles })
+        })
+    });
+});
+
+app.MapGet("/api/message-scans/{scanId}/excel", (string scanId) =>
+{
+    string? report = UiSupport.ReadMessageScan(root, scanId);
+    return report is not null && File.Exists(report)
+        ? Results.File(report, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Path.GetFileName(report))
+        : Results.NotFound();
 });
 
 app.MapPost("/api/runs", (RunRequest request) =>
@@ -286,6 +325,7 @@ sealed record RunRequest(string Project, string[]? CaseIds);
 sealed record TestItem(string Id, string Name, string[] Tags, bool Destructive, string Group, int StepCount);
 sealed record EnvironmentUpdate(Dictionary<string, string> Values);
 sealed record GenerateRequest(string SourcePath);
+sealed record MessageScanRequest(string SourcePath);
 sealed record EnvironmentDefinition(string Key, string Group, string Scope, string DefaultValue);
 sealed record EnvironmentGroup(string Name, EnvironmentVariable[] Variables);
 sealed record EnvironmentVariable(string Key, string Value, string Source, bool Secret, bool Configured);

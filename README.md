@@ -110,6 +110,9 @@ Mặc định báo cáo nằm trong `.artifacts/message-scans/`. Có thể chọ
 
 ```powershell
 dotnet run --project runner/AutoTest.MessageScanner -- --source "D:\works\projects\ops-service" --output "message-results\ops-service-messages.xlsx"
+
+Trên UI, mở **Công cụ → Cào message**, nhập đường dẫn source, nhấn **Cào message** để
+xem kết quả theo module, tìm kiếm và tải báo cáo Excel mà không cần nhớ lệnh CLI.
 ```
 
 Scanner chỉ đọc source, không build hoặc chạy project được quét và không đọc `.env`.
@@ -663,3 +666,4 @@ cho tới khi đạt kết quả hoặc hết `timeoutMs`:
 ```json
 "retry": { "timeoutMs": 10000, "intervalMs": 500 }
 ```
+

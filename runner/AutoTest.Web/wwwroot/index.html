@@ -8,7 +8,7 @@
 </head>
 <body>
   <header><div><strong>Tool-QC</strong><span>Test Console</span></div><span id="connection">Sẵn sàng</span></header>
-  <nav class="main-tabs" aria-label="Chức năng chính"><button class="nav-active" data-view="testsView"><span class="tab-icon">✓</span><span><b>Testcases</b><small>Chọn và chạy kiểm thử</small></span></button><button data-view="historyView"><span class="tab-icon">◷</span><span><b>Lịch sử chạy</b><small>Xem lại kết quả trước</small></span></button><button data-view="generatorView"><span class="tab-icon">＋</span><span><b>Sinh testcase</b><small>Quét source tạo bản nháp</small></span></button><button data-view="environmentView"><span class="tab-icon">⚙</span><span><b>Cấu hình môi trường</b><small>API, database và dịch vụ</small></span></button></nav>
+  <nav class="main-tabs" aria-label="Chức năng chính"><button class="nav-active" data-view="testsView"><span class="tab-icon">✓</span><span><b>Testcases</b><small>Chọn và chạy kiểm thử</small></span></button><button data-view="historyView"><span class="tab-icon">◷</span><span><b>Kết quả</b><small>Lịch sử và báo cáo chạy</small></span></button><button data-view="toolsView"><span class="tab-icon">◇</span><span><b>Công cụ</b><small>Sinh testcase và cào message</small></span></button><button data-view="environmentView"><span class="tab-icon">⚙</span><span><b>Cấu hình</b><small>Môi trường và kết nối</small></span></button></nav>
   <main id="mainLayout">
     <aside id="testSidebar">
       <label>Dự án<select id="project"></select></label>
@@ -33,9 +33,17 @@
       <div id="connectionChecks"></div>
       <div id="environmentGroups"></div>
     </section>
-    <section id="historyView" hidden><div class="toolbar"><h1>Lịch sử chạy</h1><button id="refreshHistory" class="compact">Làm mới</button></div><div id="historyList"></div></section>
-    <section id="generatorView" hidden><div class="toolbar"><div><h1>Sinh testcase từ source</h1><p>Tool chỉ tạo bản nháp bị vô hiệu hóa; cần duyệt contract trước khi đưa vào project.</p></div></div><label>Đường dẫn source backend<input id="sourcePath" placeholder="D:\works\projects\service-name"></label><button id="generateTests" class="primary compact">Quét và tạo bản nháp</button><pre id="generatorOutput">Chưa chạy.</pre></section>
-    <section id="runPanel" class="run-panel">
+    <section id="historyView" hidden><div class="toolbar"><div><h1>Kết quả kiểm thử</h1><p>Chọn một lần chạy để xem console và báo cáo chi tiết.</p></div><button id="refreshHistory" class="compact">Làm mới</button></div><div id="historyList"></div></section>
+    <section id="toolsView" hidden>
+      <div class="toolbar"><div><h1>Công cụ</h1><p>Chọn công cụ cần dùng; quá trình quét và sinh file được chạy ngầm.</p></div></div>
+      <div class="tool-tabs"><button class="tool-active" data-tool="generatorTool">Sinh testcase</button><button data-tool="messageScannerTool">Cào message</button></div>
+      <div id="generatorTool" class="tool-panel"><h2>Sinh testcase từ source</h2><p>Tool tạo bản nháp bị vô hiệu hóa; cần duyệt contract trước khi đưa vào project.</p><label>Đường dẫn source backend<input id="sourcePath" placeholder="D:\works\projects\service-name"></label><button id="generateTests" class="primary compact">Quét và tạo bản nháp</button><pre id="generatorOutput">Chưa chạy.</pre></div>
+      <div id="messageScannerTool" class="tool-panel" hidden>
+        <div class="toolbar"><div><h2>Cào message từ source</h2><p>Quét khóa message, bản dịch và vị trí sử dụng; tự bỏ qua file build.</p></div><a id="downloadMessages" class="button-link" hidden>Tải Excel</a></div>
+        <div class="scanner-controls"><label>Đường dẫn source backend<input id="messageSourcePath" placeholder="D:\works\projects\service-name"></label><button id="scanMessages" class="primary compact">Cào message</button></div>
+        <div id="messageSummary" class="message-summary">Chưa quét source.</div><label>Tìm message<input id="messageSearch" placeholder="Key, module hoặc nội dung bản dịch" disabled></label><div id="messageResults" class="message-results"></div>
+      </div>
+    </section>    <section id="runPanel" class="run-panel">
       <div class="toolbar"><h1>Kết quả chạy</h1><div class="report-actions"><button id="showReport" hidden>Xem báo cáo trong UI</button><a id="report" target="_blank" hidden>Mở tab mới</a></div></div>
       <div class="run-status-row"><div id="runStatus" class="status idle">Chưa chạy</div><button id="stopRun" class="stop" hidden>Dừng workload</button></div>
       <pre id="console">Chọn testcase và nhấn “Chạy testcase đã chọn”.</pre>
@@ -48,3 +56,4 @@
   <script src="app.js"></script>
 </body>
 </html>
+

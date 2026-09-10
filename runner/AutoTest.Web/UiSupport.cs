@@ -67,6 +67,23 @@ static class UiSupport
         return "RUNNER_ERROR";
     }
 
+    public static void SaveMessageScan(string root, string scanId, string reportPath)
+    {
+        string directory = Path.Combine(root, ".artifacts", "message-scans", ".ui");
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, scanId + ".txt"), Path.GetFullPath(reportPath));
+    }
+
+    public static string? ReadMessageScan(string root, string scanId)
+    {
+        if (!Regex.IsMatch(scanId, "^[a-zA-Z0-9]+$")) return null;
+        string path = Path.Combine(root, ".artifacts", "message-scans", ".ui", scanId + ".txt");
+        if (!File.Exists(path)) return null;
+        string report = Path.GetFullPath(File.ReadAllText(path).Trim());
+        string allowedRoot = Path.GetFullPath(Path.Combine(root, ".artifacts", "message-scans"));
+        return report.StartsWith(allowedRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ? report : null;
+    }
+
     private static Dictionary<string, string> ReadEnvironment(string path)
     {
         Dictionary<string, string> values = new(StringComparer.OrdinalIgnoreCase);
