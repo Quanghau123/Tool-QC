@@ -1,0 +1,10 @@
+{
+  "name": "tool-qc",
+  "private": true,
+  "scripts": {
+    "start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-ui.ps1",
+    "ui": "npm run start",
+    "build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1",
+    "test:framework": "dotnet run --project tests/AutoTest.FrameworkTests/AutoTest.FrameworkTests.csproj -c Release"
+  }
+}

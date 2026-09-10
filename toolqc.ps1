@@ -3,11 +3,21 @@ param(
     [Parameter(Position=1)][string]$Command,
     [Parameter(Position=2)][string]$Project,
     [Parameter(Position=3)][string]$Name,
-    [switch]$Background
+    [switch]$Background,
+    [switch]$NoBrowser,
+    [int]$Port = 5080
 )
 
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
+if ($Area -eq 'ui') {
+    $url = "http://127.0.0.1:$Port"
+    if (-not $NoBrowser) {
+        Start-Job -ScriptBlock { param($target) Start-Sleep -Seconds 2; Start-Process $target } -ArgumentList $url | Out-Null
+    }
+    & dotnet run --project (Join-Path $root 'runner\AutoTest.Web\AutoTest.Web.csproj') -c Release -- --url $url
+    exit $LASTEXITCODE
+}
 if ($Area -eq 'test') {
     $selectedProject = $Command
     if ([string]::IsNullOrWhiteSpace($selectedProject)) {

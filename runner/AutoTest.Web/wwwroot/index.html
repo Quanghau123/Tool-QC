@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Tool-QC</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header><div><strong>Tool-QC</strong><span>Test Console</span></div><span id="connection">Sẵn sàng</span></header>
+  <main>
+    <aside>
+      <label>Dự án<select id="project"></select></label>
+      <label>Tìm testcase<input id="search" placeholder="Tên, ID hoặc tag"></label>
+      <label>Nhóm<select id="group"><option value="">Tất cả</option></select></label>
+      <div class="summary"><b id="selectedCount">0</b> testcase đã chọn</div>
+      <button id="run" class="primary">Chạy testcase đã chọn</button>
+      <button id="selectVisible">Chọn tất cả đang hiển thị</button>
+      <button id="clear">Bỏ chọn</button>
+    </aside>
+    <section>
+      <div class="toolbar"><h1>Testcases</h1><span id="count"></span></div>
+      <div id="tests" class="tests"></div>
+    </section>
+    <section class="run-panel">
+      <div class="toolbar"><h1>Kết quả chạy</h1><a id="report" target="_blank" hidden>Mở báo cáo HTML</a></div>
+      <div id="runStatus" class="status idle">Chưa chạy</div>
+      <pre id="console">Chọn testcase và nhấn “Chạy testcase đã chọn”.</pre>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

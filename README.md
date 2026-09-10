@@ -32,9 +32,24 @@ shared launcher chỉ quản lý tiến trình JMeter và cấu trúc JTL/HTML c
 
 Thứ tự ưu tiên là biến môi trường hệ điều hành/CI, `projects/<project>/.env`, rồi `.env` ở thư mục gốc.
 
-Lệnh chạy ngắn:
+Lệnh đơn giản nhất để mở Tool-QC:
 
 ```powershell
+npm start
+```
+
+Không cần chạy `npm install` vì UI không dùng package JavaScript bên ngoài. Lệnh PowerShell
+`.\toolqc.ps1` vẫn được giữ cho automation và các chức năng nâng cao.
+
+Các lệnh khác:
+
+```powershell
+# Mở giao diện web để chọn và chạy testcase
+npm start
+
+# Cách tương đương
+npm run ui
+
 # Chạy tất cả testcase của dự án
 .\toolqc.ps1 test ops-service
 
