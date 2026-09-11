@@ -224,7 +224,50 @@ string junitPath = AutoTest.Reporting.Html.JUnitReportWriter.Write(junitDirector
 Equal("true", File.Exists(junitPath).ToString().ToLowerInvariant(), "JUnit report exists");
 Directory.Delete(junitDirectory, true);
 
-Console.WriteLine("Framework tests passed: 34");
+string generatorFixture = Path.Combine(Path.GetTempPath(), $"autotest-generator-{Guid.NewGuid():N}");
+Directory.CreateDirectory(generatorFixture);
+File.WriteAllText(Path.Combine(generatorFixture, "Fixture.cs"), """
+using FluentValidation;
+using Microsoft.AspNetCore.Mvc;
+using System.Text.Json.Serialization;
+[ApiController, Route("api/orders")]
+public sealed class OrdersController : ControllerBase
+{
+    [HttpPost, ProducesResponseType(typeof(OrderResponse), 201), ProducesResponseType(400)]
+    public Task<OrderResponse> Create([FromBody] CreateOrderRequest request) => throw new NotImplementedException();
+    [HttpGet, ProducesResponseType(typeof(OrderResponse), 200)]
+    public Task<OrderResponse> Search([FromQuery] SearchRequest request) { if (request.Page < 1) throw new ArgumentOutOfRangeException(); return OrderService.LoadAsync(request); }
+}
+public static class OrderService { public static Task<OrderResponse> LoadAsync(SearchRequest request) => throw new NotImplementedException(); }
+public sealed record AddressRequest(string Street, string City);
+public sealed class CreateOrderRequest { public required string Code { get; init; } public int Quantity { get; init; } public AddressRequest Address { get; init; } = default!; }
+public class PagingRequest { public int Current { get; init; } public int PageSize { get; init; } }
+public sealed class SearchRequest : PagingRequest { public string? Keyword { get; init; } }
+public sealed class OrderResponse { public Guid Id { get; init; } [JsonPropertyName("orderCode")] public string Code { get; init; } = ""; public int Quantity { get; init; } }
+public sealed class CreateOrderValidator : AbstractValidator<CreateOrderRequest> { public const int MaxQuantity = 20; public CreateOrderValidator() { RuleFor(x => x.Code).NotEmpty().MaximumLength(10); RuleFor(x => x.Quantity).LessThanOrEqualTo(MaxQuantity); } }
+""");
+var generatorAnalysis = new AutoTest.Generator.SourceContractAnalyzer().Analyze(generatorFixture);
+Equal("2", generatorAnalysis.Endpoints.Count.ToString(), "generator endpoint count");
+Equal("3", generatorAnalysis.Endpoints.Single(endpoint => endpoint.Method == "POST").Validations.Count.ToString(), "generator validation count");
+Equal("3", generatorAnalysis.Types["OrderResponse"].Properties.Count.ToString(), "generator response DTO properties");
+Equal("20", generatorAnalysis.Endpoints.Single(endpoint => endpoint.Method == "POST").Validations.Single(rule => rule.Rule == "LessThanOrEqualTo").Value!, "generator constant boundary");
+Equal("1", generatorAnalysis.Endpoints.Single(endpoint => endpoint.Method == "GET").ServiceCalls.Count.ToString(), "generator semantic service call");
+Equal("1", generatorAnalysis.Endpoints.Single(endpoint => endpoint.Method == "GET").Branches.Count.ToString(), "generator branch count");
+var generatedSuite = AutoTest.Generator.DraftSuiteBuilder.Build("ops-service", generatorAnalysis, null);
+string generatedJson = System.Text.Json.JsonSerializer.Serialize(generatedSuite, AutoTest.Generator.GeneratorJson.Options);
+Equal("true", generatedJson.Contains("\"address\"", StringComparison.Ordinal).ToString().ToLowerInvariant(), "generator nested DTO body");
+Equal("true", generatedJson.Contains("?current=1\\u0026pageSize=10", StringComparison.Ordinal).ToString().ToLowerInvariant(), "generator inherited query DTO");
+Equal("true", generatedJson.Contains("\"quantity\": 21", StringComparison.OrdinalIgnoreCase).ToString().ToLowerInvariant(), "generator resolved invalid boundary");
+Equal("true", generatedJson.Contains("generated.post-api-orders.validation.code.maximumlength", StringComparison.Ordinal).ToString().ToLowerInvariant(), "generator boundary case");
+Equal("true", generatedJson.Contains("$.data.orderCode", StringComparison.Ordinal).ToString().ToLowerInvariant(), "generator response assertion");
+string cobertura = Path.Combine(generatorFixture, "coverage.cobertura.xml");
+File.WriteAllText(cobertura, """<coverage lines-covered="8" lines-valid="10" branches-covered="1" branches-valid="2"><packages><package><classes><class filename="OrdersController.cs"><methods><method name="Search"><lines><line number="10" hits="0" branch="true" condition-coverage="50% (1/2)" /></lines></method></methods></class></classes></package></packages></coverage>""");
+var coverageAnalysis = AutoTest.Generator.CoberturaCoverageReader.Read(cobertura);
+Equal("0.8", coverageAnalysis.LineRate.ToString(System.Globalization.CultureInfo.InvariantCulture), "generator line coverage");
+Equal("2", coverageAnalysis.Gaps.Count.ToString(), "generator coverage gaps");
+Directory.Delete(generatorFixture, true);
+
+Console.WriteLine("Framework tests passed: 47");
 return 0;
 
 static StepSpec Step(string? method, string? path, DatabaseRequestSpec? database, MqttRequestSpec? mqtt)

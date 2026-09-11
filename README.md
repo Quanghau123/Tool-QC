@@ -51,6 +51,14 @@ Sinh testcase bản nháp từ controller .NET:
 
 Generator chỉ sinh bản nháp; các coverage chưa xác minh giữ trạng thái `blocked` để người kiểm thử hoàn thiện trước khi chạy.
 
+Generator còn dùng Roslyn SemanticModel để nhận diện service call, guard và nhánh điều kiện trong controller. Nếu đã có báo cáo Coverlet dạng Cobertura, có thể đọc các line/branch chưa được cover:
+
+```powershell
+.\toolqc.ps1 coverage .\TestResults\coverage.cobertura.xml .\.artifacts\coverage-gaps.json
+```
+
+AutoFixture và xUnit không nằm trong luồng API testcase mặc định: chúng chỉ phù hợp với renderer unit-test C# tùy chọn, trong khi Tool-QC tiếp tục dùng testcase JSON và API/database thật.
+
 Các lệnh khác:
 
 ```powershell

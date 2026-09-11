@@ -89,6 +89,66 @@ app.MapPost("/api/projects/{project}/generate", async (string project, GenerateR
     return process.ExitCode == 0 ? Results.Ok(new { output, message = standardOutput.Trim() }) : Results.BadRequest(new { message = standardError.Trim() });
 });
 
+app.MapPost("/api/projects/{project}/generate/analyze", async (string project, GenerateRequest request) =>
+{
+    _ = SafeProjectDirectory(root, project);
+    if (string.IsNullOrWhiteSpace(request.SourcePath) || !Directory.Exists(request.SourcePath))
+        return Results.BadRequest(new { code = "TQC-GEN-001", message = "The source directory does not exist." });
+    ProcessResult result = await RunGeneratorAsync(root, ["--source", request.SourcePath, "--project", project, "--analyze"]);
+    return result.ExitCode == 0
+        ? Results.Text(result.StandardOutput, "application/json")
+        : Results.BadRequest(new { code = "TQC-GEN-002", message = "Source analysis failed.", detail = result.StandardError });
+});
+
+app.MapPost("/api/projects/{project}/generate/draft", async (string project, GenerateDraftRequest request) =>
+{
+    _ = SafeProjectDirectory(root, project);
+    if (string.IsNullOrWhiteSpace(request.SourcePath) || !Directory.Exists(request.SourcePath))
+        return Results.BadRequest(new { code = "TQC-GEN-001", message = "The source directory does not exist." });
+    string output = Path.Combine(root, ".artifacts", "generated-testcases", project, $"source-draft-{DateTime.Now:yyyyMMdd-HHmmss}.json");
+    List<string> arguments = ["--source", request.SourcePath, "--project", project, "--output", output];
+    if (request.EndpointIds is { Length: > 0 }) arguments.AddRange(["--include", string.Join(',', request.EndpointIds)]);
+    ProcessResult result = await RunGeneratorAsync(root, arguments);
+    string reviewId = Path.GetFileNameWithoutExtension(output);
+    return result.ExitCode == 0
+        ? Results.Ok(new { reviewId, output, json = await File.ReadAllTextAsync(output), message = "The disabled testcase draft was generated successfully." })
+        : Results.BadRequest(new { code = "TQC-GEN-003", message = "Testcase draft generation failed.", detail = result.StandardError });
+});
+
+app.MapPost("/api/projects/{project}/generate/preflight", async (string project, DraftContentRequest request) =>
+{
+    _ = SafeProjectDirectory(root, project);
+    if (!TryNormalizeDraft(request.Json, project, activate: false, out string normalized, out string error))
+        return Results.BadRequest(new { code = "TQC-GEN-004", message = "The draft JSON is invalid.", detail = error });
+    string reviewId = SafeName(request.ReviewId, "review");
+    string directory = Path.Combine(root, ".artifacts", "generated-testcases", project, "preflight", reviewId);
+    Directory.CreateDirectory(directory);
+    await File.WriteAllTextAsync(Path.Combine(directory, "suite.json"), normalized);
+    ProcessResult result = await RunRunnerPreflightAsync(root, project, directory);
+    return result.ExitCode == 0
+        ? Results.Ok(new { passed = true, message = result.StandardOutput })
+        : Results.BadRequest(new { code = "TQC-GEN-005", message = "Testcase preflight failed.", detail = string.Join(Environment.NewLine, new[] { result.StandardError, result.StandardOutput }.Where(value => !string.IsNullOrWhiteSpace(value))) });
+});
+
+app.MapPost("/api/projects/{project}/generate/activate", async (string project, ActivateDraftRequest request) =>
+{
+    string projectDirectory = SafeProjectDirectory(root, project);
+    if (!TryNormalizeDraft(request.Json, project, activate: true, out string normalized, out string error))
+        return Results.BadRequest(new { code = "TQC-GEN-004", message = "The draft JSON is invalid.", detail = error });
+    string reviewId = SafeName(request.ReviewId, "review");
+    string preflightDirectory = Path.Combine(root, ".artifacts", "generated-testcases", project, "preflight", reviewId);
+    Directory.CreateDirectory(preflightDirectory);
+    await File.WriteAllTextAsync(Path.Combine(preflightDirectory, "suite.json"), normalized);
+    ProcessResult result = await RunRunnerPreflightAsync(root, project, preflightDirectory);
+    if (result.ExitCode != 0) return Results.BadRequest(new { code = "TQC-GEN-005", message = "Testcase preflight failed.", detail = result.StandardError });
+    string group = SafeName(request.Group, "generated");
+    string fileName = SafeName(request.FileName, $"source-{DateTime.Now:yyyyMMdd-HHmmss}") + ".json";
+    string output = Path.Combine(projectDirectory, "testcases", group, fileName);
+    Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+    await File.WriteAllTextAsync(output, normalized);
+    return Results.Ok(new { output, message = "The testcase suite passed preflight and was activated." });
+});
+
 app.MapPost("/api/message-scans", (MessageScanRequest request) =>
 {
     if (string.IsNullOrWhiteSpace(request.SourcePath) || !Directory.Exists(request.SourcePath))
@@ -288,6 +348,58 @@ static bool IsSecret(string key)
 
 static string Mask(string value) => string.IsNullOrEmpty(value) ? string.Empty : "••••••••";
 
+// Chạy generator trong process nền để UI không phụ thuộc trực tiếp vào implementation Roslyn.
+static async Task<ProcessResult> RunGeneratorAsync(string root, IEnumerable<string> generatorArguments)
+{
+    ProcessStartInfo info = new("dotnet") { WorkingDirectory = root, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+    foreach (string argument in new[] { "run", "--project", Path.Combine(root, "runner", "AutoTest.Generator", "AutoTest.Generator.csproj"), "-c", "Release", "--no-build", "--" }.Concat(generatorArguments)) info.ArgumentList.Add(argument);
+    using Process process = new() { StartInfo = info };
+    process.Start();
+    string output = await process.StandardOutput.ReadToEndAsync();
+    string error = await process.StandardError.ReadToEndAsync();
+    await process.WaitForExitAsync();
+    return new(process.ExitCode, output.Trim(), error.Trim());
+}
+
+static async Task<ProcessResult> RunRunnerPreflightAsync(string root, string project, string testcaseDirectory)
+{
+    string[] arguments = ["run", "--project", Path.Combine(root, "runner", "AutoTest.Runner", "AutoTest.Runner.csproj"), "-c", "Release", "--no-build", "--", "--project", project, "--testcase-directory", testcaseDirectory, "--preflight-only"];
+    ProcessStartInfo info = new("dotnet") { WorkingDirectory = root, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+    foreach (string argument in arguments) info.ArgumentList.Add(argument);
+    using Process process = new() { StartInfo = info };
+    process.Start();
+    string output = await process.StandardOutput.ReadToEndAsync();
+    string error = await process.StandardError.ReadToEndAsync();
+    await process.WaitForExitAsync();
+    return new(process.ExitCode, output.Trim(), error.Trim());
+}
+
+static bool TryNormalizeDraft(string json, string project, bool activate, out string normalized, out string error)
+{
+    normalized = string.Empty; error = string.Empty;
+    try
+    {
+        using JsonDocument document = JsonDocument.Parse(json, new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip });
+        JsonElement rootElement = document.RootElement;
+        if (!rootElement.TryGetProperty("project", out JsonElement projectElement) || !string.Equals(projectElement.GetString(), project, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Project in JSON does not match the selected project.");
+        var node = System.Text.Json.Nodes.JsonNode.Parse(json)?.AsObject() ?? throw new InvalidOperationException("JSON root must be an object.");
+        if (activate)
+        {
+            node.Remove("generatedDraft"); node.Remove("disabled");
+            if (node["cases"] is System.Text.Json.Nodes.JsonArray cases) foreach (System.Text.Json.Nodes.JsonNode? item in cases) if (item is System.Text.Json.Nodes.JsonObject testcase) { testcase.Remove("disabled"); testcase.Remove("draft"); testcase.Remove("detectedContract"); }
+        }
+        normalized = node.ToJsonString(new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });
+        return true;
+    }
+    catch (Exception exception) { error = exception.Message; return false; }
+}
+
+static string SafeName(string? value, string fallback)
+{
+    string cleaned = new string((string.IsNullOrWhiteSpace(value) ? fallback : value).Trim().Select(character => char.IsAsciiLetterOrDigit(character) || character is '-' or '_' ? character : '-').ToArray()).Trim('-');
+    return string.IsNullOrWhiteSpace(cleaned) ? fallback : cleaned;
+}
+
 static async Task RunAsync(string root, RunState state)
 {
     try
@@ -326,6 +438,10 @@ sealed record RunRequest(string Project, string[]? CaseIds);
 sealed record TestItem(string Id, string Name, string[] Tags, bool Destructive, string Group, int StepCount);
 sealed record EnvironmentUpdate(Dictionary<string, string> Values);
 sealed record GenerateRequest(string SourcePath);
+sealed record GenerateDraftRequest(string SourcePath, string[]? EndpointIds);
+sealed record DraftContentRequest(string ReviewId, string Json);
+sealed record ActivateDraftRequest(string ReviewId, string Json, string? Group, string? FileName);
+sealed record ProcessResult(int ExitCode, string StandardOutput, string StandardError);
 sealed record MessageScanRequest(string SourcePath);
 sealed record EnvironmentDefinition(string Key, string Group, string Scope, string DefaultValue);
 sealed record EnvironmentGroup(string Name, EnvironmentVariable[] Variables);

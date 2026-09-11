@@ -23,6 +23,13 @@ if ($Area -eq 'generate') {
     & dotnet run --project (Join-Path $root 'runner\AutoTest.Generator\AutoTest.Generator.csproj') -c Release -- --project $Command --source $Project
     exit $LASTEXITCODE
 }
+if ($Area -eq 'coverage') {
+    if ([string]::IsNullOrWhiteSpace($Command)) { throw 'Cách dùng: .\toolqc.ps1 coverage <coverage.cobertura.xml> [output.json]' }
+    $arguments = @('run', '--project', (Join-Path $root 'runner\AutoTest.Generator\AutoTest.Generator.csproj'), '-c', 'Release', '--', '--coverage-report', $Command)
+    if (-not [string]::IsNullOrWhiteSpace($Project)) { $arguments += @('--coverage-output', $Project) }
+    & dotnet @arguments
+    exit $LASTEXITCODE
+}
 if ($Area -eq 'test') {
     $selectedProject = $Command
     if ([string]::IsNullOrWhiteSpace($selectedProject)) {
@@ -42,7 +49,7 @@ if ($Area -eq 'build') {
     & dotnet build (Join-Path $root 'ApiAutoTest.sln') -c Release
     exit $LASTEXITCODE
 }
-if ($Area -ne 'integration') { throw "Chức năng chưa hỗ trợ: $Area. Dùng: ui, test, build, generate hoặc integration." }
+if ($Area -ne 'integration') { throw "Chức năng chưa hỗ trợ: $Area. Dùng: ui, test, build, generate, coverage hoặc integration." }
 if ($Command -ne 'list' -and ([string]::IsNullOrWhiteSpace($Project) -or [string]::IsNullOrWhiteSpace($Name))) {
     throw 'Cách dùng: .\toolqc.ps1 integration <start|status|stop> <project> <integration> [--Background]'
 }
