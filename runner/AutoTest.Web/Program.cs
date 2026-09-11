@@ -183,7 +183,9 @@ app.MapPost("/api/projects/{project}/generate/run", async (string project, Draft
         .Where(id => !string.IsNullOrWhiteSpace(id))
         .Select(id => id!)
         .ToArray();
-    RunState state = new(runId, project, caseIds, DateTimeOffset.Now, historyDirectory, directory);
+    RunState state = new(runId, project, caseIds, DateTimeOffset.Now, historyDirectory, directory, request.SequentialChain);
+    if (caseIds.Length > 1 && !request.SequentialChain)
+        return Results.BadRequest(new { code = "TQC-RUN-021", message = "Multiple generated testcases require sequential chain mode.", detail = "Enable 'Sinh chuỗi theo thứ tự chọn' so saved response values and authentication tokens are passed to the next API." });
     runs[runId] = state;
     _ = Task.Run(() => RunAsync(root, state));
     return Results.Accepted($"/api/runs/{runId}", new { runId });
@@ -233,7 +235,7 @@ app.MapPost("/api/runs", (RunRequest request) =>
     string runId = Guid.NewGuid().ToString("N");
     if (request.CaseIds is not { Length: > 0 })
         return Results.BadRequest(new { message = "Hãy chọn ít nhất một testcase." });
-    RunState state = new(runId, request.Project, request.CaseIds, DateTimeOffset.Now, historyDirectory);
+    RunState state = new(runId, request.Project, request.CaseIds, DateTimeOffset.Now, historyDirectory, sequentialChain: request.SequentialChain);
     runs[runId] = state;
     _ = Task.Run(() => RunAsync(root, state));
     return Results.Accepted($"/api/runs/{runId}", new { runId });
@@ -509,6 +511,7 @@ static async Task RunAsync(string root, RunState state)
         }
         else
             arguments.AddRange(["--case-ids", string.Join(',', state.CaseIds)]);
+        if (state.SequentialChain) arguments.Add("--sequential-chain");
         ProcessStartInfo startInfo = Utf8Process("dotnet", root);
         foreach (string argument in arguments) startInfo.ArgumentList.Add(argument);
         using Process process = new() { StartInfo = startInfo };
@@ -539,12 +542,12 @@ static ProcessStartInfo Utf8Process(string fileName, string workingDirectory) =>
     CreateNoWindow = true,
 };
 
-sealed record RunRequest(string Project, string[]? CaseIds);
+sealed record RunRequest(string Project, string[]? CaseIds, bool SequentialChain = false);
 sealed record TestItem(string Id, string Name, string[] Tags, bool Destructive, string Group, int StepCount);
 sealed record EnvironmentUpdate(Dictionary<string, string> Values);
 sealed record GenerateRequest(string SourcePath);
 sealed record GenerateDraftRequest(string SourcePath, string[]? EndpointIds);
-sealed record DraftContentRequest(string ReviewId, string Json);
+sealed record DraftContentRequest(string ReviewId, string Json, bool SequentialChain = false);
 sealed record ActivateDraftRequest(string ReviewId, string Json, string? Group, string? FileName);
 sealed record ProcessResult(int ExitCode, string StandardOutput, string StandardError);
 sealed record MessageScanRequest(string SourcePath);
@@ -552,7 +555,7 @@ sealed record EnvironmentDefinition(string Key, string Group, string Scope, stri
 sealed record EnvironmentGroup(string Name, EnvironmentVariable[] Variables);
 sealed record EnvironmentVariable(string Key, string Value, string Source, bool Secret, bool Configured);
 
-sealed class RunState(string id, string project, string[] caseIds, DateTimeOffset startedAt, string historyDirectory, string? testcaseDirectory = null)
+sealed class RunState(string id, string project, string[] caseIds, DateTimeOffset startedAt, string historyDirectory, string? testcaseDirectory = null, bool sequentialChain = false)
 {
     private readonly object gate = new();
     private readonly List<string> lines = [];
@@ -560,6 +563,7 @@ sealed class RunState(string id, string project, string[] caseIds, DateTimeOffse
     public string Project { get; } = project;
     private Process? process;
     public string[] CaseIds { get; } = caseIds;
+    public bool SequentialChain { get; } = sequentialChain;
     public string? TestcaseDirectory { get; } = testcaseDirectory;
     public DateTimeOffset StartedAt { get; } = startedAt;
     public string Status { get; private set; } = "running";

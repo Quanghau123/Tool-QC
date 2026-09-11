@@ -45,7 +45,11 @@ public sealed class RunnerEngine : IDisposable
     }
 
     // Chạy trọn một testcase và gom kết quả từng bước cho báo cáo.
-    public async Task<RunResult> RunAsync(CaseSpec test, CancellationToken cancellationToken = default)
+    public Task<RunResult> RunAsync(CaseSpec test, CancellationToken cancellationToken = default)
+        => RunAsync(test, null, cancellationToken);
+
+    // Chế độ chuỗi dùng chung biến đã save để testcase sau nhận dữ liệu từ testcase trước.
+    public async Task<RunResult> RunAsync(CaseSpec test, IDictionary<string, string>? sharedVariables, CancellationToken cancellationToken = default)
     {
         var watch = Stopwatch.StartNew();
         var now = DateTimeOffset.UtcNow;
@@ -74,6 +78,8 @@ public sealed class RunnerEngine : IDisposable
         };
         for (int index = 1; index <= 32; index++)
             variables[$"guid{index}"] = Guid.NewGuid().ToString();
+        foreach ((string key, string value) in sharedVariables ?? new Dictionary<string, string>())
+            variables[key] = value;
 
         try
         {
@@ -84,6 +90,11 @@ public sealed class RunnerEngine : IDisposable
             started = true;
             foreach (var step in test.Steps)
                 await RunConfiguredStepAsync(step, variables, cancellationToken, stepResults);
+            if (variables.TryGetValue("authToken", out string? chainedToken) && !string.IsNullOrWhiteSpace(chainedToken))
+                token = chainedToken;
+            if (sharedVariables is not null)
+                foreach ((string key, string value) in variables)
+                    sharedVariables[key] = value;
             return new(test.Id, test.Name, true, watch.Elapsed, null, stepResults);
         }
         catch (Exception exception)

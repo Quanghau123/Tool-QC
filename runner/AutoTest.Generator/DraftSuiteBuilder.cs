@@ -6,9 +6,12 @@ namespace AutoTest.Generator;
 // Sinh bản nháp từ contract đã phân tích; mọi phần chưa đủ bằng chứng vẫn bị khóa bởi preflight.
 public static class DraftSuiteBuilder
 {
-    public static GeneratedSuite Build(string project, GeneratorAnalysis analysis, ISet<string>? included)
+    public static GeneratedSuite Build(string project, GeneratorAnalysis analysis, IReadOnlyList<string>? included)
     {
-        EndpointContract[] endpoints = analysis.Endpoints.Where(endpoint => included is null || included.Count == 0 || included.Contains(endpoint.Id)).ToArray();
+        EndpointContract[] endpoints = included is { Count: > 0 }
+            ? included.Select(id => analysis.Endpoints.FirstOrDefault(endpoint => endpoint.Id.Equals(id, StringComparison.OrdinalIgnoreCase)))
+                .Where(endpoint => endpoint is not null).Cast<EndpointContract>().ToArray()
+            : analysis.Endpoints.ToArray();
         List<object> cases = [];
         foreach (EndpointContract endpoint in endpoints)
         {
@@ -21,7 +24,7 @@ public static class DraftSuiteBuilder
     private static object BuildSuccessCase(EndpointContract endpoint, IReadOnlyDictionary<string, TypeContract> types)
     {
         string stepName = $"Gọi thành công {endpoint.Method} {endpoint.Path}";
-        return Case(endpoint, $"generated.{endpoint.Id}.success", $"Kiểm tra thành công {endpoint.Method} {endpoint.Path}", ["generated-draft", "success", Group(endpoint)], stepName, BuildPath(endpoint, types), BuildBody(endpoint, types), SuccessStatuses(endpoint), BuildResponseAssertions(endpoint, types), endpoint.Validations.Count > 0 ? Coverage("covered", [stepName], null) : Coverage("notApplicable", null, "Source không khai báo FluentValidation cho request này."));
+        return Case(endpoint, $"generated.{endpoint.Id}.success", $"Kiểm tra thành công {endpoint.Method} {endpoint.Path}", ["generated-draft", "success", Group(endpoint)], stepName, BuildPath(endpoint, types), BuildBody(endpoint, types), BuildForm(endpoint, types), SuccessStatuses(endpoint), BuildResponseAssertions(endpoint, types), endpoint.Validations.Count > 0 ? Coverage("covered", [stepName], null) : Coverage("notApplicable", null, "Source không khai báo FluentValidation cho request này."), BuildSavedValues(endpoint, types));
     }
 
     private static object BuildValidationCase(EndpointContract endpoint, ValidationContract validation, IReadOnlyDictionary<string, TypeContract> types)
@@ -30,14 +33,16 @@ public static class DraftSuiteBuilder
         Dictionary<string, object?>? body = BuildBody(endpoint, types);
         string path = BuildPath(endpoint, types);
         BoundaryValue invalid = InvalidValue(validation, FindProperty(endpoint, validation.Property, types));
-        ParameterContract? requestParameter = endpoint.Parameters.FirstOrDefault(parameter => parameter.Source is "body" or "query");
+        ParameterContract? requestParameter = endpoint.Parameters.FirstOrDefault(parameter => parameter.Source is "body" or "form" or "query");
         if (requestParameter?.Source == "query") path = SetQueryValue(path, validation.Property, invalid.Value);
         else if (body is not null) SetNested(body, validation.Property, invalid.Value);
+        Dictionary<string, string>? form = BuildForm(endpoint, types);
+        if (requestParameter?.Source == "form" && form is not null) form[validation.Property.Split('.')[0]] = invalid.Value?.ToString() ?? string.Empty;
         object validationCoverage = invalid.Resolved ? Coverage("covered", [stepName], null) : Coverage("blocked", null, $"Không resolve được boundary '{validation.Value}' từ source; generator không tự đoán giá trị lỗi.");
-        return Case(endpoint, $"generated.{endpoint.Id}.validation.{Slug(validation.Property)}.{validation.Rule.ToLowerInvariant()}", $"Kiểm tra {validation.Property} vi phạm {validation.Rule}", ["generated-draft", "validation", Group(endpoint)], stepName, path, body, ErrorStatuses(endpoint), new Dictionary<string, object> { ["$.message"] = new { exists = true, type = "string" } }, validationCoverage);
+        return Case(endpoint, $"generated.{endpoint.Id}.validation.{Slug(validation.Property)}.{validation.Rule.ToLowerInvariant()}", $"Kiểm tra {validation.Property} vi phạm {validation.Rule}", ["generated-draft", "validation", Group(endpoint)], stepName, path, body, form, ErrorStatuses(endpoint), new Dictionary<string, object> { ["$.message"] = new { exists = true, type = "string" } }, validationCoverage, null);
     }
 
-    private static object Case(EndpointContract endpoint, string id, string name, string[] tags, string stepName, string path, object? body, int[] statuses, Dictionary<string, object> assertions, object validationCoverage) => new
+    private static object Case(EndpointContract endpoint, string id, string name, string[] tags, string stepName, string path, object? body, Dictionary<string, string>? form, int[] statuses, Dictionary<string, object> assertions, object validationCoverage, Dictionary<string, string>? save) => new
     {
         id, name, tags, destructive = endpoint.Method is not "GET" and not "HEAD", disabled = true, draft = true,
         variables = BuildVariables(endpoint),
@@ -52,8 +57,15 @@ public static class DraftSuiteBuilder
             concurrency = Coverage("notApplicable", null, "Không phát hiện contract concurrency trực tiếp."), reporting = Coverage("covered", [stepName], null)
         },
         detectedContract = endpoint,
-        steps = new[] { new { name = stepName, auth = endpoint.RequiresAuthentication ? "admin" : null, request = new { method = endpoint.Method, path, body }, expect = new { statusOneOf = statuses, json = assertions } } }
+        steps = new[] { new { name = stepName, auth = endpoint.RequiresAuthentication ? "admin" : null, request = new { method = endpoint.Method, path, body, form }, expect = new { statusOneOf = statuses, json = assertions }, save } }
     };
+
+    private static Dictionary<string, string>? BuildSavedValues(EndpointContract endpoint, IReadOnlyDictionary<string, TypeContract> types)
+    {
+        if (endpoint.AuthenticationRole != "login" || endpoint.ResponseType is null || !TryType(types, endpoint.ResponseType, out TypeContract? response)) return null;
+        PropertyContract? accessToken = AllProperties(response, types).FirstOrDefault(property => property.JsonName.Equals("accessToken", StringComparison.OrdinalIgnoreCase) || property.JsonName.Equals("token", StringComparison.OrdinalIgnoreCase));
+        return accessToken is null ? null : new Dictionary<string, string> { ["authToken"] = $"$.data.{accessToken.JsonName}" };
+    }
 
     private static Dictionary<string, string> BuildVariables(EndpointContract endpoint) => endpoint.Parameters.Where(parameter => parameter.Source is "route" or "route-or-query").ToDictionary(parameter => parameter.Name, parameter => SampleScalar(parameter.Type, parameter.Name).ToString() ?? "${unique}", StringComparer.OrdinalIgnoreCase);
     private static Dictionary<string, object?>? BuildBody(EndpointContract endpoint, IReadOnlyDictionary<string, TypeContract> types)
@@ -66,6 +78,21 @@ public static class DraftSuiteBuilder
         if (endpoint.AuthenticationRole == "user-create")
             foreach (string key in result.Keys.Where(key => key.Contains("password", StringComparison.OrdinalIgnoreCase)).ToArray()) result[key] = "Admin@123";
         return result;
+    }
+
+    private static Dictionary<string, string>? BuildForm(EndpointContract endpoint, IReadOnlyDictionary<string, TypeContract> types)
+    {
+        if (endpoint.Parameters.FirstOrDefault(parameter => parameter.Source == "form") is not { } formParameter || !TryType(types, formParameter.Type, out TypeContract? contract)) return null;
+        Dictionary<string, string> form = new(StringComparer.OrdinalIgnoreCase);
+        foreach (PropertyContract property in AllProperties(contract, types))
+        {
+            if (property.Type.Contains("IFormFile", StringComparison.OrdinalIgnoreCase)) continue;
+            object? sample = property.IsCollection ? null : Sample(property.Type, property.JsonName, types, [], 0);
+            if (sample is not null) form[property.JsonName] = sample.ToString() ?? string.Empty;
+        }
+        if (endpoint.AuthenticationRole == "user-create")
+            foreach (string key in form.Keys.Where(key => key.Contains("password", StringComparison.OrdinalIgnoreCase)).ToArray()) form[key] = "Admin@123";
+        return form;
     }
 
     private static string? AuthEnvironmentValue(string field)

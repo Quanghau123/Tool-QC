@@ -36,7 +36,11 @@ public sealed class HttpStepExecutor : ITestStepExecutor
             string requestTarget=Uri.TryCreate(path,UriKind.Absolute,out Uri? absoluteUri)?absoluteUri.ToString():path;
             using var message=new HttpRequestMessage(new HttpMethod(method),requestTarget);
             if(!string.IsNullOrWhiteSpace(step.Auth)) {
-                string? token=!string.IsNullOrWhiteSpace(step.AuthToken)?Templates.Resolve(step.AuthToken,context.Variables,context.Environment):await (context.ResolveAuthenticationToken?.Invoke(cancellationToken)??Task.FromResult<string?>(null));
+                string? token=!string.IsNullOrWhiteSpace(step.AuthToken)
+                    ? Templates.Resolve(step.AuthToken,context.Variables,context.Environment)
+                    : context.Variables.TryGetValue("authToken",out string? chainedToken)&&!string.IsNullOrWhiteSpace(chainedToken)
+                        ? chainedToken
+                        : await (context.ResolveAuthenticationToken?.Invoke(cancellationToken)??Task.FromResult<string?>(null));
                 if(token is not null) message.Headers.Authorization=new AuthenticationHeaderValue(context.Project.Authentication?.Prefix??"Bearer",token);
             }
             foreach(var header in request.Headers??[]) message.Headers.TryAddWithoutValidation(header.Key,Templates.Resolve(header.Value,context.Variables,context.Environment));

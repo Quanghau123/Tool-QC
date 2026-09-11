@@ -51,9 +51,8 @@ if (args.Contains("--analyze", StringComparer.OrdinalIgnoreCase))
     return;
 }
 
-HashSet<string>? included = Argument("--include")?
-    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+string[]? included = Argument("--include")?
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 string output = Path.GetFullPath(Argument("--output") ?? Path.Combine("projects", project, "testcases", "generated", "source-draft.json"));
 GeneratedSuite suite = DraftSuiteBuilder.Build(project, analysis, included);
 Directory.CreateDirectory(Path.GetDirectoryName(output)!);

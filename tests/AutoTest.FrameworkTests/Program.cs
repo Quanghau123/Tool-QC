@@ -244,7 +244,7 @@ public sealed class UsersController : ControllerBase
     [AllowAnonymous, HttpPost("auth"), ProducesResponseType(typeof(AuthResponse), 200)]
     public Task<AuthResponse> Authenticate([FromBody] LoginRequest request) => throw new NotImplementedException();
     [Authorize, HttpPost, ProducesResponseType(typeof(OrderResponse), 200)]
-    public Task<OrderResponse> CreateUser([FromBody] CreateUserRequest request) => throw new NotImplementedException();
+    public Task<OrderResponse> CreateUser([FromForm] CreateUserRequest request) => throw new NotImplementedException();
 }
 public static class OrderService { public static Task<OrderResponse> LoadAsync(SearchRequest request) => throw new NotImplementedException(); }
 public sealed record AddressRequest(string Street, string City);
@@ -279,6 +279,9 @@ Equal("true", generatedJson.Contains("generated.post-api-orders.validation.code.
 Equal("true", generatedJson.Contains("$.data.orderCode", StringComparison.Ordinal).ToString().ToLowerInvariant(), "generator response assertion");
 Equal("true", generatedJson.Contains("${env:AUTH_USERNAME}", StringComparison.Ordinal).ToString().ToLowerInvariant(), "generator login uses environment username");
 Equal("true", generatedJson.Contains("${env:AUTH_PASSWORD}", StringComparison.Ordinal).ToString().ToLowerInvariant(), "generator login uses environment password");
+Equal("true", generatedJson.Contains("\"authToken\": \"$.data.accessToken\"", StringComparison.Ordinal).ToString().ToLowerInvariant(), "generator login saves token for chained requests");
+Equal("true", generatedJson.Contains("\"form\"", StringComparison.Ordinal).ToString().ToLowerInvariant(), "generator FromForm request uses multipart form");
+Equal("false", generatedJson.Contains("\"avatarPicture\"", StringComparison.Ordinal).ToString().ToLowerInvariant(), "generator omits unsupported file placeholder");
 string cobertura = Path.Combine(generatorFixture, "coverage.cobertura.xml");
 File.WriteAllText(cobertura, """<coverage lines-covered="8" lines-valid="10" branches-covered="1" branches-valid="2"><packages><package><classes><class filename="OrdersController.cs"><methods><method name="Search"><lines><line number="10" hits="0" branch="true" condition-coverage="50% (1/2)" /></lines></method></methods></class></classes></package></packages></coverage>""");
 var coverageAnalysis = AutoTest.Generator.CoberturaCoverageReader.Read(cobertura);
@@ -286,7 +289,7 @@ Equal("0.8", coverageAnalysis.LineRate.ToString(System.Globalization.CultureInfo
 Equal("2", coverageAnalysis.Gaps.Count.ToString(), "generator coverage gaps");
 Directory.Delete(generatorFixture, true);
 
-Console.WriteLine("Framework tests passed: 53");
+Console.WriteLine("Framework tests passed: 56");
 return 0;
 
 static StepSpec Step(string? method, string? path, DatabaseRequestSpec? database, MqttRequestSpec? mqtt)
