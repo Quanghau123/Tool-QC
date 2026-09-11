@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Tool-QC</title>
-  <link rel="stylesheet" href="app.css">
+  <link rel="stylesheet" href="app.css?v=20260911-1">
 </head>
 <body>
   <header><div><strong>Tool-QC</strong><span>Test Console</span></div><span id="connection">Sẵn sàng</span></header>
@@ -44,16 +44,12 @@
         <div id="messageSummary" class="message-summary">Chưa quét source.</div><label>Tìm message<input id="messageSearch" placeholder="Key, module hoặc nội dung bản dịch" disabled></label><div id="messageResults" class="message-results"></div>
       </div>
     </section>    <section id="runPanel" class="run-panel">
-      <div class="toolbar"><h1>Kết quả chạy</h1><div class="report-actions"><button id="showReport" hidden>Xem báo cáo trong UI</button><a id="report" target="_blank" hidden>Mở tab mới</a></div></div>
+      <div class="toolbar"><h1>Kết quả chạy</h1><a id="report" class="report-link" target="_blank" rel="noopener" hidden>Mở báo cáo</a></div>
       <div class="run-status-row"><div id="runStatus" class="status idle">Chưa chạy</div><button id="stopRun" class="stop" hidden>Dừng workload</button></div>
       <pre id="console">Chọn testcase và nhấn “Chạy testcase đã chọn”.</pre>
-      <div id="reportPanel" class="report-panel" hidden>
-        <div class="report-panel-header"><strong>Báo cáo chi tiết</strong><button id="closeReport">Đóng báo cáo</button></div>
-        <iframe id="reportFrame" title="Báo cáo testcase"></iframe>
-      </div>
     </section>
   </main>
-  <script src="app.js"></script>
+  <script src="app.js?v=20260911-1"></script>
 </body>
 </html>
 
