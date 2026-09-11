@@ -1,10 +1,14 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Encodings.Web;
+using System.Text;
 using AutoTest.MessageScanner;
 
 // Backend UI: khai báo endpoint, khởi chạy runner nền và trả artifact cho trình duyệt.
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
+Console.InputEncoding = Encoding.UTF8;
+Console.OutputEncoding = new UTF8Encoding(false);
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.WebHost.UseUrls(builder.Configuration["url"] ?? "http://127.0.0.1:5080");
@@ -82,7 +86,7 @@ app.MapPost("/api/projects/{project}/generate", async (string project, GenerateR
         return Results.BadRequest(new { message = "Đường dẫn source không tồn tại." });
     string output = Path.Combine(root, ".artifacts", "generated-testcases", project, $"source-draft-{DateTime.Now:yyyyMMdd-HHmmss}.json");
     Directory.CreateDirectory(Path.GetDirectoryName(output)!);
-    ProcessStartInfo info = new("dotnet") { WorkingDirectory = root, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+    ProcessStartInfo info = Utf8Process("dotnet", root);
     foreach (string argument in new[] { "run", "--project", Path.Combine(root, "runner", "AutoTest.Generator", "AutoTest.Generator.csproj"), "-c", "Release", "--", "--source", request.SourcePath, "--project", project, "--output", output }) info.ArgumentList.Add(argument);
     using Process process = new() { StartInfo = info }; process.Start();
     string standardOutput = await process.StandardOutput.ReadToEndAsync(); string standardError = await process.StandardError.ReadToEndAsync(); await process.WaitForExitAsync();
@@ -95,9 +99,11 @@ app.MapPost("/api/projects/{project}/generate/analyze", async (string project, G
     if (string.IsNullOrWhiteSpace(request.SourcePath) || !Directory.Exists(request.SourcePath))
         return Results.BadRequest(new { code = "TQC-GEN-001", message = "The source directory does not exist." });
     ProcessResult result = await RunGeneratorAsync(root, ["--source", request.SourcePath, "--project", project, "--analyze"]);
-    return result.ExitCode == 0
-        ? Results.Text(result.StandardOutput, "application/json")
-        : Results.BadRequest(new { code = "TQC-GEN-002", message = "Source analysis failed.", detail = result.StandardError });
+    if (result.ExitCode != 0)
+        return Results.BadRequest(new { code = "TQC-GEN-002", message = "Source analysis failed.", detail = result.StandardError });
+    if (!TryExtractJson(result.StandardOutput, out string analysisJson, out string analysisError))
+        return Results.BadRequest(new { code = "TQC-GEN-007", message = "Source analysis returned invalid JSON.", detail = analysisError });
+    return Results.Text(analysisJson, "application/json");
 });
 
 app.MapPost("/api/projects/{project}/generate/draft", async (string project, GenerateDraftRequest request) =>
@@ -124,9 +130,18 @@ app.MapPost("/api/projects/{project}/generate/preflight", async (string project,
     string directory = Path.Combine(root, ".artifacts", "generated-testcases", project, "preflight", reviewId);
     Directory.CreateDirectory(directory);
     await File.WriteAllTextAsync(Path.Combine(directory, "suite.json"), normalized);
-    ProcessResult result = await RunRunnerPreflightAsync(root, project, directory);
+    ProcessResult result = await RunRunnerPreflightAsync(root, project, directory, requireCompleteCoverage: false);
+    ProcessResult officialCheck = result.ExitCode == 0
+        ? await RunRunnerPreflightAsync(root, project, directory, requireCompleteCoverage: true)
+        : result;
     return result.ExitCode == 0
-        ? Results.Ok(new { passed = true, message = result.StandardOutput })
+        ? Results.Ok(new
+        {
+            passed = true,
+            readyToSave = officialCheck.ExitCode == 0,
+            message = result.StandardOutput,
+            warnings = officialCheck.ExitCode == 0 ? Array.Empty<string>() : PreflightLines(officialCheck),
+        })
         : Results.BadRequest(new { code = "TQC-GEN-005", message = "Testcase preflight failed.", detail = string.Join(Environment.NewLine, new[] { result.StandardError, result.StandardOutput }.Where(value => !string.IsNullOrWhiteSpace(value))) });
 });
 
@@ -139,7 +154,7 @@ app.MapPost("/api/projects/{project}/generate/activate", async (string project, 
     string preflightDirectory = Path.Combine(root, ".artifacts", "generated-testcases", project, "preflight", reviewId);
     Directory.CreateDirectory(preflightDirectory);
     await File.WriteAllTextAsync(Path.Combine(preflightDirectory, "suite.json"), normalized);
-    ProcessResult result = await RunRunnerPreflightAsync(root, project, preflightDirectory);
+    ProcessResult result = await RunRunnerPreflightAsync(root, project, preflightDirectory, requireCompleteCoverage: true);
     if (result.ExitCode != 0) return Results.BadRequest(new { code = "TQC-GEN-005", message = "Testcase preflight failed.", detail = result.StandardError });
     string group = SafeName(request.Group, "generated");
     string fileName = SafeName(request.FileName, $"source-{DateTime.Now:yyyyMMdd-HHmmss}") + ".json";
@@ -147,6 +162,31 @@ app.MapPost("/api/projects/{project}/generate/activate", async (string project, 
     Directory.CreateDirectory(Path.GetDirectoryName(output)!);
     await File.WriteAllTextAsync(output, normalized);
     return Results.Ok(new { output, message = "The testcase suite passed preflight and was activated." });
+});
+
+app.MapPost("/api/projects/{project}/generate/run", async (string project, DraftContentRequest request) =>
+{
+    _ = SafeProjectDirectory(root, project);
+    if (!TryNormalizeDraft(request.Json, project, activate: true, out string normalized, out string error))
+        return Results.BadRequest(new { code = "TQC-GEN-004", message = "The draft JSON is invalid.", detail = error });
+    string reviewId = SafeName(request.ReviewId, "review");
+    string runId = Guid.NewGuid().ToString("N");
+    string directory = Path.Combine(root, ".artifacts", "generated-testcases", project, "runs", reviewId, runId);
+    Directory.CreateDirectory(directory);
+    await File.WriteAllTextAsync(Path.Combine(directory, "suite.json"), normalized);
+    ProcessResult preflight = await RunRunnerPreflightAsync(root, project, directory, requireCompleteCoverage: false);
+    if (preflight.ExitCode != 0)
+        return Results.BadRequest(new { code = "TQC-GEN-005", message = "Testcase preflight failed.", detail = string.Join(Environment.NewLine, new[] { preflight.StandardError, preflight.StandardOutput }.Where(value => !string.IsNullOrWhiteSpace(value))) });
+    using JsonDocument document = JsonDocument.Parse(normalized);
+    string[] caseIds = document.RootElement.GetProperty("cases").EnumerateArray()
+        .Select(testCase => testCase.GetProperty("id").GetString())
+        .Where(id => !string.IsNullOrWhiteSpace(id))
+        .Select(id => id!)
+        .ToArray();
+    RunState state = new(runId, project, caseIds, DateTimeOffset.Now, historyDirectory, directory);
+    runs[runId] = state;
+    _ = Task.Run(() => RunAsync(root, state));
+    return Results.Accepted($"/api/runs/{runId}", new { runId });
 });
 
 app.MapPost("/api/message-scans", (MessageScanRequest request) =>
@@ -351,8 +391,11 @@ static string Mask(string value) => string.IsNullOrEmpty(value) ? string.Empty :
 // Chạy generator trong process nền để UI không phụ thuộc trực tiếp vào implementation Roslyn.
 static async Task<ProcessResult> RunGeneratorAsync(string root, IEnumerable<string> generatorArguments)
 {
-    ProcessStartInfo info = new("dotnet") { WorkingDirectory = root, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
-    foreach (string argument in new[] { "run", "--project", Path.Combine(root, "runner", "AutoTest.Generator", "AutoTest.Generator.csproj"), "-c", "Release", "--no-build", "--" }.Concat(generatorArguments)) info.ArgumentList.Add(argument);
+    string generatorDll = Path.Combine(root, "runner", "AutoTest.Generator", "bin", "Release", "net8.0", "AutoTest.Generator.dll");
+    if (!File.Exists(generatorDll))
+        return new(127, string.Empty, "TQC-GEN-008: Generator has not been built. Restart Tool-QC with npm start.");
+    ProcessStartInfo info = Utf8Process("dotnet", root);
+    foreach (string argument in new[] { generatorDll }.Concat(generatorArguments)) info.ArgumentList.Add(argument);
     using Process process = new() { StartInfo = info };
     process.Start();
     string output = await process.StandardOutput.ReadToEndAsync();
@@ -361,18 +404,39 @@ static async Task<ProcessResult> RunGeneratorAsync(string root, IEnumerable<stri
     return new(process.ExitCode, output.Trim(), error.Trim());
 }
 
-static async Task<ProcessResult> RunRunnerPreflightAsync(string root, string project, string testcaseDirectory)
+static async Task<ProcessResult> RunRunnerPreflightAsync(string root, string project, string testcaseDirectory, bool requireCompleteCoverage)
 {
-    string[] arguments = ["run", "--project", Path.Combine(root, "runner", "AutoTest.Runner", "AutoTest.Runner.csproj"), "-c", "Release", "--no-build", "--", "--project", project, "--testcase-directory", testcaseDirectory, "--preflight-only"];
-    ProcessStartInfo info = new("dotnet") { WorkingDirectory = root, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+    string runnerDll = Path.Combine(root, "runner", "AutoTest.Runner", "bin", "Release", "net8.0", "AutoTest.Runner.dll");
+    if (!File.Exists(runnerDll))
+        return new(127, string.Empty, "TQC-GEN-009: Test runner has not been built. Restart Tool-QC with npm start.");
+    string[] arguments = [runnerDll, "--project", project, "--testcase-directory", testcaseDirectory, "--preflight-only"];
+    ProcessStartInfo info = Utf8Process("dotnet", root);
     foreach (string argument in arguments) info.ArgumentList.Add(argument);
+    if (!requireCompleteCoverage) info.ArgumentList.Add("--allow-incomplete-coverage");
     using Process process = new() { StartInfo = info };
     process.Start();
-    string output = await process.StandardOutput.ReadToEndAsync();
-    string error = await process.StandardError.ReadToEndAsync();
-    await process.WaitForExitAsync();
-    return new(process.ExitCode, output.Trim(), error.Trim());
+    using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(30));
+    try
+    {
+        Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
+        Task<string> errorTask = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync(timeout.Token);
+        return new(process.ExitCode, (await outputTask).Trim(), (await errorTask).Trim());
+    }
+    catch (OperationCanceledException)
+    {
+        if (!process.HasExited) process.Kill(entireProcessTree: true);
+        return new(124, string.Empty, "TQC-GEN-006: Preflight exceeded 30 seconds and was stopped. Build the runner once, then retry.");
+    }
 }
+
+static string[] PreflightLines(ProcessResult result) => string.Join(
+        Environment.NewLine,
+        new[] { result.StandardError, result.StandardOutput }.Where(value => !string.IsNullOrWhiteSpace(value)))
+    .Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    .Where(line => !line.StartsWith("Preflight phát hiện", StringComparison.OrdinalIgnoreCase))
+    .Select(line => line.TrimStart('-', ' '))
+    .ToArray();
 
 static bool TryNormalizeDraft(string json, string project, bool activate, out string normalized, out string error)
 {
@@ -388,10 +452,42 @@ static bool TryNormalizeDraft(string json, string project, bool activate, out st
             node.Remove("generatedDraft"); node.Remove("disabled");
             if (node["cases"] is System.Text.Json.Nodes.JsonArray cases) foreach (System.Text.Json.Nodes.JsonNode? item in cases) if (item is System.Text.Json.Nodes.JsonObject testcase) { testcase.Remove("disabled"); testcase.Remove("draft"); testcase.Remove("detectedContract"); }
         }
-        normalized = node.ToJsonString(new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });
+        normalized = node.ToJsonString(new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            WriteIndented = true,
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        });
         return true;
     }
     catch (Exception exception) { error = exception.Message; return false; }
+}
+
+// dotnet run có thể ghi thông tin build trước payload; chỉ trả đúng JSON cho trình duyệt.
+static bool TryExtractJson(string output, out string json, out string error)
+{
+    json = string.Empty;
+    error = string.Empty;
+    int objectStart = output.IndexOf('{');
+    int arrayStart = output.IndexOf('[');
+    int start = objectStart < 0 ? arrayStart : arrayStart < 0 ? objectStart : Math.Min(objectStart, arrayStart);
+    if (start < 0)
+    {
+        error = string.IsNullOrWhiteSpace(output) ? "Generator did not return output." : output.Trim();
+        return false;
+    }
+
+    string candidate = output[start..].Trim();
+    try
+    {
+        using JsonDocument document = JsonDocument.Parse(candidate);
+        json = document.RootElement.GetRawText();
+        return true;
+    }
+    catch (JsonException exception)
+    {
+        error = $"Generator output could not be parsed: {exception.Message}";
+        return false;
+    }
 }
 
 static string SafeName(string? value, string fallback)
@@ -404,19 +500,16 @@ static async Task RunAsync(string root, RunState state)
 {
     try
     {
-        List<string> arguments = [
-            "run", "--project", Path.Combine(root, "runner", "AutoTest.Runner", "AutoTest.Runner.csproj"),
-            "-c", "Release", "--no-build", "--", "--project", state.Project,
-        ];
-        arguments.AddRange(["--case-ids", string.Join(',', state.CaseIds)]);
-        ProcessStartInfo startInfo = new("dotnet")
+        string runnerDll = Path.Combine(root, "runner", "AutoTest.Runner", "bin", "Release", "net8.0", "AutoTest.Runner.dll");
+        List<string> arguments = [runnerDll, "--project", state.Project];
+        if (!string.IsNullOrWhiteSpace(state.TestcaseDirectory))
         {
-            WorkingDirectory = root,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
+            arguments.AddRange(["--testcase-directory", state.TestcaseDirectory]);
+            arguments.Add("--allow-incomplete-coverage");
+        }
+        else
+            arguments.AddRange(["--case-ids", string.Join(',', state.CaseIds)]);
+        ProcessStartInfo startInfo = Utf8Process("dotnet", root);
         foreach (string argument in arguments) startInfo.ArgumentList.Add(argument);
         using Process process = new() { StartInfo = startInfo };
         state.Attach(process);
@@ -434,6 +527,18 @@ static async Task RunAsync(string root, RunState state)
     }
 }
 
+// Chuẩn hóa UTF-8 cho mọi process con để message tiếng Việt không phụ thuộc code page Windows.
+static ProcessStartInfo Utf8Process(string fileName, string workingDirectory) => new(fileName)
+{
+    WorkingDirectory = workingDirectory,
+    RedirectStandardOutput = true,
+    RedirectStandardError = true,
+    StandardOutputEncoding = Encoding.UTF8,
+    StandardErrorEncoding = Encoding.UTF8,
+    UseShellExecute = false,
+    CreateNoWindow = true,
+};
+
 sealed record RunRequest(string Project, string[]? CaseIds);
 sealed record TestItem(string Id, string Name, string[] Tags, bool Destructive, string Group, int StepCount);
 sealed record EnvironmentUpdate(Dictionary<string, string> Values);
@@ -447,7 +552,7 @@ sealed record EnvironmentDefinition(string Key, string Group, string Scope, stri
 sealed record EnvironmentGroup(string Name, EnvironmentVariable[] Variables);
 sealed record EnvironmentVariable(string Key, string Value, string Source, bool Secret, bool Configured);
 
-sealed class RunState(string id, string project, string[] caseIds, DateTimeOffset startedAt, string historyDirectory)
+sealed class RunState(string id, string project, string[] caseIds, DateTimeOffset startedAt, string historyDirectory, string? testcaseDirectory = null)
 {
     private readonly object gate = new();
     private readonly List<string> lines = [];
@@ -455,6 +560,7 @@ sealed class RunState(string id, string project, string[] caseIds, DateTimeOffse
     public string Project { get; } = project;
     private Process? process;
     public string[] CaseIds { get; } = caseIds;
+    public string? TestcaseDirectory { get; } = testcaseDirectory;
     public DateTimeOffset StartedAt { get; } = startedAt;
     public string Status { get; private set; } = "running";
     public int? ExitCode { get; private set; }

@@ -44,7 +44,8 @@ public sealed class SourceContractAnalyzer
             bool authorize = parts.Any(part => HasAttribute(part.AttributeLists, "Authorize"));
             foreach (ClassDeclarationSyntax controller in parts) endpoints.AddRange(ReadController(root, controller, validations, prefix, authorize, compilation));
         }
-        return new(root, files.Length, endpoints.OrderBy(endpoint => endpoint.Path).ThenBy(endpoint => endpoint.Method).ToArray(), types, warnings);
+        EndpointContract[] ordered = endpoints.OrderBy(endpoint => endpoint.Path).ThenBy(endpoint => endpoint.Method).ToArray();
+        return new(root, files.Length, ordered, types, warnings, DiscoverAuthentication(ordered, types));
     }
 
     private static IEnumerable<EndpointContract> ReadController(string root, ClassDeclarationSyntax controller, Dictionary<string, List<ValidationContract>> validations, string prefix, bool controllerAuthorize, CSharpCompilation compilation)
@@ -66,9 +67,71 @@ public sealed class SourceContractAnalyzer
             SemanticModel semanticModel = compilation.GetSemanticModel(action.SyntaxTree, ignoreAccessibility: true);
             ServiceCallContract[] serviceCalls = ReadServiceCalls(root, action, semanticModel);
             BranchContract[] branches = ReadBranches(root, action, semanticModel);
-            yield return new(Slug($"{method}-{path}"), controllerName, action.Identifier.ValueText, method, path, Path.GetRelativePath(root, action.SyntaxTree.FilePath), span.StartLinePosition.Line + 1, authorize, anonymous, permissions, statuses, UnwrapResponseType(action.ReturnType.ToString()), parameters, rules, serviceCalls, branches);
+            string? responseType = UnwrapResponseType(action.ReturnType.ToString());
+            string role = DetectAuthenticationRole(method, path, controllerName, action.Identifier.ValueText, anonymous, authorize, parameters, responseType);
+            yield return new(Slug($"{method}-{path}"), controllerName, action.Identifier.ValueText, method, path, Path.GetRelativePath(root, action.SyntaxTree.FilePath), span.StartLinePosition.Line + 1, authorize, anonymous, role, permissions, statuses, responseType, parameters, rules, serviceCalls, branches);
         }
     }
+
+    private static AuthenticationDiscovery DiscoverAuthentication(IReadOnlyList<EndpointContract> endpoints, IReadOnlyDictionary<string, TypeContract> types)
+    {
+        AuthEndpointCandidate[] logins = endpoints.Where(endpoint => endpoint.AuthenticationRole == "login").Select(endpoint => Candidate(endpoint, types)).OrderByDescending(candidate => candidate.Confidence).ToArray();
+        AuthEndpointCandidate[] users = endpoints.Where(endpoint => endpoint.AuthenticationRole == "user-create").Select(endpoint => Candidate(endpoint, types)).OrderByDescending(candidate => candidate.Confidence).ToArray();
+        AuthConfigurationSuggestion? suggestion = logins.FirstOrDefault() is { } login ? Suggest(login) : null;
+        return new(logins, users, suggestion);
+    }
+
+    private static AuthEndpointCandidate Candidate(EndpointContract endpoint, IReadOnlyDictionary<string, TypeContract> types)
+    {
+        ParameterContract? body = endpoint.Parameters.FirstOrDefault(parameter => parameter.Source == "body");
+        string[] credentials = body is not null && types.TryGetValue(TypeKey(body.Type), out TypeContract? request)
+            ? request.Properties.Where(property => CredentialKind(property.JsonName) is not null).Select(property => property.JsonName).ToArray() : [];
+        string? token = endpoint.ResponseType is not null && types.TryGetValue(TypeKey(endpoint.ResponseType), out TypeContract? response)
+            ? response.Properties.FirstOrDefault(property => IsTokenField(property.JsonName))?.JsonName : null;
+        int confidence = (endpoint.AllowsAnonymous ? 20 : 0)
+            + (credentials.Any(field => CredentialKind(field) == "password") ? 35 : 0)
+            + (credentials.Any(field => CredentialKind(field) is "username" or "email") ? 30 : 0)
+            + (credentials.Any(field => CredentialKind(field) == "code") ? 20 : 0)
+            + (token is not null ? 20 : 0);
+        return new(endpoint.Id, endpoint.Method, endpoint.Path, body?.Type ?? string.Empty, endpoint.ResponseType, credentials, token, confidence);
+    }
+
+    private static AuthConfigurationSuggestion Suggest(AuthEndpointCandidate login)
+    {
+        Dictionary<string, string> body = new(StringComparer.OrdinalIgnoreCase);
+        List<string> variables = [];
+        foreach (string field in login.CredentialFields)
+        {
+            string variable = CredentialKind(field) switch { "password" => "AUTH_PASSWORD", "code" => "AUTH_CODE", "email" => "AUTH_EMAIL", _ => "AUTH_USERNAME" };
+            body[field] = $"${{env:{variable}}}";
+            if (!variables.Contains(variable, StringComparer.OrdinalIgnoreCase)) variables.Add(variable);
+        }
+        string tokenPath = string.IsNullOrWhiteSpace(login.TokenField) ? "$.accessToken" : $"$.data.{login.TokenField}";
+        return new("login", login.Path, login.Method, body, tokenPath, "Authorization", "Bearer", variables);
+    }
+
+    private static string DetectAuthenticationRole(string method, string path, string controller, string action, bool anonymous, bool authorize, IReadOnlyList<ParameterContract> parameters, string? responseType)
+    {
+        string text = $"{path} {controller} {action} {responseType}";
+        bool loginName = Regex.IsMatch(text, @"\b(auth|authenticate|authentication|login|sign[- ]?in|token)\b", RegexOptions.IgnoreCase);
+        bool createUserName = method == "POST" && Regex.IsMatch(text, @"\b(user|users|account|accounts|member|members)\b", RegexOptions.IgnoreCase) && Regex.IsMatch(action, "create|register|signup|signUp", RegexOptions.IgnoreCase);
+        string parameterText = string.Join(' ', parameters.Select(parameter => parameter.Type));
+        bool credentialRequest = Regex.IsMatch(parameterText, "Auth|Login|Credential|SignIn", RegexOptions.IgnoreCase);
+        if (method == "POST" && anonymous && (loginName || credentialRequest)) return "login";
+        if (method == "POST" && authorize && createUserName) return "user-create";
+        return "business";
+    }
+
+    private static string? CredentialKind(string name)
+    {
+        if (name.Contains("password", StringComparison.OrdinalIgnoreCase) || name.Contains("secret", StringComparison.OrdinalIgnoreCase)) return "password";
+        if (name.Equals("code", StringComparison.OrdinalIgnoreCase) || name.EndsWith("Code", StringComparison.OrdinalIgnoreCase)) return "code";
+        if (name.Contains("email", StringComparison.OrdinalIgnoreCase)) return "email";
+        if (name.Contains("username", StringComparison.OrdinalIgnoreCase) || name.Contains("userName", StringComparison.OrdinalIgnoreCase) || name.Equals("login", StringComparison.OrdinalIgnoreCase)) return "username";
+        return null;
+    }
+
+    private static bool IsTokenField(string name) => name.Equals("accessToken", StringComparison.OrdinalIgnoreCase) || name.Equals("token", StringComparison.OrdinalIgnoreCase) || name.EndsWith("AccessToken", StringComparison.OrdinalIgnoreCase);
 
     private static CSharpCompilation CreateCompilation(IEnumerable<SyntaxTree> trees)
     {

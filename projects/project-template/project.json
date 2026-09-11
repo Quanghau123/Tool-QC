@@ -2,6 +2,14 @@
   "name": "replace-me",
   "baseUrlVariable": "API_BASE_URL",
   "defaultHeaders": { "Accept": "application/json" },
-  "authentication": { "strategy": "static-token", "header": "Authorization", "prefix": "Bearer" },
+  "authentication": {
+    "strategy": "login",
+    "loginPath": "${env:AUTH_LOGIN_PATH}",
+    "method": "POST",
+    "body": { "username": "${env:AUTH_USERNAME}", "password": "${env:AUTH_PASSWORD}" },
+    "tokenPath": "$.accessToken",
+    "header": "Authorization",
+    "prefix": "Bearer"
+  },
   "safety": { "productionHosts": ["api.company.com"] }
 }

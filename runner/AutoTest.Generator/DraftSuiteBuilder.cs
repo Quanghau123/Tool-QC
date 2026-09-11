@@ -56,7 +56,26 @@ public static class DraftSuiteBuilder
     };
 
     private static Dictionary<string, string> BuildVariables(EndpointContract endpoint) => endpoint.Parameters.Where(parameter => parameter.Source is "route" or "route-or-query").ToDictionary(parameter => parameter.Name, parameter => SampleScalar(parameter.Type, parameter.Name).ToString() ?? "${unique}", StringComparer.OrdinalIgnoreCase);
-    private static Dictionary<string, object?>? BuildBody(EndpointContract endpoint, IReadOnlyDictionary<string, TypeContract> types) => endpoint.Parameters.FirstOrDefault(parameter => parameter.Source == "body") is { } body ? SampleObject(body.Type, types, [], 0) : null;
+    private static Dictionary<string, object?>? BuildBody(EndpointContract endpoint, IReadOnlyDictionary<string, TypeContract> types)
+    {
+        if (endpoint.Parameters.FirstOrDefault(parameter => parameter.Source == "body") is not { } body) return null;
+        Dictionary<string, object?> result = SampleObject(body.Type, types, [], 0);
+        if (endpoint.AuthenticationRole == "login")
+            foreach (string key in result.Keys.ToArray())
+                result[key] = AuthEnvironmentValue(key) ?? result[key];
+        if (endpoint.AuthenticationRole == "user-create")
+            foreach (string key in result.Keys.Where(key => key.Contains("password", StringComparison.OrdinalIgnoreCase)).ToArray()) result[key] = "Admin@123";
+        return result;
+    }
+
+    private static string? AuthEnvironmentValue(string field)
+    {
+        if (field.Contains("password", StringComparison.OrdinalIgnoreCase) || field.Contains("secret", StringComparison.OrdinalIgnoreCase)) return "${env:AUTH_PASSWORD}";
+        if (field.Equals("code", StringComparison.OrdinalIgnoreCase) || field.EndsWith("Code", StringComparison.OrdinalIgnoreCase)) return "${env:AUTH_CODE}";
+        if (field.Contains("email", StringComparison.OrdinalIgnoreCase)) return "${env:AUTH_EMAIL}";
+        if (field.Contains("username", StringComparison.OrdinalIgnoreCase) || field.Equals("login", StringComparison.OrdinalIgnoreCase)) return "${env:AUTH_USERNAME}";
+        return null;
+    }
 
     private static string BuildPath(EndpointContract endpoint, IReadOnlyDictionary<string, TypeContract> types)
     {
@@ -80,6 +99,7 @@ public static class DraftSuiteBuilder
 
     private static object? Sample(string type, string name, IReadOnlyDictionary<string, TypeContract> types, HashSet<string> stack, int depth)
     {
+        if (IsScalar(type)) return SampleScalar(type, name);
         if (TryType(types, type, out TypeContract? contract)) return contract.Kind == "enum" ? contract.EnumValues.FirstOrDefault() ?? "0" : SampleObject(type, types, stack, depth);
         return SampleScalar(type, name);
     }
@@ -89,13 +109,25 @@ public static class DraftSuiteBuilder
         string clean = CleanType(type).ToLowerInvariant(); string lowerName = name.ToLowerInvariant();
         if (clean is "bool" or "boolean") return true;
         if (Regex.IsMatch(clean, "^(byte|short|int|int32|long|int64|float|double|decimal)$")) return lowerName is "pagesize" ? 10 : 1;
-        if (clean is "datetime" or "datetimeoffset") return "${nowIso}";
-        if (clean == "guid") return "${guid1}";
+        if (clean is "datetime" or "datetimeoffset")
+        {
+            if (lowerName.Contains("end") || lowerName.Contains("expire")) return "${futureEndIso}";
+            if (lowerName.Contains("start")) return "${futureStartIso}";
+            return "${nowIso}";
+        }
+        if (clean == "guid") return "${unique}";
         if (lowerName.Contains("email")) return "generated.${unique}@integration.test";
         if (lowerName.Contains("password")) return "Admin@123";
         if (lowerName.Contains("phone")) return "0900000000";
-        if (lowerName.Contains("code")) return "AUTO_${unique}";
+        if (lowerName.Contains("code")) return "AUTO${shortUniqueA}";
         return "${unique}";
+    }
+
+    private static bool IsScalar(string type)
+    {
+        string clean = CleanType(type).ToLowerInvariant();
+        return clean is "string" or "char" or "bool" or "boolean" or "byte" or "short" or "int" or "int32" or "long" or "int64"
+            or "float" or "double" or "decimal" or "datetime" or "datetimeoffset" or "dateonly" or "timeonly" or "guid";
     }
 
     private static Dictionary<string, object> BuildResponseAssertions(EndpointContract endpoint, IReadOnlyDictionary<string, TypeContract> types)

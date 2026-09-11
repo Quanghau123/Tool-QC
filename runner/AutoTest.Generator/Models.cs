@@ -1,9 +1,13 @@
 using System.Text.Json;
+using System.Text.Encodings.Web;
 
 namespace AutoTest.Generator;
 
-public sealed record GeneratorAnalysis(string SourceDirectory, int ScannedFileCount, IReadOnlyList<EndpointContract> Endpoints, IReadOnlyDictionary<string, TypeContract> Types, IReadOnlyList<string> Warnings);
-public sealed record EndpointContract(string Id, string Controller, string Action, string Method, string Path, string SourceFile, int SourceLine, bool RequiresAuthentication, bool AllowsAnonymous, IReadOnlyList<string> Permissions, IReadOnlyList<int> ResponseStatuses, string? ResponseType, IReadOnlyList<ParameterContract> Parameters, IReadOnlyList<ValidationContract> Validations, IReadOnlyList<ServiceCallContract> ServiceCalls, IReadOnlyList<BranchContract> Branches);
+public sealed record GeneratorAnalysis(string SourceDirectory, int ScannedFileCount, IReadOnlyList<EndpointContract> Endpoints, IReadOnlyDictionary<string, TypeContract> Types, IReadOnlyList<string> Warnings, AuthenticationDiscovery Authentication);
+public sealed record AuthenticationDiscovery(IReadOnlyList<AuthEndpointCandidate> LoginEndpoints, IReadOnlyList<AuthEndpointCandidate> UserCreationEndpoints, AuthConfigurationSuggestion? SuggestedConfiguration);
+public sealed record AuthEndpointCandidate(string EndpointId, string Method, string Path, string RequestType, string? ResponseType, IReadOnlyList<string> CredentialFields, string? TokenField, int Confidence);
+public sealed record AuthConfigurationSuggestion(string Strategy, string LoginPath, string Method, IReadOnlyDictionary<string, string> Body, string TokenPath, string Header, string Prefix, IReadOnlyList<string> RequiredEnvironmentVariables);
+public sealed record EndpointContract(string Id, string Controller, string Action, string Method, string Path, string SourceFile, int SourceLine, bool RequiresAuthentication, bool AllowsAnonymous, string AuthenticationRole, IReadOnlyList<string> Permissions, IReadOnlyList<int> ResponseStatuses, string? ResponseType, IReadOnlyList<ParameterContract> Parameters, IReadOnlyList<ValidationContract> Validations, IReadOnlyList<ServiceCallContract> ServiceCalls, IReadOnlyList<BranchContract> Branches);
 public sealed record ParameterContract(string Name, string Type, string Source, bool Required, bool Nullable);
 public sealed record ValidationContract(string Property, string Rule, string? Value, string SourceFile);
 public sealed record TypeContract(string Name, string Kind, int GenericArity, IReadOnlyList<string> TypeParameters, IReadOnlyList<string> BaseTypes, IReadOnlyList<PropertyContract> Properties, IReadOnlyList<string> EnumValues, string SourceFile);
@@ -16,5 +20,9 @@ public sealed record GeneratedSuite(int SchemaVersion, string Project, bool Gene
 
 public static class GeneratorJson
 {
-    public static JsonSerializerOptions Options { get; } = new(JsonSerializerDefaults.Web) { WriteIndented = true };
+    public static JsonSerializerOptions Options { get; } = new(JsonSerializerDefaults.Web)
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
 }

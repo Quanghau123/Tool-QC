@@ -238,28 +238,47 @@ public sealed class OrdersController : ControllerBase
     [HttpGet, ProducesResponseType(typeof(OrderResponse), 200)]
     public Task<OrderResponse> Search([FromQuery] SearchRequest request) { if (request.Page < 1) throw new ArgumentOutOfRangeException(); return OrderService.LoadAsync(request); }
 }
+[ApiController, Route("api/users")]
+public sealed class UsersController : ControllerBase
+{
+    [AllowAnonymous, HttpPost("auth"), ProducesResponseType(typeof(AuthResponse), 200)]
+    public Task<AuthResponse> Authenticate([FromBody] LoginRequest request) => throw new NotImplementedException();
+    [Authorize, HttpPost, ProducesResponseType(typeof(OrderResponse), 200)]
+    public Task<OrderResponse> CreateUser([FromBody] CreateUserRequest request) => throw new NotImplementedException();
+}
 public static class OrderService { public static Task<OrderResponse> LoadAsync(SearchRequest request) => throw new NotImplementedException(); }
 public sealed record AddressRequest(string Street, string City);
 public sealed class CreateOrderRequest { public required string Code { get; init; } public int Quantity { get; init; } public AddressRequest Address { get; init; } = default!; }
 public class PagingRequest { public int Current { get; init; } public int PageSize { get; init; } }
 public sealed class SearchRequest : PagingRequest { public string? Keyword { get; init; } }
 public sealed class OrderResponse { public Guid Id { get; init; } [JsonPropertyName("orderCode")] public string Code { get; init; } = ""; public int Quantity { get; init; } }
+public sealed record LoginRequest(string Username, string Password);
+public sealed record AuthResponse(string AccessToken, string RefreshToken);
+public sealed record CreateUserRequest(string Username, string Password);
 public sealed class CreateOrderValidator : AbstractValidator<CreateOrderRequest> { public const int MaxQuantity = 20; public CreateOrderValidator() { RuleFor(x => x.Code).NotEmpty().MaximumLength(10); RuleFor(x => x.Quantity).LessThanOrEqualTo(MaxQuantity); } }
 """);
 var generatorAnalysis = new AutoTest.Generator.SourceContractAnalyzer().Analyze(generatorFixture);
-Equal("2", generatorAnalysis.Endpoints.Count.ToString(), "generator endpoint count");
-Equal("3", generatorAnalysis.Endpoints.Single(endpoint => endpoint.Method == "POST").Validations.Count.ToString(), "generator validation count");
+Equal("4", generatorAnalysis.Endpoints.Count.ToString(), "generator endpoint count");
+Equal("3", generatorAnalysis.Endpoints.Single(endpoint => endpoint.Path == "/api/orders" && endpoint.Method == "POST").Validations.Count.ToString(), "generator validation count");
 Equal("3", generatorAnalysis.Types["OrderResponse"].Properties.Count.ToString(), "generator response DTO properties");
-Equal("20", generatorAnalysis.Endpoints.Single(endpoint => endpoint.Method == "POST").Validations.Single(rule => rule.Rule == "LessThanOrEqualTo").Value!, "generator constant boundary");
+Equal("20", generatorAnalysis.Endpoints.Single(endpoint => endpoint.Path == "/api/orders" && endpoint.Method == "POST").Validations.Single(rule => rule.Rule == "LessThanOrEqualTo").Value!, "generator constant boundary");
 Equal("1", generatorAnalysis.Endpoints.Single(endpoint => endpoint.Method == "GET").ServiceCalls.Count.ToString(), "generator semantic service call");
 Equal("1", generatorAnalysis.Endpoints.Single(endpoint => endpoint.Method == "GET").Branches.Count.ToString(), "generator branch count");
+Equal("login", generatorAnalysis.Endpoints.Single(endpoint => endpoint.Path == "/api/users/auth").AuthenticationRole, "generator login endpoint role");
+Equal("user-create", generatorAnalysis.Endpoints.Single(endpoint => endpoint.Path == "/api/users" && endpoint.Method == "POST").AuthenticationRole, "generator create-user endpoint role");
+Equal("/api/users/auth", generatorAnalysis.Authentication.SuggestedConfiguration!.LoginPath, "generator suggested login path");
+Equal("AUTH_USERNAME", generatorAnalysis.Authentication.SuggestedConfiguration.RequiredEnvironmentVariables.First(), "generator auth environment variable");
 var generatedSuite = AutoTest.Generator.DraftSuiteBuilder.Build("ops-service", generatorAnalysis, null);
 string generatedJson = System.Text.Json.JsonSerializer.Serialize(generatedSuite, AutoTest.Generator.GeneratorJson.Options);
 Equal("true", generatedJson.Contains("\"address\"", StringComparison.Ordinal).ToString().ToLowerInvariant(), "generator nested DTO body");
-Equal("true", generatedJson.Contains("?current=1\\u0026pageSize=10", StringComparison.Ordinal).ToString().ToLowerInvariant(), "generator inherited query DTO");
+Equal("false", generatedJson.Contains("\"code\": {}", StringComparison.Ordinal).ToString().ToLowerInvariant(), "generator scalar string body");
+Equal("true", generatedJson.Contains("AUTO${shortUniqueA}", StringComparison.Ordinal).ToString().ToLowerInvariant(), "generator short unique code");
+Equal("true", (generatedJson.Contains("?current=1\\u0026pageSize=10", StringComparison.Ordinal) || generatedJson.Contains("?current=1&pageSize=10", StringComparison.Ordinal)).ToString().ToLowerInvariant(), "generator inherited query DTO");
 Equal("true", generatedJson.Contains("\"quantity\": 21", StringComparison.OrdinalIgnoreCase).ToString().ToLowerInvariant(), "generator resolved invalid boundary");
 Equal("true", generatedJson.Contains("generated.post-api-orders.validation.code.maximumlength", StringComparison.Ordinal).ToString().ToLowerInvariant(), "generator boundary case");
 Equal("true", generatedJson.Contains("$.data.orderCode", StringComparison.Ordinal).ToString().ToLowerInvariant(), "generator response assertion");
+Equal("true", generatedJson.Contains("${env:AUTH_USERNAME}", StringComparison.Ordinal).ToString().ToLowerInvariant(), "generator login uses environment username");
+Equal("true", generatedJson.Contains("${env:AUTH_PASSWORD}", StringComparison.Ordinal).ToString().ToLowerInvariant(), "generator login uses environment password");
 string cobertura = Path.Combine(generatorFixture, "coverage.cobertura.xml");
 File.WriteAllText(cobertura, """<coverage lines-covered="8" lines-valid="10" branches-covered="1" branches-valid="2"><packages><package><classes><class filename="OrdersController.cs"><methods><method name="Search"><lines><line number="10" hits="0" branch="true" condition-coverage="50% (1/2)" /></lines></method></methods></class></classes></package></packages></coverage>""");
 var coverageAnalysis = AutoTest.Generator.CoberturaCoverageReader.Read(cobertura);
@@ -267,7 +286,7 @@ Equal("0.8", coverageAnalysis.LineRate.ToString(System.Globalization.CultureInfo
 Equal("2", coverageAnalysis.Gaps.Count.ToString(), "generator coverage gaps");
 Directory.Delete(generatorFixture, true);
 
-Console.WriteLine("Framework tests passed: 47");
+Console.WriteLine("Framework tests passed: 53");
 return 0;
 
 static StepSpec Step(string? method, string? path, DatabaseRequestSpec? database, MqttRequestSpec? mqtt)

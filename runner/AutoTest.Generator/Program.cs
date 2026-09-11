@@ -1,6 +1,10 @@
 // CLI generator: phân tích source bằng Roslyn và sinh testcase nháp không phụ thuộc AI.
 using System.Text.Json;
+using System.Text;
 using AutoTest.Generator;
+
+Console.InputEncoding = Encoding.UTF8;
+Console.OutputEncoding = new UTF8Encoding(false);
 
 string? Argument(string key)
 {

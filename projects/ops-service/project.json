@@ -2,6 +2,14 @@
   "name": "ops-service",
   "baseUrlVariable": "API_BASE_URL",
   "defaultHeaders": { "Accept": "application/json" },
-  "authentication": { "strategy": "static-token", "header": "Authorization", "prefix": "Bearer" },
+  "authentication": {
+    "strategy": "login",
+    "loginPath": "/api/Users/Auth",
+    "method": "POST",
+    "body": { "username": "${env:AUTH_USERNAME}", "password": "${env:AUTH_PASSWORD}" },
+    "tokenPath": "$.data.accessToken",
+    "header": "Authorization",
+    "prefix": "Bearer"
+  },
   "safety": { "productionHosts": [] }
 }

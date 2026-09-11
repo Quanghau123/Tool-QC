@@ -8,7 +8,10 @@ using AutoTest.Elasticsearch;
 using AutoTest.HttpStub;
 using AutoTest.TestValidation;
 using AutoTest.Redis;
+using System.Text;
 // CLI runner: nạp project, preflight, chạy testcase song song và xuất báo cáo.
+Console.InputEncoding = Encoding.UTF8;
+Console.OutputEncoding = new UTF8Encoding(false);
 var startedAt=DateTimeOffset.Now;
 var root=Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,"..","..","..","..",".."));
 string Arg(string key,string fallback){var i=Array.IndexOf(args,key);return i>=0&&i+1<args.Length?args[i+1]:fallback;}
@@ -21,6 +24,7 @@ if(!testcaseDirectory.StartsWith(Path.GetFullPath(projectDir)+Path.DirectorySepa
 var env=EnvironmentStore.Load([Path.Combine(root,".env"),Path.Combine(projectDir,".env")]);
 var tags=Arg("--tags",env.Get("TEST_TAGS")??"").Split(',',StringSplitOptions.RemoveEmptyEntries|StringSplitOptions.TrimEntries);
 var caseIds=Arg("--case-ids","").Split(',',StringSplitOptions.RemoveEmptyEntries|StringSplitOptions.TrimEntries);
+var requireCompleteCoverage=!args.Contains("--allow-incomplete-coverage",StringComparer.OrdinalIgnoreCase);
 var project=SpecLoader.Project(Path.Combine(projectDir,"project.json"));
 var cases=SpecLoader.Cases(testcaseDirectory,project.Name)
     .Where(c=>caseIds.Length==0||caseIds.Contains(c.Id,StringComparer.OrdinalIgnoreCase))
@@ -34,7 +38,8 @@ if(caseIds.Length>0)
 }
 await using(var validationRegistry=new StepExecutorRegistry(new ITestStepExecutor[]{new HttpStepExecutor(project,env),new PostgreSqlStepExecutor(),new ElasticsearchStepExecutor(),new MqttStepExecutor(env),new HttpStubStepExecutor(env),new RedisStepExecutor()}))
 {
-    var issues=TestcaseValidator.Validate(testcaseDirectory,project,cases,validationRegistry.All,validateTemporaryFiles:tags.Length==0&&caseIds.Length==0);
+    bool usesDefaultTestcaseDirectory=testcaseDirectory.Equals(Path.GetFullPath(Path.Combine(projectDir,"testcases")),StringComparison.OrdinalIgnoreCase);
+    var issues=TestcaseValidator.Validate(testcaseDirectory,project,cases,validationRegistry.All,validateTemporaryFiles:usesDefaultTestcaseDirectory&&tags.Length==0&&caseIds.Length==0,requireCompleteCoverage:requireCompleteCoverage);
     if(issues.Count>0){Console.Error.WriteLine($"Preflight phát hiện {issues.Count} lỗi testcase:");foreach(var issue in issues)Console.Error.WriteLine($"- {issue.Location}: {issue.Message}");return 3;}
 }
 if(args.Contains("--preflight-only",StringComparer.OrdinalIgnoreCase)){Console.WriteLine($"Preflight thành công cho {cases.Count} testcase.");return 0;}

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Tool-QC</title>
-  <link rel="stylesheet" href="app.css?v=20260911-1">
+  <link rel="stylesheet" href="app.css?v=20260911-5">
 </head>
 <body>
   <header><div><strong>Tool-QC</strong><span>Test Console</span></div><span id="connection">Sẵn sàng</span></header>
@@ -37,8 +37,8 @@
     <section id="toolsView" hidden>
       <div class="toolbar"><div><h1>Công cụ</h1><p>Chọn công cụ cần dùng; quá trình quét và sinh file được chạy ngầm.</p></div></div>
       <div class="tool-tabs"><button class="tool-active" data-tool="generatorTool">Sinh testcase</button><button data-tool="messageScannerTool">Cào message</button></div>
-      <div id="generatorTool" class="tool-panel"><h2>Sinh testcase từ source</h2><p>Roslyn đọc controller, DTO lồng nhau, query DTO, response DTO và FluentValidation. JSON luôn được xem, sửa và preflight trước khi kích hoạt.</p><div class="scanner-controls"><label>Đường dẫn source backend<input id="sourcePath" placeholder="D:\works\projects\service-name"></label><button id="analyzeSource" class="primary compact">Phân tích source</button></div><div id="generatorSummary" class="message-summary">Chưa phân tích source.</div><label>Tìm endpoint<input id="endpointSearch" placeholder="Method, route, controller hoặc action" disabled></label><div class="generator-actions"><span><b id="endpointSelectedCount">0</b> endpoint đã chọn</span><button id="generateTests" class="primary compact" disabled>Sinh bản xem trước</button></div><div id="endpointResults" class="endpoint-results"></div><section id="draftEditor" class="draft-editor" hidden><div class="toolbar"><div><h2>Duyệt JSON testcase</h2><p>Sửa fixture, auth, assertion và coverage blocked trước khi chạy preflight.</p></div><div class="toolbar-buttons"><button id="preflightDraft" class="compact">Chạy preflight</button><button id="activateDraft" class="primary compact" disabled>Kích hoạt testcase</button></div></div><div class="draft-target"><label>Nhóm thư mục<input id="draftGroup" value="generated"></label><label>Tên file<input id="draftFileName" placeholder="customers-search"></label></div><textarea id="draftJson" spellcheck="false"></textarea><div id="draftStatus" class="message-summary">Chưa chạy preflight.</div></section><pre id="generatorOutput">Chưa sinh testcase.</pre></div>
-      <div id="messageScannerTool" class="tool-panel" hidden>
+      <div id="generatorTool" class="tool-panel"><h2>Sinh testcase từ source</h2><p>Roslyn đọc controller, DTO lồng nhau, query DTO, response DTO và FluentValidation.</p><div class="generator-guide"><b>Quy trình 3 bước</b><span><strong>1. Kiểm tra bản nháp</strong> — chỉ kiểm tra JSON, biến, assertion và coverage; không gọi API.</span><span><strong>2. Chạy thử</strong> — gọi API thật bằng testcase tạm, chưa đưa vào danh sách chính.</span><span><strong>3. Lưu testcase</strong> — lưu testcase đã đạt kiểm tra vào thư mục dự án để dùng lâu dài.</span></div><div class="scanner-controls"><label>Đường dẫn source backend<input id="sourcePath" placeholder="D:\works\projects\service-name"></label><button id="analyzeSource" class="primary compact">Phân tích source</button></div><div id="generatorSummary" class="message-summary">Chưa phân tích source.</div><label>Tìm endpoint<input id="endpointSearch" placeholder="Method, route, controller hoặc action" disabled></label><div class="generator-actions"><span><b id="endpointSelectedCount">0</b> endpoint đã chọn</span><button id="generateTests" class="primary compact" disabled>Sinh bản nháp</button></div><div id="endpointResults" class="endpoint-results"></div><section id="draftEditor" class="draft-editor" hidden><div class="toolbar"><div><h2>Testcase vừa sinh</h2><p id="draftArtifact">Chưa có file bản nháp.</p></div><div class="toolbar-buttons"><button id="toggleDraftJson" class="compact">Xem JSON</button><button id="preflightDraft" class="compact">1. Kiểm tra</button><button id="runDraft" class="compact" disabled>2. Chạy thử API</button><button id="activateDraft" class="primary compact" disabled>3. Lưu testcase</button></div></div><div id="draftJsonPanel" hidden><div class="draft-target"><label>Nhóm thư mục<input id="draftGroup" value="generated"></label><label>Tên file<input id="draftFileName" placeholder="customers-search"></label></div><textarea id="draftJson" spellcheck="false"></textarea></div><div id="draftStatus" class="message-summary">Chưa kiểm tra bản nháp.</div><div id="draftReportInfo" class="draft-report-info" hidden></div></section></div>
+            <div id="messageScannerTool" class="tool-panel" hidden>
         <div class="toolbar"><div><h2>Cào message từ source</h2><p>Quét khóa message, bản dịch và vị trí sử dụng; tự bỏ qua file build.</p></div><a id="downloadMessages" class="button-link" hidden>Tải Excel</a></div>
         <div class="scanner-controls"><label>Đường dẫn source backend<input id="messageSourcePath" placeholder="D:\works\projects\service-name"></label><button id="scanMessages" class="primary compact">Cào message</button></div>
         <div id="messageSummary" class="message-summary">Chưa quét source.</div><label>Tìm message<input id="messageSearch" placeholder="Key, module hoặc nội dung bản dịch" disabled></label><div id="messageResults" class="message-results"></div>
@@ -49,7 +49,7 @@
       <pre id="console">Chọn testcase và nhấn “Chạy testcase đã chọn”.</pre>
     </section>
   </main>
-  <script src="app.js?v=20260911-1"></script>
+  <script src="app.js?v=20260911-9"></script>
 </body>
 </html>
 

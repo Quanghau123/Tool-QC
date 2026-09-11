@@ -21,7 +21,8 @@ public static class TestcaseValidator
         ProjectSpec project,
         IReadOnlyList<CaseSpec> cases,
         IReadOnlyCollection<ITestStepExecutor> executors,
-        bool validateTemporaryFiles = true)
+        bool validateTemporaryFiles = true,
+        bool requireCompleteCoverage = true)
     {
         var issues = new List<ValidationIssue>();
         var selectedGroups = cases.Select(test => test.SourceGroup).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -43,14 +44,14 @@ public static class TestcaseValidator
                 issues.Add(new(test.Id, "Testcase phải có ít nhất một tag."));
             if (test.Tags?.Any(string.IsNullOrWhiteSpace) == true)
                 issues.Add(new(test.Id, "Tag không được rỗng."));
-            if (test.SchemaVersion >= 2) ValidateCoverage(test, issues);
+            if (test.SchemaVersion >= 2) ValidateCoverage(test, issues, requireCompleteCoverage);
             ValidateSteps(test.Id, test.Steps, test.Variables, executors, issues, cleanup: false);
             ValidateSteps(test.Id, test.Cleanup ?? [], test.Variables, executors, issues, cleanup: true);
         }
         return issues;
     }
 
-    private static void ValidateCoverage(CaseSpec test, List<ValidationIssue> issues)
+    private static void ValidateCoverage(CaseSpec test, List<ValidationIssue> issues, bool requireCompleteCoverage)
     {
         string location = $"{test.Id} / coverage";
         if (test.Coverage is null) { issues.Add(new(location, "Thiếu coverage manifest bắt buộc.")); return; }
@@ -82,6 +83,8 @@ public static class TestcaseValidator
             }
             else if (string.IsNullOrWhiteSpace(item.Reason)) issues.Add(new(location, $"coverage.{name} {item.Status} nhưng thiếu reason."));
         }
+
+        if (!requireCompleteCoverage) return;
 
         bool mutates = test.Destructive || test.Steps.Any(IsMutation);
         bool protectedApi = test.Steps.Any(step => step.Auth is not null || step.AuthToken is not null);

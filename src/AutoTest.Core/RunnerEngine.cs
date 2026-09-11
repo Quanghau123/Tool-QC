@@ -253,20 +253,29 @@ public sealed class RunnerEngine : IDisposable
     {
         if (token is not null) return;
         var auth = project.Authentication ?? throw new InvalidOperationException("Chưa cấu hình xác thực.");
-        if (auth.Strategy.Equals("static-token", StringComparison.OrdinalIgnoreCase))
+        string strategy = env.Get("AUTH_TYPE") ?? auth.Strategy;
+        if (strategy.Equals("static-token", StringComparison.OrdinalIgnoreCase))
         {
             token = env.Require("AUTH_TOKEN");
             return;
         }
-        if (!auth.Strategy.Equals("login", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException($"Không hỗ trợ kiểu xác thực: {auth.Strategy}");
+        if (!strategy.Equals("login", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Không hỗ trợ kiểu xác thực: {strategy}");
+        string loginPath = env.Get("AUTH_LOGIN_PATH") ?? auth.LoginPath ?? throw new InvalidOperationException("Thiếu đường dẫn đăng nhập. Cấu hình authentication.loginPath hoặc AUTH_LOGIN_PATH.");
+        string method = env.Get("AUTH_LOGIN_METHOD") ?? auth.Method ?? "POST";
         using var content = new StringContent(ResolveTemplate(auth.Body?.GetRawText() ?? "{}", new Dictionary<string, string>(), env), Encoding.UTF8, "application/json");
-        using var response = await http.SendAsync(new HttpRequestMessage(new HttpMethod(auth.Method ?? "POST"), auth.LoginPath) { Content = content }, cancellationToken);
+        using var response = await http.SendAsync(new HttpRequestMessage(new HttpMethod(method), ResolveTemplate(loginPath, new Dictionary<string, string>(), env)) { Content = content }, cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode) throw new InvalidOperationException($"Đăng nhập tự động thất bại với HTTP {(int)response.StatusCode}. Kiểm tra AUTH_USERNAME/AUTH_PASSWORD và authentication.loginPath.");
         using var document = JsonDocument.Parse(body);
-        var selected = JsonPath.Select(document.RootElement, auth.TokenPath ?? "$.accessToken");
-        token = selected.Found ? JsonPath.Text(selected.Value) : throw new InvalidOperationException("Không tìm thấy access token trong phản hồi đăng nhập.");
+        string tokenPath = env.Get("AUTH_TOKEN_PATH") ?? auth.TokenPath ?? "$.accessToken";
+        string[] tokenPaths = [tokenPath, "$.data.accessToken", "$.accessToken", "$.data.token", "$.token"];
+        foreach (string candidate in tokenPaths.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var selected = JsonPath.Select(document.RootElement, candidate);
+            if (selected.Found && !string.IsNullOrWhiteSpace(JsonPath.Text(selected.Value))) { token = JsonPath.Text(selected.Value); return; }
+        }
+        throw new InvalidOperationException($"Không tìm thấy access token tại {string.Join(", ", tokenPaths.Distinct(StringComparer.OrdinalIgnoreCase))}. Cấu hình AUTH_TOKEN_PATH theo response đăng nhập.");
     }
 
     private void Guard(string url)
