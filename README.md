@@ -49,7 +49,21 @@ Sinh testcase bản nháp từ controller .NET:
 .\toolqc.ps1 generate ops-service "D:\works\projects\ops-service"
 ```
 
+Có thể ép chế độ sinh bằng tham số cuối: `auto`, `ai` hoặc `local`:
+
+```powershell
+.\toolqc.ps1 generate ops-service "D:\works\projects\ops-service" auto
+```
+
 Generator chỉ sinh bản nháp; các coverage chưa xác minh giữ trạng thái `blocked` để người kiểm thử hoàn thiện trước khi chạy. Trên UI, bản nháp có thể được preflight và chạy trực tiếp từ thư mục artifact tạm trước khi kích hoạt; kết quả vẫn xuất hiện trong panel chạy, lịch sử và báo cáo mà không ghi vào `projects/<project>/testcases`.
+
+Generator hỗ trợ ba chế độ: `auto` ưu tiên AI rồi tự quay về Roslyn local, `ai` bắt buộc AI, và `local` chỉ dùng Roslyn. Provider hỗ trợ `codex-cli` và `claude-cli`; chọn bằng `TESTCASE_GENERATOR_PROVIDER` hoặc UI. AI chạy read-only/restricted trên source backend, không được đọc `.env` hoặc secret; kết quả vẫn phải qua preflight, chạy thử và người dùng lưu chính thức.
+
+Máy dùng Codex cần cài và đăng nhập `codex`; máy dùng Claude cần cài `claude` và đăng nhập `claude auth login`. Tool-QC chỉ gọi CLI đã chọn và không lưu API key của provider.
+
+`TESTCASE_GENERATOR_TIMEOUT_SECONDS=0` nghĩa là không giới hạn thời gian AI. Tool chỉ dừng khi người dùng dừng UI/process hoặc khi đặt một số giây lớn hơn `0`; phân tích source lớn có thể chạy hàng chục phút hoặc lâu hơn.
+
+Bước phân tích source cũng có chế độ nhanh bằng Roslyn hoặc chuyên sâu bằng AI. Với source lớn, chọn `Theo module`; Tool-QC chỉ nạp controller, DTO, validator và service thuộc module đã chọn, sau đó AI làm giàu dependency, thứ tự API và các rủi ro auth, scope, integrity, lifecycle và concurrency.
 
 Generator còn dùng Roslyn SemanticModel để nhận diện service call, guard và nhánh điều kiện trong controller. Nếu đã có báo cáo Coverlet dạng Cobertura, có thể đọc các line/branch chưa được cover:
 

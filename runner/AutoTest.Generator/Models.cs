@@ -3,7 +3,26 @@ using System.Text.Encodings.Web;
 
 namespace AutoTest.Generator;
 
-public sealed record GeneratorAnalysis(string SourceDirectory, int ScannedFileCount, IReadOnlyList<EndpointContract> Endpoints, IReadOnlyDictionary<string, TypeContract> Types, IReadOnlyList<string> Warnings, AuthenticationDiscovery Authentication);
+public sealed record GeneratorAnalysis(string SourceDirectory, int ScannedFileCount, IReadOnlyList<EndpointContract> Endpoints, IReadOnlyDictionary<string, TypeContract> Types, IReadOnlyList<string> Warnings, AuthenticationDiscovery Authentication)
+{
+    public string? SelectedModule { get; init; }
+    public string AnalysisProvider { get; init; } = "local-roslyn";
+    public bool AiUsed { get; init; }
+    public bool FellBack { get; init; }
+    public string AnalysisMessage { get; init; } = "Source analyzed by Roslyn.";
+    public IReadOnlyDictionary<string, AiEndpointInsight> AiInsights { get; init; } = new Dictionary<string, AiEndpointInsight>();
+}
+public sealed record AiEndpointInsight(
+    string Module,
+    string Summary,
+    IReadOnlyList<string> Dependencies,
+    IReadOnlyList<string> Risks,
+    IReadOnlyList<string> SuggestedPredecessors,
+    int Confidence,
+    IReadOnlyList<AiBusinessRule> BusinessRules,
+    IReadOnlyList<string> EvidenceFiles,
+    IReadOnlyList<string> SideEffects);
+public sealed record AiBusinessRule(string Rule, string Condition, string ExpectedBehavior, string EvidenceFile, int EvidenceLine, string TestSuggestion);
 public sealed record AuthenticationDiscovery(IReadOnlyList<AuthEndpointCandidate> LoginEndpoints, IReadOnlyList<AuthEndpointCandidate> UserCreationEndpoints, AuthConfigurationSuggestion? SuggestedConfiguration);
 public sealed record AuthEndpointCandidate(string EndpointId, string Method, string Path, string RequestType, string? ResponseType, IReadOnlyList<string> CredentialFields, string? TokenField, int Confidence);
 public sealed record AuthConfigurationSuggestion(string Strategy, string LoginPath, string Method, IReadOnlyDictionary<string, string> Body, string TokenPath, string Header, string Prefix, IReadOnlyList<string> RequiredEnvironmentVariables);

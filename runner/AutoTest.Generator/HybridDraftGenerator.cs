@@ -1,0 +1,232 @@
+using System.Diagnostics;
+using System.Text;
+using System.Text.Json;
+using AutoTest.Generator.Ai;
+
+namespace AutoTest.Generator;
+
+public sealed record GeneratorExecutionOptions(string Mode, string Provider, int TimeoutSeconds, bool FallbackEnabled)
+{
+    public static GeneratorExecutionOptions From(string? mode, string? provider, string? timeout, string? fallback)
+        => new(
+            Normalize(mode, "auto", ["auto", "ai", "local"]),
+            Normalize(provider, "codex-cli", ["codex-cli", "claude-cli"]),
+            int.TryParse(timeout, out int seconds) && seconds >= 0 ? seconds : 0,
+            !bool.TryParse(fallback, out bool enabled) || enabled);
+
+    private static string Normalize(string? value, string fallback, string[] allowed)
+        => allowed.Contains(value?.Trim(), StringComparer.OrdinalIgnoreCase) ? value!.Trim().ToLowerInvariant() : fallback;
+}
+
+public sealed record GeneratorExecutionResult(GeneratedSuite Suite, string RequestedMode, string Provider, bool AiUsed, bool FellBack, string Message);
+public sealed record CodexCommand(string FileName, IReadOnlyList<string> PrefixArguments, string DisplayName);
+public sealed record AiProviderStatus(string Provider, bool Available, bool Authenticated, string Executable, string Version, string Message);
+
+public static class HybridDraftGenerator
+{
+    public static async Task<string> RepairDraftAsync(
+        string project,
+        string source,
+        string draftJson,
+        IReadOnlyList<string> validationIssues,
+        GeneratorExecutionOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        if (options.Mode == "local") throw new InvalidOperationException("Automatic testcase repair requires an AI provider.");
+        IAiGeneratorProvider provider = AiProviderFactory.Create(options.Provider);
+        string prompt = $$"""
+You are repairing a Tool-QC testcase draft for project {{project}}.
+Read CLAUDE.md and only the source files needed to verify the testcase contract. Never read .env, secrets, tokens, passwords, logs, artifacts, or customer data.
+
+The errors below are Tool-QC preflight errors, not backend business failures. Repair only testcase JSON, variable ordering, authentication chaining, save mappings, assertions, cleanup, and coverage evidence. Do not weaken expected backend behavior merely to make the testcase pass. Do not invent API fields, statuses, message keys, database tables, or permissions.
+
+Return ONLY the complete repaired JSON object. No markdown fence or explanation.
+
+Preflight errors:
+{{JsonSerializer.Serialize(validationIssues, GeneratorJson.Options)}}
+
+Current draft:
+{{draftJson}}
+""";
+        return StripFence(await provider.ExecuteAsync(source, prompt, options.TimeoutSeconds, cancellationToken));
+    }
+
+    public static async Task<GeneratorAnalysis> AnalyzeAsync(
+        string project,
+        string source,
+        GeneratorAnalysis localAnalysis,
+        GeneratorExecutionOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        if (options.Mode == "local") return localAnalysis;
+        if (string.IsNullOrWhiteSpace(localAnalysis.SelectedModule) && localAnalysis.Endpoints.Count > 30)
+            throw new InvalidOperationException($"Deep AI analysis requires a module when source contains {localAnalysis.Endpoints.Count} endpoints. Select one module to keep source evidence complete and bounded.");
+        try
+        {
+            IReadOnlyDictionary<string, AiEndpointInsight> insights = await AnalyzeWithAiAsync(project, source, localAnalysis, options, cancellationToken);
+            return localAnalysis with
+            {
+                AnalysisProvider = options.Provider,
+                AiUsed = true,
+                AnalysisMessage = $"Source analyzed by Roslyn and {options.Provider}; {insights.Count} endpoint insights enriched.",
+                AiInsights = insights,
+            };
+        }
+        catch (Exception exception) when (options.Mode == "auto" && options.FallbackEnabled)
+        {
+            return localAnalysis with
+            {
+                FellBack = true,
+                AnalysisMessage = $"AI analysis was unavailable; Roslyn results are shown. {Short(exception.Message)}",
+            };
+        }
+    }
+
+    public static Task<AiProviderStatus> ProbeAsync(string provider = "codex-cli", CancellationToken cancellationToken = default)
+        => AiProviderFactory.Create(provider).ProbeAsync(cancellationToken);
+
+    public static async Task<GeneratorExecutionResult> BuildAsync(
+        string project,
+        string source,
+        GeneratorAnalysis analysis,
+        IReadOnlyList<string>? included,
+        GeneratorExecutionOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        GeneratedSuite localSuite = DraftSuiteBuilder.Build(project, analysis, included);
+        if (options.Mode == "local")
+            return new(localSuite, options.Mode, "local-roslyn", false, false, "Generated by the local Roslyn generator.");
+
+        try
+        {
+            GeneratedSuite aiSuite = await BuildWithAiAsync(project, source, analysis, localSuite, options, cancellationToken);
+            return new(aiSuite, options.Mode, options.Provider, true, false, $"Generated and reviewed by {options.Provider}.");
+        }
+        catch (Exception exception) when (options.Mode == "auto" && options.FallbackEnabled)
+        {
+            return new(localSuite, options.Mode, "local-roslyn", false, true, $"AI was unavailable; used the local Roslyn generator. {Short(exception.Message)}");
+        }
+    }
+
+    private static async Task<GeneratedSuite> BuildWithAiAsync(
+        string project,
+        string source,
+        GeneratorAnalysis analysis,
+        GeneratedSuite localSuite,
+        GeneratorExecutionOptions options,
+        CancellationToken cancellationToken)
+    {
+        IAiGeneratorProvider provider = AiProviderFactory.Create(options.Provider);
+        string json = StripFence(await provider.ExecuteAsync(source, BuildPrompt(project, analysis, localSuite), options.TimeoutSeconds, cancellationToken));
+        GeneratedSuite? suite = JsonSerializer.Deserialize<GeneratedSuite>(json, GeneratorJson.Options);
+        if (suite is null || !suite.Project.Equals(project, StringComparison.OrdinalIgnoreCase) || suite.Cases.Count == 0)
+            throw new InvalidDataException("AI returned an empty or mismatched testcase suite.");
+        return suite with { GeneratedDraft = true, Disabled = true };
+    }
+
+    private static async Task<IReadOnlyDictionary<string, AiEndpointInsight>> AnalyzeWithAiAsync(
+        string project,
+        string source,
+        GeneratorAnalysis analysis,
+        GeneratorExecutionOptions options,
+        CancellationToken cancellationToken)
+    {
+        IAiGeneratorProvider provider = AiProviderFactory.Create(options.Provider);
+        string json = StripFence(await provider.ExecuteAsync(source, BuildAnalysisPrompt(project, analysis), options.TimeoutSeconds, cancellationToken));
+        Dictionary<string, AiEndpointInsight>? insights = JsonSerializer.Deserialize<Dictionary<string, AiEndpointInsight>>(json, GeneratorJson.Options);
+        return insights ?? throw new InvalidDataException("AI returned invalid endpoint insights.");
+    }
+
+    private static string BuildAnalysisPrompt(string project, GeneratorAnalysis analysis)
+        => $$"""
+You are performing deep business-rule analysis for Tool-QC project {{project}}. Roslyn metadata below is only a navigation seed, not the analysis result.
+For every endpoint, independently inspect the real production path in the current read-only source directory:
+controller/action -> request validator -> service interface and implementation -> guards/validation partials -> repositories/EF queries -> entities/status enums -> transaction/outbox/cache/search/background side effects.
+Also inspect permission declarations, parent/event/tenant scope, lifecycle and time rules, uniqueness, limits, aggregate calculations, idempotency, locking/concurrency, rollback behavior, and cleanup or compensating actions.
+Never read .env, secrets, tokens, passwords, local manifests, generated artifacts, logs, or customer data.
+
+Return ONLY a JSON object keyed by endpoint ID. Every value must have exactly:
+- module: string
+- summary: concise Vietnamese business summary
+- dependencies: string array of required data/resources
+- risks: string array
+- suggestedPredecessors: endpoint ID array; only IDs present in the supplied endpoint list
+- confidence: integer 0-100
+- businessRules: array of objects with rule, condition, expectedBehavior, evidenceFile, evidenceLine, testSuggestion
+- evidenceFiles: string array of source-relative files actually inspected
+- sideEffects: string array describing database, outbox, cache, Elasticsearch, message, file, or external integration effects
+
+Every business rule must cite an existing source-relative file and a real 1-based line number. If source evidence is insufficient, omit the rule instead of guessing. Do not merely restate HTTP attributes or DTO fields. Keep text concise and Vietnamese.
+Selected module: {{analysis.SelectedModule ?? "all"}}
+Endpoints:
+{{JsonSerializer.Serialize(analysis.Endpoints.Select(endpoint => new { endpoint.Id, endpoint.Method, endpoint.Path, endpoint.Controller, endpoint.Action, endpoint.SourceFile, endpoint.SourceLine, endpoint.RequiresAuthentication, endpoint.AuthenticationRole, endpoint.Permissions, endpoint.Parameters, endpoint.Validations, endpoint.ServiceCalls, endpoint.Branches }), GeneratorJson.Options)}}
+""";
+
+    private static string BuildPrompt(string project, GeneratorAnalysis analysis, GeneratedSuite localSuite)
+        => $$"""
+You are improving a Tool-QC API testcase draft for project {{project}}.
+Read CLAUDE.md and relevant backend source in the current read-only directory. Never read or output .env, secrets, tokens, passwords, or customer data.
+Root cause this generator protects against: static source extraction can miss business dependencies, authentication flow, variable mappings, and meaningful database/response assertions.
+
+Return ONLY one valid JSON object using the exact Tool-QC suite structure of the draft below. Do not use markdown fences or explanations.
+Requirements:
+- Keep schemaVersion 2, project {{project}}, generatedDraft true and disabled true.
+- Preserve selected endpoints and Vietnamese testcase/step names.
+- Improve request values, authentication chaining, save mappings, response assertions, cleanup, and coverage evidence using production source.
+- Do not invent endpoints, fields, statuses, permissions, database tables, or message keys.
+- Keep uncertain coverage blocked with a concise reason; never falsely mark it covered.
+- Every testcase remains disabled until Tool-QC preflight and user review pass.
+
+Roslyn analysis summary:
+{{JsonSerializer.Serialize(new { analysis.SourceDirectory, analysis.ScannedFileCount, analysis.Authentication, Endpoints = analysis.Endpoints.Select(endpoint => new { endpoint.Id, endpoint.Method, endpoint.Path, endpoint.SourceFile, endpoint.SourceLine, endpoint.RequiresAuthentication, endpoint.Permissions, endpoint.Parameters, endpoint.Validations, endpoint.ResponseType, endpoint.ResponseStatuses }) }, GeneratorJson.Options)}}
+
+Local draft to improve:
+{{JsonSerializer.Serialize(localSuite, GeneratorJson.Options)}}
+""";
+
+    private static string StripFence(string value)
+    {
+        string text = value.Trim();
+        if (!text.StartsWith("```", StringComparison.Ordinal)) return text;
+        int firstLine = text.IndexOf('\n');
+        int closing = text.LastIndexOf("```", StringComparison.Ordinal);
+        return firstLine >= 0 && closing > firstLine ? text[(firstLine + 1)..closing].Trim() : text;
+    }
+
+    private static string Short(string value) => value.Length <= 240 ? value : value[..240];
+
+    public static CodexCommand ResolveCodexCommand(string? searchPath = null)
+    {
+        AiCliCommand command = AiCliProcess.Resolve("codex", searchPath);
+        return new(command.FileName, command.PrefixArguments, command.DisplayName);
+    }
+
+    private static async Task<ProcessResult> RunCodexCommandAsync(CodexCommand command, IReadOnlyList<string> arguments, int timeoutSeconds, CancellationToken cancellationToken)
+    {
+        ProcessStartInfo info = new(command.FileName)
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (string argument in command.PrefixArguments.Concat(arguments)) info.ArgumentList.Add(argument);
+        using Process process = new() { StartInfo = info };
+        process.Start();
+        using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
+        Task<string> output = process.StandardOutput.ReadToEndAsync(timeout.Token);
+        Task<string> error = process.StandardError.ReadToEndAsync(timeout.Token);
+        try { await process.WaitForExitAsync(timeout.Token); }
+        catch (OperationCanceledException)
+        {
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            return new(124, string.Empty, $"Codex CLI status check exceeded {timeoutSeconds} seconds.");
+        }
+        return new(process.ExitCode, (await output).Trim(), (await error).Trim());
+    }
+
+    private sealed record ProcessResult(int ExitCode, string Output, string Error);
+}

@@ -20,7 +20,9 @@ if ($Area -eq 'ui') {
 }
 if ($Area -eq 'generate') {
     if ([string]::IsNullOrWhiteSpace($Command) -or [string]::IsNullOrWhiteSpace($Project)) { throw 'Cách dùng: .\toolqc.ps1 generate <project> <source-path>' }
-    & dotnet run --project (Join-Path $root 'runner\AutoTest.Generator\AutoTest.Generator.csproj') -c Release -- --project $Command --source $Project
+    $arguments = @('run', '--project', (Join-Path $root 'runner\AutoTest.Generator\AutoTest.Generator.csproj'), '-c', 'Release', '--', '--project', $Command, '--source', $Project)
+    if (-not [string]::IsNullOrWhiteSpace($Name)) { $arguments += @('--mode', $Name) }
+    & dotnet @arguments
     exit $LASTEXITCODE
 }
 if ($Area -eq 'coverage') {

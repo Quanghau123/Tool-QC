@@ -11,10 +11,13 @@ public sealed class SourceContractAnalyzer
 {
     private static readonly HashSet<string> HttpAttributes = new(StringComparer.OrdinalIgnoreCase) { "HttpGet", "HttpPost", "HttpPut", "HttpDelete", "HttpPatch" };
 
-    public GeneratorAnalysis Analyze(string sourceDirectory)
+    public GeneratorAnalysis Analyze(string sourceDirectory, string? module = null)
     {
         string root = Path.GetFullPath(sourceDirectory);
-        string[] files = Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories).Where(path => IsSourceFile(root, path)).ToArray();
+        string[] sourceFiles = Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)
+            .Where(path => IsSourceFile(root, path))
+            .ToArray();
+        string[] files = SelectModuleFiles(root, sourceFiles, module);
         List<string> warnings = [];
         List<SyntaxTree> trees = [];
         List<CompilationUnitSyntax> roots = [];
@@ -42,10 +45,25 @@ public sealed class SourceContractAnalyzer
         {
             string prefix = parts.Select(ControllerRoute).FirstOrDefault(route => route is not null) ?? InheritedRoute(parts, inheritedRoutes) ?? string.Empty;
             bool authorize = parts.Any(part => HasAttribute(part.AttributeLists, "Authorize"));
-            foreach (ClassDeclarationSyntax controller in parts) endpoints.AddRange(ReadController(root, controller, validations, prefix, authorize, compilation));
+            foreach (ClassDeclarationSyntax controller in parts)
+                if (string.IsNullOrWhiteSpace(module) || IsDirectModuleFile(root, controller.SyntaxTree.FilePath, module))
+                    endpoints.AddRange(ReadController(root, controller, validations, prefix, authorize, compilation));
         }
         EndpointContract[] ordered = endpoints.OrderBy(endpoint => endpoint.Path).ThenBy(endpoint => endpoint.Method).ToArray();
-        return new(root, files.Length, ordered, types, warnings, DiscoverAuthentication(ordered, types));
+        return new(root, files.Length, ordered, types, warnings, DiscoverAuthentication(ordered, types)) { SelectedModule = NullIfEmpty(module ?? string.Empty) };
+    }
+
+    public static IReadOnlyList<string> DiscoverModules(string sourceDirectory)
+    {
+        string root = Path.GetFullPath(sourceDirectory);
+        return Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)
+            .Where(path => IsSourceFile(root, path))
+            .Select(path => ModuleName(root, path))
+            .OfType<string>()
+            .Where(module => !string.IsNullOrWhiteSpace(module))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(module => module, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static IEnumerable<EndpointContract> ReadController(string root, ClassDeclarationSyntax controller, Dictionary<string, List<ValidationContract>> validations, string prefix, bool controllerAuthorize, CSharpCompilation compilation)
@@ -288,4 +306,61 @@ public sealed class SourceContractAnalyzer
     private static string Camel(string value) => string.IsNullOrEmpty(value) ? value : char.ToLowerInvariant(value[0]) + value[1..];
     private static string? NullIfEmpty(string value) => string.IsNullOrWhiteSpace(value) ? null : value;
     private static bool IsSourceFile(string root, string path) { string relative = Path.GetRelativePath(root, path); string[] ignored = ["bin", "obj", ".git", ".claude", ".codex", ".agents", "node_modules", ".artifacts", "test-results"]; return !relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(segment => ignored.Contains(segment, StringComparer.OrdinalIgnoreCase)); }
+    private static bool IsModuleFile(string root, string path, string? module)
+    {
+        if (string.IsNullOrWhiteSpace(module)) return true;
+        if (IsDirectModuleFile(root, path, module)) return true;
+        string fileName = Path.GetFileName(path);
+        return fileName is "BaseController.cs" or "GlobalUsings.cs" or "Program.cs" or "Startup.cs";
+    }
+
+    private static bool IsDirectModuleFile(string root, string path, string module)
+    {
+        string[] segments = Path.GetRelativePath(root, path).Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (segments.Any(segment => segment.Equals(module, StringComparison.OrdinalIgnoreCase))) return true;
+        string file = Path.GetFileNameWithoutExtension(path);
+        string[] fileParts = file.Split(['.', '-', '_'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return fileParts.Any(part => part.Equals(module, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string[] SelectModuleFiles(string root, string[] sourceFiles, string? module)
+    {
+        if (string.IsNullOrWhiteSpace(module)) return sourceFiles;
+        HashSet<string> selected = sourceFiles
+            .Where(path => IsModuleFile(root, path, module))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> controllerNames = selected
+            .SelectMany(path => CSharpSyntaxTree.ParseText(File.ReadAllText(path), path: path).GetCompilationUnitRoot()
+                .DescendantNodes().OfType<ClassDeclarationSyntax>())
+            .Where(IsController)
+            .Select(ControllerKey)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (controllerNames.Count == 0) return selected.ToArray();
+        foreach (string path in sourceFiles)
+        {
+            if (selected.Contains(path)) continue;
+            CompilationUnitSyntax syntax = CSharpSyntaxTree.ParseText(File.ReadAllText(path), path: path).GetCompilationUnitRoot();
+            if (syntax.DescendantNodes().OfType<ClassDeclarationSyntax>().Any(controller =>
+                controllerNames.Contains(ControllerKey(controller)) && IsControllerContractRoot(path, controller)))
+                selected.Add(path);
+        }
+        return selected.ToArray();
+    }
+
+    private static bool IsControllerContractRoot(string path, ClassDeclarationSyntax controller)
+    {
+        string expectedFileName = controller.Identifier.ValueText + ".cs";
+        return Path.GetFileName(path).Equals(expectedFileName, StringComparison.OrdinalIgnoreCase)
+            || controller.AttributeLists.SelectMany(list => list.Attributes).Any(attribute =>
+                AttributeName(attribute) is "Route" or "Authorize");
+    }
+    private static string? ModuleName(string root, string path)
+    {
+        string[] segments = Path.GetRelativePath(root, path).Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        int controller = Array.FindIndex(segments, segment => segment.Equals("Controllers", StringComparison.OrdinalIgnoreCase));
+        if (controller >= 0 && controller + 1 < segments.Length - 1) return segments[controller + 1];
+        int module = Array.FindIndex(segments, segment => segment.Equals("Modules", StringComparison.OrdinalIgnoreCase));
+        if (module >= 0 && module + 1 < segments.Length - 1) return segments[module + 1];
+        return null;
+    }
 }

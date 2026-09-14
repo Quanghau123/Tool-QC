@@ -79,6 +79,17 @@ app.MapPost("/api/projects/{project}/environment/check", async (string project) 
     return Results.Ok(await UiSupport.CheckConnectionsAsync(root, projectDir));
 });
 
+app.MapGet("/api/generator/status", async (string? provider) =>
+{
+    string selectedProvider = string.IsNullOrWhiteSpace(provider) ? "codex-cli" : provider;
+    ProcessResult result = await RunGeneratorAsync(root, ["--ai-status", "--provider", selectedProvider]);
+    if (result.ExitCode != 0)
+        return Results.Ok(new { provider = selectedProvider, available = false, authenticated = false, message = result.StandardError });
+    if (!TryExtractJson(result.StandardOutput, out string statusJson, out string statusError))
+        return Results.Ok(new { provider = selectedProvider, available = false, authenticated = false, message = statusError });
+    return Results.Text(statusJson, "application/json");
+});
+
 app.MapPost("/api/projects/{project}/generate", async (string project, GenerateRequest request) =>
 {
     _ = SafeProjectDirectory(root, project);
@@ -98,12 +109,35 @@ app.MapPost("/api/projects/{project}/generate/analyze", async (string project, G
     _ = SafeProjectDirectory(root, project);
     if (string.IsNullOrWhiteSpace(request.SourcePath) || !Directory.Exists(request.SourcePath))
         return Results.BadRequest(new { code = "TQC-GEN-001", message = "The source directory does not exist." });
-    ProcessResult result = await RunGeneratorAsync(root, ["--source", request.SourcePath, "--project", project, "--analyze"]);
+    List<string> arguments = ["--source", request.SourcePath, "--project", project, "--analyze", "--mode", request.Mode ?? "local", "--provider", request.Provider ?? "codex-cli"];
+    if (!string.IsNullOrWhiteSpace(request.Module)) arguments.AddRange(["--module", request.Module]);
+    ProcessResult result = await RunGeneratorAsync(root, arguments);
     if (result.ExitCode != 0)
-        return Results.BadRequest(new { code = "TQC-GEN-002", message = "Source analysis failed.", detail = result.StandardError });
+    {
+        string detail = CleanGeneratorError(result.StandardError);
+        if (detail.Contains("Codex CLI exceeded", StringComparison.OrdinalIgnoreCase))
+            return Results.BadRequest(new
+            {
+                code = "TQC-GEN-AI-004",
+                message = "AI source analysis timed out.",
+                detail = "Source quá lớn để AI phân tích toàn bộ trong một lượt. Chọn Phạm vi phân tích = Theo module, chọn một module rồi chạy lại; hoặc chọn chế độ Chuyên sâu — ưu tiên AI để tự quay về Roslyn khi AI quá thời gian.",
+            });
+        return Results.BadRequest(new { code = "TQC-GEN-002", message = "Source analysis failed.", detail });
+    }
     if (!TryExtractJson(result.StandardOutput, out string analysisJson, out string analysisError))
         return Results.BadRequest(new { code = "TQC-GEN-007", message = "Source analysis returned invalid JSON.", detail = analysisError });
     return Results.Text(analysisJson, "application/json");
+});
+
+app.MapPost("/api/projects/{project}/generate/modules", async (string project, GenerateRequest request) =>
+{
+    _ = SafeProjectDirectory(root, project);
+    if (string.IsNullOrWhiteSpace(request.SourcePath) || !Directory.Exists(request.SourcePath))
+        return Results.BadRequest(new { code = "TQC-GEN-001", message = "The source directory does not exist." });
+    ProcessResult result = await RunGeneratorAsync(root, ["--source", request.SourcePath, "--project", project, "--list-modules"]);
+    if (result.ExitCode != 0) return Results.BadRequest(new { code = "TQC-GEN-010", message = "Source module discovery failed.", detail = result.StandardError });
+    if (!TryExtractJson(result.StandardOutput, out string modulesJson, out string modulesError)) return Results.BadRequest(new { code = "TQC-GEN-011", message = "Module discovery returned invalid JSON.", detail = modulesError });
+    return Results.Text(modulesJson, "application/json");
 });
 
 app.MapPost("/api/projects/{project}/generate/draft", async (string project, GenerateDraftRequest request) =>
@@ -112,12 +146,13 @@ app.MapPost("/api/projects/{project}/generate/draft", async (string project, Gen
     if (string.IsNullOrWhiteSpace(request.SourcePath) || !Directory.Exists(request.SourcePath))
         return Results.BadRequest(new { code = "TQC-GEN-001", message = "The source directory does not exist." });
     string output = Path.Combine(root, ".artifacts", "generated-testcases", project, $"source-draft-{DateTime.Now:yyyyMMdd-HHmmss}.json");
-    List<string> arguments = ["--source", request.SourcePath, "--project", project, "--output", output];
+    List<string> arguments = ["--source", request.SourcePath, "--project", project, "--output", output, "--mode", request.Mode ?? "auto", "--provider", request.Provider ?? "codex-cli"];
     if (request.EndpointIds is { Length: > 0 }) arguments.AddRange(["--include", string.Join(',', request.EndpointIds)]);
     ProcessResult result = await RunGeneratorAsync(root, arguments);
     string reviewId = Path.GetFileNameWithoutExtension(output);
+    GeneratorMetadata metadata = await ReadGeneratorMetadataAsync(output + ".meta.json");
     return result.ExitCode == 0
-        ? Results.Ok(new { reviewId, output, json = await File.ReadAllTextAsync(output), message = "The disabled testcase draft was generated successfully." })
+        ? Results.Ok(new { reviewId, output, json = await File.ReadAllTextAsync(output), message = metadata.Message, provider = metadata.Provider, aiUsed = metadata.AiUsed, fellBack = metadata.FellBack })
         : Results.BadRequest(new { code = "TQC-GEN-003", message = "Testcase draft generation failed.", detail = result.StandardError });
 });
 
@@ -143,6 +178,68 @@ app.MapPost("/api/projects/{project}/generate/preflight", async (string project,
             warnings = officialCheck.ExitCode == 0 ? Array.Empty<string>() : PreflightLines(officialCheck),
         })
         : Results.BadRequest(new { code = "TQC-GEN-005", message = "Testcase preflight failed.", detail = string.Join(Environment.NewLine, new[] { result.StandardError, result.StandardOutput }.Where(value => !string.IsNullOrWhiteSpace(value))) });
+});
+
+app.MapPost("/api/projects/{project}/generate/repair", async (string project, RepairDraftRequest request) =>
+{
+    _ = SafeProjectDirectory(root, project);
+    if (string.IsNullOrWhiteSpace(request.SourcePath) || !Directory.Exists(request.SourcePath))
+        return Results.BadRequest(new { code = "TQC-GEN-001", message = "The source directory does not exist." });
+    string reviewId = SafeName(request.ReviewId, "review");
+    string directory = Path.Combine(root, ".artifacts", "generated-testcases", project, "repair", reviewId);
+    Directory.CreateDirectory(directory);
+    string currentJson = request.Json;
+    int maximumRepairs = Math.Clamp(request.MaxAttempts, 1, 10);
+    List<object> attempts = [];
+    for (int repairCount = 0; repairCount <= maximumRepairs; repairCount++)
+    {
+        if (!TryNormalizeDraft(currentJson, project, activate: false, out string normalized, out string normalizeError))
+            return Results.BadRequest(new { code = "TQC-GEN-004", message = "The draft JSON is invalid.", detail = normalizeError });
+        string attemptDirectory = Path.Combine(directory, $"check-{repairCount + 1:00}");
+        Directory.CreateDirectory(attemptDirectory);
+        string suitePath = Path.Combine(attemptDirectory, "suite.json");
+        await File.WriteAllTextAsync(suitePath, normalized);
+        ProcessResult preflight = await RunRunnerPreflightAsync(root, project, attemptDirectory, requireCompleteCoverage: false);
+        if (preflight.ExitCode == 0)
+        {
+            ProcessResult official = await RunRunnerPreflightAsync(root, project, attemptDirectory, requireCompleteCoverage: true);
+            return Results.Ok(new
+            {
+                repaired = repairCount > 0,
+                attempts = repairCount,
+                json = normalized,
+                readyToSave = official.ExitCode == 0,
+                warnings = official.ExitCode == 0 ? Array.Empty<string>() : PreflightLines(official),
+                history = attempts,
+                message = $"Testcase passed preflight after {repairCount} repair round(s).",
+            });
+        }
+        string[] issues = PreflightLines(preflight);
+        attempts.Add(new { check = repairCount + 1, repairCount, issues });
+        if (repairCount == maximumRepairs)
+            break;
+        string issuesPath = Path.Combine(attemptDirectory, "issues.json");
+        string repairedPath = Path.Combine(attemptDirectory, "repaired.json");
+        await File.WriteAllTextAsync(issuesPath, JsonSerializer.Serialize(issues, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        ProcessResult repair = await RunGeneratorAsync(root,
+        [
+            "--repair-draft", "--source", request.SourcePath, "--project", project,
+            "--draft", suitePath, "--issues", issuesPath, "--output", repairedPath,
+            "--provider", request.Provider ?? "codex-cli",
+        ]);
+        if (repair.ExitCode != 0)
+            return Results.BadRequest(new { code = "TQC-GEN-AI-006", message = "AI testcase repair failed.", detail = CleanGeneratorError(repair.StandardError), attempts = repairCount + 1, history = attempts });
+        currentJson = await File.ReadAllTextAsync(repairedPath);
+    }
+    return Results.BadRequest(new
+    {
+        code = "TQC-GEN-012",
+        message = "Automatic testcase repair reached the attempt limit.",
+        detail = $"AI đã sửa và kiểm tra lại {maximumRepairs} vòng nhưng preflight vẫn còn lỗi. JSON cuối được giữ lại để kiểm tra thủ công.",
+        json = currentJson,
+        attempts = maximumRepairs,
+        history = attempts,
+    });
 });
 
 app.MapPost("/api/projects/{project}/generate/activate", async (string project, ActivateDraftRequest request) =>
@@ -406,6 +503,25 @@ static async Task<ProcessResult> RunGeneratorAsync(string root, IEnumerable<stri
     return new(process.ExitCode, output.Trim(), error.Trim());
 }
 
+static async Task<GeneratorMetadata> ReadGeneratorMetadataAsync(string path)
+{
+    if (!File.Exists(path)) return new("local-roslyn", false, false, "The testcase draft was generated successfully.");
+    try
+    {
+        using JsonDocument document = JsonDocument.Parse(await File.ReadAllTextAsync(path));
+        JsonElement root = document.RootElement;
+        return new(
+            root.TryGetProperty("provider", out JsonElement provider) ? provider.GetString() ?? "local-roslyn" : "local-roslyn",
+            root.TryGetProperty("aiUsed", out JsonElement aiUsed) && aiUsed.GetBoolean(),
+            root.TryGetProperty("fellBack", out JsonElement fellBack) && fellBack.GetBoolean(),
+            root.TryGetProperty("message", out JsonElement message) ? message.GetString() ?? "The testcase draft was generated successfully." : "The testcase draft was generated successfully.");
+    }
+    catch
+    {
+        return new("local-roslyn", false, false, "The testcase draft was generated successfully.");
+    }
+}
+
 static async Task<ProcessResult> RunRunnerPreflightAsync(string root, string project, string testcaseDirectory, bool requireCompleteCoverage)
 {
     string runnerDll = Path.Combine(root, "runner", "AutoTest.Runner", "bin", "Release", "net8.0", "AutoTest.Runner.dll");
@@ -439,6 +555,16 @@ static string[] PreflightLines(ProcessResult result) => string.Join(
     .Where(line => !line.StartsWith("Preflight phát hiện", StringComparison.OrdinalIgnoreCase))
     .Select(line => line.TrimStart('-', ' '))
     .ToArray();
+
+static string CleanGeneratorError(string error)
+{
+    string[] lines = error.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    string? useful = lines.FirstOrDefault(line => !line.StartsWith("at ", StringComparison.OrdinalIgnoreCase)
+        && !line.StartsWith("---", StringComparison.OrdinalIgnoreCase)
+        && !line.Contains("Program.<Main>", StringComparison.OrdinalIgnoreCase));
+    return useful?.Replace("Unhandled exception. ", string.Empty, StringComparison.OrdinalIgnoreCase)
+        ?? "The generator failed without a diagnostic message.";
+}
 
 static bool TryNormalizeDraft(string json, string project, bool activate, out string normalized, out string error)
 {
@@ -545,15 +671,17 @@ static ProcessStartInfo Utf8Process(string fileName, string workingDirectory) =>
 sealed record RunRequest(string Project, string[]? CaseIds, bool SequentialChain = false);
 sealed record TestItem(string Id, string Name, string[] Tags, bool Destructive, string Group, int StepCount);
 sealed record EnvironmentUpdate(Dictionary<string, string> Values);
-sealed record GenerateRequest(string SourcePath);
-sealed record GenerateDraftRequest(string SourcePath, string[]? EndpointIds);
+sealed record GenerateRequest(string SourcePath, string? Mode = "local", string? Module = null, string? Provider = "codex-cli");
+sealed record GenerateDraftRequest(string SourcePath, string[]? EndpointIds, string? Mode = "auto", string? Provider = "codex-cli");
 sealed record DraftContentRequest(string ReviewId, string Json, bool SequentialChain = false);
+sealed record RepairDraftRequest(string ReviewId, string Json, string SourcePath, string? Provider = "codex-cli", int MaxAttempts = 5);
 sealed record ActivateDraftRequest(string ReviewId, string Json, string? Group, string? FileName);
 sealed record ProcessResult(int ExitCode, string StandardOutput, string StandardError);
 sealed record MessageScanRequest(string SourcePath);
 sealed record EnvironmentDefinition(string Key, string Group, string Scope, string DefaultValue);
 sealed record EnvironmentGroup(string Name, EnvironmentVariable[] Variables);
 sealed record EnvironmentVariable(string Key, string Value, string Source, bool Secret, bool Configured);
+sealed record GeneratorMetadata(string Provider, bool AiUsed, bool FellBack, string Message);
 
 sealed class RunState(string id, string project, string[] caseIds, DateTimeOffset startedAt, string historyDirectory, string? testcaseDirectory = null, bool sequentialChain = false)
 {
