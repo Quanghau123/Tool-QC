@@ -2,13 +2,34 @@
   const byId = id => document.getElementById(id);
   const generatorMode = document.querySelector('.generator-mode');
   const analysisOptions = document.querySelector('.analysis-options');
-  if (generatorMode && analysisOptions) analysisOptions.after(generatorMode);
-
   const providerStatus = byId('generatorProvider');
   if (generatorMode && providerStatus && !byId('draftRepairMode')) {
     const repairModeLabel = document.createElement('label');
     repairModeLabel.innerHTML = 'Xử lý lỗi testcase<select id="draftRepairMode"><option value="auto">Tự sửa bằng AI và kiểm tra lại</option><option value="manual">Chỉ báo lỗi để sửa thủ công</option></select>';
     generatorMode.insertBefore(repairModeLabel, providerStatus);
+  }
+
+  const guide = document.querySelector('.generator-guide');
+  const providerLabel = byId('generatorAiProvider')?.closest('label');
+  const generationLabel = byId('generatorMode')?.closest('label');
+  const repairModeLabel = byId('draftRepairMode')?.closest('label');
+  if (guide && generatorMode && analysisOptions && providerLabel && generationLabel && repairModeLabel && providerStatus) {
+    const createGroup = (className, title, description) => {
+      const section = document.createElement('section');
+      section.className = `generator-config-group ${className}`;
+      section.innerHTML = `<div class="generator-config-heading"><b>${title}</b><small>${description}</small></div><div class="generator-config-fields"></div>`;
+      return section;
+    };
+    const aiGroup = createGroup('ai-provider-group', '1. Chọn AI', 'AI đọc source, bổ sung rule nghiệp vụ và hỗ trợ sửa testcase.');
+    const analysisGroup = createGroup('analysis-group', '2. Phân tích source', 'Chọn mức độ và phạm vi source cần phân tích.');
+    const generationGroup = createGroup('generation-group', '3. Sinh và kiểm tra testcase', 'Chọn cách sinh bản nháp và cách xử lý lỗi của testcase.');
+    aiGroup.querySelector('.generator-config-fields').append(providerLabel, providerStatus);
+    analysisGroup.querySelector('.generator-config-fields').append(...analysisOptions.querySelectorAll('label'));
+    generationGroup.querySelector('.generator-config-fields').append(generationLabel, repairModeLabel);
+    guide.before(aiGroup);
+    guide.after(analysisGroup, generationGroup);
+    generatorMode.remove();
+    analysisOptions.remove();
   }
 
   const toolbar = document.querySelector('#draftEditor .toolbar-buttons');
