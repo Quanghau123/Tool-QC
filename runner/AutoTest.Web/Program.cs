@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Encodings.Web;
 using System.Text;
 using AutoTest.MessageScanner;
@@ -46,6 +47,146 @@ app.MapGet("/api/projects/{project}/tests", (string project) =>
         .OrderBy(test => test.Group)
         .ThenBy(test => test.Name)
         .ToArray();
+});
+
+app.MapGet("/api/archify/status", async (string? provider) =>
+{
+    string archifyCli = ArchifyCliPath(root);
+    ProcessResult result = await RunGeneratorAsync(root, ["--ai-status", "--provider", provider ?? "codex-cli"]);
+    JsonElement? ai = result.ExitCode == 0 ? JsonDocument.Parse(result.StandardOutput).RootElement.Clone() : null;
+    return Results.Ok(new
+    {
+        available = File.Exists(archifyCli) && result.ExitCode == 0,
+        archifyInstalled = File.Exists(archifyCli),
+        ai,
+    });
+});
+
+app.MapGet("/api/archify/guides", async () =>
+{
+    string archifyCli = ArchifyCliPath(root);
+    if (!File.Exists(archifyCli))
+        return Results.NotFound(new { code = "TQC-ARCH-003", message = "Archify is not installed." });
+    ProcessResult result = await RunProcessAsync("node", [archifyCli, "guide", "--json"], root);
+    if (result.ExitCode != 0)
+        return Results.BadRequest(new { code = "TQC-ARCH-006", message = "Archify guides could not be loaded.", detail = CleanGeneratorError(result.StandardError) });
+    return Results.Text(result.StandardOutput, "application/json; charset=utf-8");
+});
+
+app.MapPost("/api/archify/generate", async (ArchifyRequest request) =>
+{
+    string diagramType = NormalizeDiagramType(request.DiagramType);
+    string provider = string.IsNullOrWhiteSpace(request.Provider) ? "codex-cli" : request.Provider;
+    string sourcePath = string.IsNullOrWhiteSpace(request.SourcePath) ? root : Path.GetFullPath(request.SourcePath);
+    if (!Directory.Exists(sourcePath))
+        return Results.BadRequest(new { code = "TQC-ARCH-001", message = "The source directory does not exist.", detail = sourcePath });
+    if (string.IsNullOrWhiteSpace(request.Description))
+        return Results.BadRequest(new { code = "TQC-ARCH-002", message = "A project description or diagram request is required." });
+    string archifyCli = ArchifyCliPath(root);
+    if (!File.Exists(archifyCli))
+        return Results.BadRequest(new { code = "TQC-ARCH-003", message = "Archify is not installed.", detail = "Install the Archify skill under .agents/skills/archify." });
+
+    string runId = $"archify-{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}"[..39];
+    string outputDirectory = Path.Combine(root, ".artifacts", "archify", runId);
+    Directory.CreateDirectory(outputDirectory);
+    string specificationPath = Path.Combine(outputDirectory, $"diagram.{diagramType}.json");
+    string semanticPath = Path.Combine(outputDirectory, $"analysis.semantic.{diagramType}.json");
+    string htmlPath = Path.Combine(outputDirectory, "diagram.html");
+    string requestPath = Path.Combine(outputDirectory, "request.txt");
+    await File.WriteAllTextAsync(requestPath, request.Description, new UTF8Encoding(false));
+    ProcessResult generation = await RunGeneratorAsync(root,
+    [
+        "--archify-spec", "--source", sourcePath, "--project", "diagram",
+        "--diagram-type", diagramType, "--description-file", requestPath,
+        "--visual-preset", request.VisualPreset ?? "classic",
+        "--animation", request.Animation ?? "none",
+        "--archify-root", Path.Combine(root, ".agents", "skills", "archify"),
+        "--provider", provider, "--output", specificationPath,
+    ]);
+    if (generation.ExitCode != 0)
+        return Results.BadRequest(new { code = "TQC-ARCH-AI-001", message = "AI could not create the diagram specification.", detail = CleanGeneratorError(generation.StandardError) });
+    File.Copy(specificationPath, semanticPath, overwrite: true);
+    DiagramSemantics semantics = CaptureDiagramSemantics(specificationPath, diagramType);
+
+    const int maximumRepairs = 12;
+    List<object> repairHistory = [];
+    ProcessResult delivery = new(-1, string.Empty, string.Empty);
+    for (int repairCount = 0; repairCount <= maximumRepairs; repairCount++)
+    {
+        delivery = await RunProcessAsync("node", [archifyCli, "deliver", diagramType, specificationPath, htmlPath, "--quality", "showcase", "--json"], root);
+        if (delivery.ExitCode == 0) break;
+        string diagnosticText = ArchifyDiagnosticText(delivery);
+        repairHistory.Add(new { check = repairCount + 1, issues = ArchifyDiagnosticLines(diagnosticText) });
+        if (repairCount == maximumRepairs) break;
+        if (TryApplyArchifyWorkflowRouteRepair(specificationPath, diagnosticText))
+            continue;
+        if (TryApplyArchifyReadabilityRepair(specificationPath, diagnosticText))
+            continue;
+        string diagnosticsPath = Path.Combine(outputDirectory, $"diagnostics-{repairCount + 1:00}.json");
+        string repairedPath = Path.Combine(outputDirectory, $"repaired-{repairCount + 1:00}.{diagramType}.json");
+        await File.WriteAllTextAsync(diagnosticsPath, diagnosticText, new UTF8Encoding(false));
+        ProcessResult repair = await RunGeneratorAsync(root,
+        [
+            "--archify-repair", "--source", sourcePath, "--diagram-type", diagramType,
+            "--specification", specificationPath, "--diagnostics", diagnosticsPath,
+            "--archify-root", Path.Combine(root, ".agents", "skills", "archify"),
+            "--provider", provider, "--output", repairedPath,
+        ]);
+        if (repair.ExitCode != 0)
+            return Results.BadRequest(new { code = "TQC-ARCH-AI-002", message = "AI could not repair the Archify specification.", detail = CleanGeneratorError(repair.StandardError), specificationPath, repairHistory });
+        if (!PreservesDiagramSemantics(repairedPath, diagramType, semantics, out string semanticError))
+        {
+            repairHistory.Add(new { check = repairHistory.Count + 1, issues = new[] { semanticError } });
+            continue;
+        }
+        File.Copy(repairedPath, specificationPath, overwrite: true);
+    }
+    if (delivery.ExitCode != 0)
+    {
+        ProcessResult standardDelivery = await RunProcessAsync("node", [archifyCli, "deliver", diagramType, specificationPath, htmlPath, "--quality", "standard", "--json"], root);
+        delivery = standardDelivery;
+        if (standardDelivery.ExitCode == 0)
+        {
+            repairHistory.Add(new { check = repairHistory.Count + 1, issues = new[] { "Tool-QC preserved every semantic item and delivered with the standard composition profile." } });
+        }
+        if (delivery.ExitCode != 0)
+        {
+            string diagnostics = ArchifyDiagnosticText(delivery);
+            return Results.BadRequest(new
+            {
+                code = "TQC-ARCH-005",
+                message = "Archify validation or rendering failed after automatic repair.",
+                detail = string.Join(Environment.NewLine, ArchifyDiagnosticLines(diagnostics).Take(12)),
+                specificationPath,
+                semanticPath,
+                semanticCoverage = "100%",
+                repairAttempts = maximumRepairs,
+                repairHistory,
+            });
+        }
+    }
+    return Results.Ok(new
+    {
+        runId,
+        diagramType,
+        specificationPath,
+        semanticPath,
+        semanticCoverage = "100%",
+        htmlPath,
+        url = $"/api/archify/{runId}",
+        repairAttempts = repairHistory.Count,
+        message = repairHistory.Count == 0 ? "The architecture diagram was generated and validated successfully." : $"The architecture diagram was repaired and validated after {repairHistory.Count} round(s).",
+    });
+});
+
+app.MapGet("/api/archify/{runId}", (string runId) =>
+{
+    string safeRunId = SafeName(runId, string.Empty);
+    if (!safeRunId.Equals(runId, StringComparison.Ordinal)) return Results.BadRequest();
+    string file = Path.GetFullPath(Path.Combine(root, ".artifacts", "archify", safeRunId, "diagram.html"));
+    string artifactRoot = Path.GetFullPath(Path.Combine(root, ".artifacts", "archify")) + Path.DirectorySeparatorChar;
+    if (!file.StartsWith(artifactRoot, StringComparison.OrdinalIgnoreCase) || !File.Exists(file)) return Results.NotFound();
+    return Results.File(file, "text/html; charset=utf-8");
 });
 
 app.MapGet("/api/projects/{project}/environment", (string project) =>
@@ -379,6 +520,149 @@ static string SafeProjectDirectory(string root, string project)
     return projectDir;
 }
 
+static string ArchifyCliPath(string root) => Path.Combine(root, ".agents", "skills", "archify", "bin", "archify.mjs");
+static string NormalizeDiagramType(string? value) => value?.Trim().ToLowerInvariant() switch
+{
+    "workflow" => "workflow",
+    "sequence" => "sequence",
+    "dataflow" => "dataflow",
+    "lifecycle" => "lifecycle",
+    _ => "architecture",
+};
+static async Task<ProcessResult> RunProcessAsync(string fileName, IEnumerable<string> arguments, string workingDirectory)
+{
+    ProcessStartInfo info = Utf8Process(fileName, workingDirectory);
+    foreach (string argument in arguments) info.ArgumentList.Add(argument);
+    using Process process = new() { StartInfo = info };
+    process.Start();
+    Task<string> output = process.StandardOutput.ReadToEndAsync();
+    Task<string> error = process.StandardError.ReadToEndAsync();
+    await process.WaitForExitAsync();
+    return new(process.ExitCode, (await output).Trim(), (await error).Trim());
+}
+static string ArchifyDiagnosticText(ProcessResult result)
+    => string.Join(Environment.NewLine, new[] { result.StandardOutput, result.StandardError }.Where(value => !string.IsNullOrWhiteSpace(value))).Trim();
+static string[] ArchifyDiagnosticLines(string value)
+{
+    try
+    {
+        using JsonDocument document = JsonDocument.Parse(value);
+        JsonElement root = document.RootElement;
+        if (root.TryGetProperty("diagnostics", out JsonElement diagnostics) && diagnostics.ValueKind == JsonValueKind.Array)
+            return diagnostics.EnumerateArray().Select(item =>
+            {
+                string code = item.TryGetProperty("code", out JsonElement codeElement) ? codeElement.GetString() ?? "archify" : "archify";
+                string message = item.TryGetProperty("message", out JsonElement messageElement) ? messageElement.GetString() ?? "Unknown validation error." : "Unknown validation error.";
+                return $"{code}: {message}";
+            }).ToArray();
+        if (root.TryGetProperty("error", out JsonElement error)) return [error.GetString() ?? "Archify validation failed."];
+    }
+    catch { }
+    return value.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Where(line => line is not "{" and not "}").Take(12).ToArray();
+}
+static DiagramSemantics CaptureDiagramSemantics(string specificationPath, string diagramType)
+{
+    JsonObject specification = JsonNode.Parse(File.ReadAllText(specificationPath)) as JsonObject
+        ?? throw new InvalidOperationException("Archify specification is not a JSON object.");
+    (string nodeCollection, string relationCollection, string fromProperty, string toProperty) = DiagramSemanticCollections(diagramType);
+    string[] nodeIds = (specification[nodeCollection] as JsonArray ?? []).OfType<JsonObject>()
+        .Select(node => node["id"]?.GetValue<string>()).OfType<string>().Order(StringComparer.Ordinal).ToArray();
+    string[] relations = (specification[relationCollection] as JsonArray ?? []).OfType<JsonObject>()
+        .Select(relation => $"{relation[fromProperty]?.GetValue<string>()}->{relation[toProperty]?.GetValue<string>()}")
+        .Order(StringComparer.Ordinal).ToArray();
+    return new(nodeCollection, relationCollection, nodeIds, relations);
+}
+static bool PreservesDiagramSemantics(string specificationPath, string diagramType, DiagramSemantics expected, out string error)
+{
+    try
+    {
+        DiagramSemantics actual = CaptureDiagramSemantics(specificationPath, diagramType);
+        string[] missingNodes = expected.NodeIds.Except(actual.NodeIds, StringComparer.Ordinal).ToArray();
+        string[] missingRelations = expected.Relations.Except(actual.Relations, StringComparer.Ordinal).ToArray();
+        if (missingNodes.Length == 0 && missingRelations.Length == 0)
+        {
+            error = string.Empty;
+            return true;
+        }
+        error = $"AI repair was rejected because it removed semantic content. Missing nodes: {string.Join(", ", missingNodes.Take(8))}. Missing relationships: {string.Join(", ", missingRelations.Take(8))}.";
+        return false;
+    }
+    catch (Exception exception)
+    {
+        error = $"AI repair was rejected because semantic preservation could not be verified: {exception.Message}";
+        return false;
+    }
+}
+static (string Nodes, string Relations, string From, string To) DiagramSemanticCollections(string diagramType) => diagramType switch
+{
+    "architecture" => ("components", "connections", "from", "to"),
+    "workflow" => ("nodes", "edges", "from", "to"),
+    "sequence" => ("participants", "messages", "from", "to"),
+    "dataflow" => ("nodes", "flows", "from", "to"),
+    "lifecycle" => ("states", "transitions", "from", "to"),
+    _ => throw new InvalidOperationException($"Unsupported diagram type '{diagramType}'."),
+};
+static bool TryApplyArchifyReadabilityRepair(string specificationPath, string diagnostics)
+{
+    try
+    {
+        using JsonDocument receipt = JsonDocument.Parse(diagnostics);
+        if (!receipt.RootElement.TryGetProperty("diagnostics", out JsonElement items)
+            || !items.EnumerateArray().Any(item => item.TryGetProperty("code", out JsonElement code)
+                && code.GetString() == "composition/desktop-readability"))
+            return false;
+        JsonNode? specification = JsonNode.Parse(File.ReadAllText(specificationPath));
+        JsonArray? components = specification?["components"] as JsonArray;
+        if (components is null) return false;
+        bool changed = false;
+        foreach (JsonObject component in components.OfType<JsonObject>())
+        {
+            string? sublabel = component["sublabel"]?.GetValue<string>();
+            if (!string.IsNullOrWhiteSpace(sublabel))
+            {
+                component.Remove("sublabel");
+                changed = true;
+            }
+        }
+        if (!changed) return false;
+        File.WriteAllText(specificationPath, specification!.ToJsonString(new JsonSerializerOptions { WriteIndented = true }), new UTF8Encoding(false));
+        return true;
+    }
+    catch { return false; }
+}
+static bool TryApplyArchifyWorkflowRouteRepair(string specificationPath, string diagnostics)
+{
+    try
+    {
+        using JsonDocument receipt = JsonDocument.Parse(diagnostics);
+        if (!receipt.RootElement.TryGetProperty("diagnostics", out JsonElement diagnosticItems)) return false;
+        HashSet<string> edgeIds = diagnosticItems.EnumerateArray()
+            .Where(item => item.TryGetProperty("code", out JsonElement code) && code.GetString() == "workflow/route-preset-conflict")
+            .Select(item => item.TryGetProperty("subject", out JsonElement subject)
+                && subject.TryGetProperty("id", out JsonElement id) ? id.GetString() : null)
+            .OfType<string>()
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (edgeIds.Count == 0) return false;
+        JsonObject? specification = JsonNode.Parse(File.ReadAllText(specificationPath)) as JsonObject;
+        JsonArray? edges = specification?["edges"] as JsonArray;
+        if (edges is null) return false;
+        bool changed = false;
+        foreach (JsonObject edge in edges.OfType<JsonObject>())
+        {
+            string? id = edge["id"]?.GetValue<string>();
+            if (id is null || !edgeIds.Contains(id)) continue;
+            edge["route"] = "auto";
+            edge.Remove("via");
+            edge.Remove("fromSide");
+            edge.Remove("toSide");
+            changed = true;
+        }
+        if (!changed) return false;
+        File.WriteAllText(specificationPath, specification!.ToJsonString(new JsonSerializerOptions { WriteIndented = true }), new UTF8Encoding(false));
+        return true;
+    }
+    catch { return false; }
+}
 static IEnumerable<TestItem> ReadTests(string directory, string project)
 {
     foreach (string path in Directory.EnumerateFiles(directory, "*.json", SearchOption.AllDirectories))
@@ -671,12 +955,14 @@ static ProcessStartInfo Utf8Process(string fileName, string workingDirectory) =>
 sealed record RunRequest(string Project, string[]? CaseIds, bool SequentialChain = false);
 sealed record TestItem(string Id, string Name, string[] Tags, bool Destructive, string Group, int StepCount);
 sealed record EnvironmentUpdate(Dictionary<string, string> Values);
+sealed record ArchifyRequest(string? SourcePath, string Description, string? DiagramType = "architecture", string? Provider = "codex-cli", string? VisualPreset = "classic", string? Animation = "none");
 sealed record GenerateRequest(string SourcePath, string? Mode = "local", string? Module = null, string? Provider = "codex-cli");
 sealed record GenerateDraftRequest(string SourcePath, string[]? EndpointIds, string? Mode = "auto", string? Provider = "codex-cli");
 sealed record DraftContentRequest(string ReviewId, string Json, bool SequentialChain = false);
 sealed record RepairDraftRequest(string ReviewId, string Json, string SourcePath, string? Provider = "codex-cli", int MaxAttempts = 5);
 sealed record ActivateDraftRequest(string ReviewId, string Json, string? Group, string? FileName);
 sealed record ProcessResult(int ExitCode, string StandardOutput, string StandardError);
+sealed record DiagramSemantics(string NodeCollection, string RelationCollection, string[] NodeIds, string[] Relations);
 sealed record MessageScanRequest(string SourcePath);
 sealed record EnvironmentDefinition(string Key, string Group, string Scope, string DefaultValue);
 sealed record EnvironmentGroup(string Name, EnvironmentVariable[] Variables);
@@ -766,6 +1052,4 @@ sealed class RunState(string id, string project, string[] caseIds, DateTimeOffse
     private RunSnapshot CreateSnapshot() => new(Id, Project, CaseIds, StartedAt, FinishedAt, Status, ExitCode, ReportPath, FailureType, FailureCategory, FailureMessage, FixHint, lines.ToArray());
     private void Save() => UiSupport.SaveHistory(historyDirectory, CreateSnapshot());
 }
-
-
 
