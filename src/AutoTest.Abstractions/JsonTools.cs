@@ -15,6 +15,21 @@ public static IReadOnlyList<JsonElement> SelectMany(JsonElement root,string path
  public static string Text(JsonElement v)=>v.ValueKind==JsonValueKind.String?v.GetString()!:v.GetRawText();
 }
 
+public static class JsonDisplay
+{
+ public static string Format(string? value)
+ {
+  if(string.IsNullOrWhiteSpace(value))return value??string.Empty;
+  try
+  {
+   using JsonDocument document=JsonDocument.Parse(value);
+   return JsonSerializer.Serialize(document.RootElement,new JsonSerializerOptions{WriteIndented=true});
+  }
+  catch(JsonException){return value;}
+ }
+}
+
+
 public static class JsonAssertionValues
 {
  public static bool Equal(JsonElement actual,JsonElement expected,string resolvedExpected)

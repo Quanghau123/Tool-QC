@@ -13,6 +13,7 @@ public sealed class RedisStepExecutor : ITestStepExecutor
     public bool CanExecute(StepSpec step) => step.Request?.Redis is not null;
 
     public async Task<StepRunResult> ExecuteAsync(StepExecutionContext context, CancellationToken cancellationToken)
+
     {
         Stopwatch watch = Stopwatch.StartNew();
         RedisRequestSpec request = context.Step.Request!.Redis!;
@@ -21,6 +22,23 @@ public sealed class RedisStepExecutor : ITestStepExecutor
         string connectionVariable = request.ConnectionStringVariable ?? "REDIS_CONNECTION_STRING";
         string expected = Describe(context.Step.Expect?.Redis, context.Step.Expect?.Json);
         string? actual = null;
+        string requestPayload = JsonSerializer.Serialize(new
+        {
+            command,
+            key,
+            field = request.Field is null ? null : Templates.Resolve(request.Field, context.Variables, context.Environment),
+            value = request.Value is null ? null : Templates.Resolve(request.Value, context.Variables, context.Environment),
+            group = request.Group is null ? null : Templates.Resolve(request.Group, context.Variables, context.Environment),
+            consumer = request.Consumer is null ? null : Templates.Resolve(request.Consumer, context.Variables, context.Environment),
+            payloadField = request.PayloadField is null ? null : Templates.Resolve(request.PayloadField, context.Variables, context.Environment),
+            filters = request.Filters?.ToDictionary(x => x.Key, x => Templates.Resolve(x.Value, context.Variables, context.Environment)),
+            count = request.Count,
+            blockMs = request.BlockMs,
+            ackMatch = request.AckMatch,
+            startId = request.StartId,
+            entries = request.Entries?.ToDictionary(x => x.Key, x => Templates.Resolve(x.Value, context.Variables, context.Environment))
+        }, new JsonSerializerOptions { WriteIndented = true });
+        requestPayload = context.Redact?.Invoke(requestPayload) ?? requestPayload;
         try
         {
             ConfigurationOptions options = ConfigurationOptions.Parse(context.Environment.Require(connectionVariable));
@@ -43,15 +61,15 @@ public sealed class RedisStepExecutor : ITestStepExecutor
                 await AssertAsync(database, key, actual, context.Step.Expect?.Redis);
                 if (command == "xreadgroup") AssertAndSaveJson(context, actual);
             }
-            return Result(true, actual, null);
+            return Result(true, JsonDisplay.Format(actual), null);
         }
         catch (Exception exception)
         {
-            return Result(false, actual, context.Redact?.Invoke(exception.Message) ?? exception.Message);
+            return Result(false, JsonDisplay.Format(actual), context.Redact?.Invoke(exception.Message) ?? exception.Message);
         }
 
         StepRunResult Result(bool passed, string? response, string? error) => new(context.Step.Name, context.Cleanup, passed,
-            $"REDIS {command.ToUpperInvariant()}", key, null, expected, null, response, watch.Elapsed, error);
+            $"REDIS {command.ToUpperInvariant()}", key, requestPayload, expected, null, response, watch.Elapsed, error);
     }
 
     private static async Task<string> ReadMatchingStreamEntryAsync(

@@ -18,6 +18,7 @@ public sealed class ElasticsearchStepExecutor : ITestStepExecutor
         => Templates.Resolve(request.Path, context.Variables, context.Environment);
 
     public async Task<StepRunResult> ExecuteAsync(StepExecutionContext context, CancellationToken cancellationToken)
+
     {
         var watch = Stopwatch.StartNew();
         ElasticsearchRequestSpec request = context.Step.Request!.Elasticsearch!;
@@ -25,6 +26,10 @@ public sealed class ElasticsearchStepExecutor : ITestStepExecutor
         string method = Templates.Resolve(request.Method, context.Variables, context.Environment);
         string path = ResolvePath(request, context);
         string expected = context.Step.Expect?.Status is int status ? $"HTTP {status}" : "HTTP thành công";
+        string? payload = request.Body is JsonElement body
+            ? Templates.Resolve(body.GetRawText(), context.Variables, context.Environment)
+            : null;
+        string? actual = null;
         try
         {
             using var client = new HttpClient { BaseAddress = new Uri(context.Environment.Require(urlVariable)) };
@@ -34,22 +39,19 @@ public sealed class ElasticsearchStepExecutor : ITestStepExecutor
             string? password = context.Environment.Get(passwordVariable);
             if (!string.IsNullOrWhiteSpace(username))
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes($"{username}:{password}")));
-
             using var message = new HttpRequestMessage(new HttpMethod(method), path);
-            string? payload = request.Body is JsonElement body
-                ? Templates.Resolve(body.GetRawText(), context.Variables, context.Environment)
-                : null;
             if (payload is not null) message.Content = new StringContent(payload, Encoding.UTF8, "application/json");
             using HttpResponseMessage response = await client.SendAsync(message, cancellationToken);
             string responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            actual = JsonDisplay.Format(responseBody);
             if (context.Assertions && context.Step.Expect?.Status is int wanted && (int)response.StatusCode != wanted)
-                throw new InvalidOperationException($"{context.Step.Name}: mong đợi HTTP {wanted}, thực tế {(int)response.StatusCode}. Body: {responseBody}");
+                throw new InvalidOperationException($"{context.Step.Name}: mong đợi HTTP {wanted}, thực tế {(int)response.StatusCode}. Body: {actual}");
             if (context.Assertions) AssertAndSave(context, responseBody);
-            return new(context.Step.Name, context.Cleanup, true, method, path, payload, expected, (int)response.StatusCode, responseBody, watch.Elapsed, null);
+            return new(context.Step.Name, context.Cleanup, true, method, path, JsonDisplay.Format(payload), expected, (int)response.StatusCode, actual, watch.Elapsed, null);
         }
         catch (Exception exception)
         {
-            return new(context.Step.Name, context.Cleanup, false, method, path, null, expected, null, null, watch.Elapsed, context.Redact?.Invoke(exception.Message) ?? exception.Message);
+            return new(context.Step.Name, context.Cleanup, false, method, path, JsonDisplay.Format(payload), expected, null, actual, watch.Elapsed, context.Redact?.Invoke(exception.Message) ?? exception.Message);
         }
     }
 

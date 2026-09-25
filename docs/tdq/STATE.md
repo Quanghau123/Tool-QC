@@ -1,27 +1,27 @@
 # TDQ STATE (generated — do not hand-edit)
-Updated: 2026-09-25T11:08:20+07:00 · Project: D:\works\projects\Tool-QC · schema 3
+Updated: 2026-09-25T16:27:52+07:00 · Project: D:\works\projects\Tool-QC · schema 3
 
 | Field | Value |
 |---|---|
-| Request | 2026-09-25-0505-tqc-api-001 |
+| Request | 2026-09-25-1625-campaign-reset-ui |
 | Lane | full |
-| Phase | qc |
-| Spec | docs/tdq/spec/2026-09-25-0505-tqc-api-001.md — ✔ approved |
-| Plan | docs/tdq/plan/2026-09-25-0505-tqc-api-001.md — ✔ approved |
+| Phase | analyze |
+| Spec | (none) |
+| Plan | (none) |
 | Quick approval | (not applicable) |
 | Doc language | vi |
 | Lean level | full |
-| QC level | ultra |
-| Run mode | main |
+| QC level | full |
+| Run mode | (not settled) |
 
 ## Where we are
-Implementation is finished. Forbidden: Ignoring a failing test; reporting PASS without running it.
+A request is open, deep mode. Forbidden: Writing the spec while anything is still vague.
 
 ## What comes next
-Run the spec's Definition of Done, record the results, fix what fails.
+Read the code, research, interview the user until nothing is vague.
 ```
-python3 scripts/tdq_state.py set phase=report
+python3 scripts/tdq_state.py set phase=spec
 ```
-Done when: Every QC item of the spec PASSes, with evidence
+Done when: No question is left that would change the outcome
 
 > Write state only through `python3 scripts/tdq_state.py …`. Unsure where you stand → run `tdq_state.py next`.
