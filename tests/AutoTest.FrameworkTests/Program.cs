@@ -59,7 +59,22 @@ IReadOnlyList<ValidationIssue> redisIssues = TestcaseValidator.Validate(redisVal
     [new CaseSpec("redis.case", "Redis", ["redis"], false, null, [redisStep with { Expect = new ExpectSpec(null, null, null, null, null, null, null, new RedisExpectSpec(Exists: true)) }], null,
         new CoverageSpec(new SourceVerificationSpec(["source.cs"], DateTimeOffset.UtcNow.ToString("O"), null), new("covered", ["redis"], null), new("covered", ["redis"], null), new("notApplicable", null, "n/a"), new("notApplicable", null, "n/a"), new("notApplicable", null, "n/a"), new("notApplicable", null, "n/a"), new("notApplicable", null, "n/a"), new("covered", ["redis"], null)))],
     registry.All, validateTemporaryFiles: false);
-Equal("0", redisIssues.Count.ToString(), "Redis testcase preflight");
+Equal("0", redisIssues.Count.ToString(), "Redis testcase preflight");var redisStreamStep = new StepSpec("redis stream", null, null,
+    new RequestSpec(null, null, null, null, null, null, null, null, null, null,
+        new RedisRequestSpec("xreadgroup", "${env:REDIS_STREAM_KEY}", Group: "tool-qc-test", Consumer: "${unique}", PayloadField: "payload",
+            Filters: new Dictionary<string, string> { ["$.CampaignId"] = "${campaignId}", ["$.Status"] = "1" }, Count: 32, BlockMs: 5000, AckMatch: true)),
+    new ExpectSpec(null, null, null, new Dictionary<string, AssertionSpec>
+    {
+        ["$.CampaignId"] = new() { ExpectedValue = JsonDocument.Parse("\"${campaignId}\"").RootElement.Clone() },
+        ["$.MtcNewsletterId"] = new() { Exists = true }
+    }, null, null, null, null),
+    new Dictionary<string, string> { ["mtcNewsletterId"] = "$.MtcNewsletterId" }, null, null, null);
+IReadOnlyList<ValidationIssue> redisStreamIssues = TestcaseValidator.Validate(redisValidationDirectory,
+    new ProjectSpec("framework-test", "FRAMEWORK_TEST_URL", null, null, null),
+    [new CaseSpec("redis.stream", "Redis stream", ["redis"], false, new Dictionary<string, string> { ["campaignId"] = "campaign-1" }, [redisStreamStep], null,
+        new CoverageSpec(new SourceVerificationSpec(["source.cs"], DateTimeOffset.UtcNow.ToString("O"), null), new("covered", ["redis stream"], null), new("covered", ["redis stream"], null), new("notApplicable", null, "n/a"), new("notApplicable", null, "n/a"), new("covered", ["redis stream"], null), new("covered", ["redis stream"], null), new("notApplicable", null, "n/a"), new("covered", ["redis stream"], null)))],
+    registry.All, validateTemporaryFiles: false);
+Equal("0", redisStreamIssues.Count.ToString(), "Redis xreadgroup testcase preflight");
 Directory.Delete(redisValidationDirectory, true);
 await using (var stubExecutor = new HttpStubStepExecutor(environment))
 {
@@ -307,7 +322,7 @@ Equal("0.8", coverageAnalysis.LineRate.ToString(System.Globalization.CultureInfo
 Equal("2", coverageAnalysis.Gaps.Count.ToString(), "generator coverage gaps");
 Directory.Delete(generatorFixture, true);
 
-Console.WriteLine("Framework tests passed: 56");
+Console.WriteLine("Framework tests passed: 57");
 return 0;
 
 static StepSpec Step(string? method, string? path, DatabaseRequestSpec? database, MqttRequestSpec? mqtt)

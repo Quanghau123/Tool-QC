@@ -46,8 +46,24 @@ public sealed class HttpStepExecutor : ITestStepExecutor
             foreach(var header in request.Headers??[]) message.Headers.TryAddWithoutValidation(header.Key,Templates.Resolve(header.Value,context.Variables,context.Environment));
             if(request.RawBody is not null&&request.Body is not null) throw new InvalidDataException($"Bước '{step.Name}' không thể gửi đồng thời body và rawBody.");
             if(payload is not null&&form is not null) throw new InvalidDataException($"Bước '{step.Name}' không thể gửi đồng thời body JSON và form.");
+            if(request.Multipart is not null && (payload is not null || form is not null)) throw new InvalidDataException($"Bước '{step.Name}' không thể gửi multipart cùng body hoặc form.");
             if(payload is not null) message.Content=new StringContent(payload,Encoding.UTF8,"application/json");
             else if(form is not null){var content=new MultipartFormDataContent();foreach(var item in form)content.Add(new StringContent(item.Value),item.Key);message.Content=content;}
+            else if(request.Multipart is not null)
+            {
+                var content=new MultipartFormDataContent();
+                foreach(var item in request.Multipart.Fields??[]) content.Add(new StringContent(Templates.Resolve(item.Value,context.Variables,context.Environment)),item.Key);
+                foreach(var file in request.Multipart.Files??[])
+                {
+                    string filePath=Templates.Resolve(file.Path,context.Variables,context.Environment);
+                    if(!File.Exists(filePath)) throw new FileNotFoundException($"Không tìm thấy file multipart: {filePath}");
+                    var stream=new FileStream(filePath,FileMode.Open,FileAccess.Read,FileShare.Read);
+                    var fileContent=new StreamContent(stream);
+                    fileContent.Headers.ContentType=new MediaTypeHeaderValue(file.ContentType??"application/octet-stream");
+                    content.Add(fileContent,file.Field,Templates.Resolve(file.FileName??Path.GetFileName(filePath),context.Variables,context.Environment));
+                }
+                message.Content=content;
+            }
             using var response=await client.SendAsync(message,cancellationToken);status=(int)response.StatusCode;responseText=await response.Content.ReadAsStringAsync(cancellationToken);
             if(context.Cleanup&&!response.IsSuccessStatusCode)throw new InvalidOperationException($"Bước dọn dữ liệu nhận mã HTTP {status}. Nội dung phản hồi: {R(context,responseText)}");
             if(context.Assertions){ExpectSpec exp=step.Expect??throw new InvalidDataException($"Thiếu cấu hình kết quả mong đợi cho bước: {step.Name}");int[] accepted=exp.StatusOneOf??(exp.Status is { } s?[s]:[]);if(accepted.Length==0)throw new InvalidDataException($"Thiếu status hoặc statusOneOf cho bước: {step.Name}");if(!accepted.Contains(status.Value))throw new InvalidOperationException($"{step.Name}: mong đợi mã HTTP thuộc [{string.Join(", ",accepted)}], thực tế nhận {status}. Nội dung phản hồi: {R(context,responseText)}");if(exp.MaxResponseTimeMs is { } max&&watch.ElapsedMilliseconds>max)throw new InvalidOperationException($"Thời gian phản hồi vượt quá giới hạn {max} ms.");AssertAndSave(step,exp,responseText,context);}

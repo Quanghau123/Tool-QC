@@ -178,10 +178,32 @@ public static class TestcaseValidator
             if (step.Request.Redis is { } redis)
             {
                 string command = redis.Command?.Trim().ToLowerInvariant() ?? string.Empty;
-                if (command is not ("get" or "hget" or "set" or "delete" or "exists")) issues.Add(new(location, "Redis command chỉ hỗ trợ get, hget, set, delete hoặc exists."));
+                if (command is not ("get" or "hget" or "set" or "delete" or "exists" or "xadd" or "xreadgroup")) issues.Add(new(location, "Redis command chỉ hỗ trợ get, hget, set, delete, exists, xadd hoặc xreadgroup."));
                 if (string.IsNullOrWhiteSpace(redis.Key)) issues.Add(new(location, "Redis key không được rỗng."));
                 if (command == "hget" && string.IsNullOrWhiteSpace(redis.Field)) issues.Add(new(location, "Redis hget bắt buộc có field."));
-                if (!cleanup && step.Expect?.Redis is null) issues.Add(new(location, "Bước Redis phải khai báo expect.redis."));
+                if (command == "xadd" && (redis.Entries is null || redis.Entries.Count == 0)) issues.Add(new(location, "Redis xadd bắt buộc có entries."));
+                if (command == "xreadgroup")
+                {
+                    if (string.IsNullOrWhiteSpace(redis.Group)) issues.Add(new(location, "Redis xreadgroup bắt buộc có group."));
+                    if (string.IsNullOrWhiteSpace(redis.Consumer)) issues.Add(new(location, "Redis xreadgroup bắt buộc có consumer."));
+                    if (string.IsNullOrWhiteSpace(redis.PayloadField)) issues.Add(new(location, "Redis xreadgroup bắt buộc có payloadField."));
+                    if (redis.Filters is null || redis.Filters.Count == 0) issues.Add(new(location, "Redis xreadgroup bắt buộc có filters."));
+                    if (redis.Count is <= 0 or > 1000) issues.Add(new(location, "Redis xreadgroup count phải từ 1 đến 1000."));
+                    if (redis.BlockMs is < 0 or > 300000) issues.Add(new(location, "Redis xreadgroup blockMs phải từ 0 đến 300000."));
+                    if (!cleanup && step.Save is null) issues.Add(new(location, "Redis xreadgroup cần save để lưu payload callback."));
+                }
+                if (!cleanup && step.Expect?.Redis is null && (step.Expect?.Json?.Count ?? 0) == 0)
+                    issues.Add(new(location, "Bước Redis phải khai báo expect.redis hoặc expect.json."));
+            }
+            if (step.Request.Multipart is { } multipart)
+            {
+                if (step.Request.Body is not null || step.Request.Form is not null || step.Request.RawBody is not null)
+                    issues.Add(new(location, "Multipart không được dùng đồng thời với body, form hoặc rawBody."));
+                foreach (MultipartFileSpec file in multipart.Files ?? [])
+                {
+                    if (string.IsNullOrWhiteSpace(file.Field) || string.IsNullOrWhiteSpace(file.Path))
+                        issues.Add(new(location, "Multipart file bắt buộc có field và path."));
+                }
             }
             if (step.ParallelRequests is < 1 or > 1000) issues.Add(new(location, "parallelRequests phải từ 1 đến 1000."));
             if (step.ParallelRequests is > 1 && step.Save is not null) issues.Add(new(location, "Không thể vừa chạy song song vừa save biến."));
@@ -200,6 +222,12 @@ public static class TestcaseValidator
         if (step.Request?.Body is { } body) yield return body.GetRawText();
         if (step.Request?.RawBody is not null) yield return step.Request.RawBody;
         foreach (string value in step.Request?.Form?.Values ?? Enumerable.Empty<string>()) yield return value;
+        foreach (string value in step.Request?.Multipart?.Fields?.Values ?? Enumerable.Empty<string>()) yield return value;
+        foreach (MultipartFileSpec file in step.Request?.Multipart?.Files ?? [])
+        {
+            yield return file.Path;
+            if (file.FileName is not null) yield return file.FileName;
+        }
         foreach (string value in step.Request?.Headers?.Values ?? Enumerable.Empty<string>()) yield return value;
         if (step.Request?.Mqtt is { } mqtt)
         {
@@ -207,6 +235,13 @@ public static class TestcaseValidator
                 if (value is not null) yield return value;
         }
         foreach (string value in step.Request?.Database?.Parameters?.Values ?? Enumerable.Empty<string>()) yield return value;
+        if (step.Request?.Redis is { } redis)
+        {
+            foreach (string? value in new[] { redis.Key, redis.Field, redis.Value, redis.ConnectionStringVariable, redis.Group, redis.Consumer, redis.PayloadField, redis.StartId })
+                if (value is not null) yield return value;
+            foreach (string value in redis.Entries?.Values ?? Enumerable.Empty<string>()) yield return value;
+            foreach (string value in redis.Filters?.Values ?? Enumerable.Empty<string>()) yield return value;
+        }
         if (step.Request?.HttpStub is { } stub)
         {
             if (stub.Method is not null) yield return stub.Method;
