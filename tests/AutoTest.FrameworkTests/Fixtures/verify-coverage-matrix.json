@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "topologies": [
+    "spot",
+    "duration-consecutive",
+    "duration-gap",
+    "duration-multi-range",
+    "two-day",
+    "reverse-sync",
+    "valid-persistence",
+    "invalid-no-partial-state"
+  ]
+}

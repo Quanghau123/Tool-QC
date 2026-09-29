@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text;
 using AutoTest.Generator;
 using AutoTest.Generator.Ai;
+using AutoTest.Generator.WorkbookImport;
 
 Console.InputEncoding = Encoding.UTF8;
 Console.OutputEncoding = new UTF8Encoding(false);
@@ -16,7 +17,68 @@ string? Argument(string key)
 if (args.Contains("--help", StringComparer.OrdinalIgnoreCase) || args.Contains("-h", StringComparer.OrdinalIgnoreCase))
 {
     Console.WriteLine("AutoTest.Generator --source <path> --project <name> [--mode auto|ai|local] [--module <name>] [--list-modules] [--analyze] [--include <id,id>] [--output <file.json>]");
+    Console.WriteLine("AutoTest.Generator --workbook <file.xlsx> --project <name> [--analyze-workbook | --case-id <sheet/case> | --case-ids <id,id> --output <path>]");
     return;
+}
+
+if (Argument("--workbook") is { } workbookArgument)
+{
+    try
+    {
+        string workbookPath = Path.GetFullPath(workbookArgument);
+        string workbookProject = Argument("--project") ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(workbookProject)) throw new InvalidOperationException("Use --workbook <file.xlsx> --project <project-name>.");
+        WorkbookImportService importer = new();
+        if (args.Contains("--analyze-workbook", StringComparer.OrdinalIgnoreCase))
+        {
+            var result = importer.Analyze(workbookProject, workbookPath);
+            Console.WriteLine(JsonSerializer.Serialize(new
+            {
+                workbook = new
+                {
+                    result.Workbook.FileName,
+                    result.Workbook.Sha256,
+                    result.Workbook.FileSize,
+                    sheetCount = result.Workbook.Sheets.Count,
+                    sheets = result.Workbook.Sheets.Select(sheet => new { sheet.Name, sheet.Hidden, cellCount = sheet.Cells.Count, mergeCount = sheet.Merges.Count, sheet.FormulaCount }),
+                },
+                analysis = result.Analysis,
+            }, GeneratorJson.Options));
+            return;
+        }
+
+        string[] caseIds = (Argument("--case-ids") ?? Argument("--case-id") ?? throw new InvalidOperationException("Use --case-id <stable-id> or --case-ids <id,id> when generating workbook testcases.")).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        string repositoryRoot = Path.GetFullPath(Argument("--repository-root") ?? Directory.GetCurrentDirectory());
+        WorkbookGenerationBatch batch = importer.GenerateBatch(workbookProject, workbookPath, caseIds, repositoryRoot);
+        string outputArgument = Argument("--output") ?? Path.Combine(".artifacts", "generated-testcases", workbookProject);
+        string outputPath = Path.GetFullPath(outputArgument);
+        bool singleFile = caseIds.Length == 1 && Path.HasExtension(outputPath);
+        if (singleFile)
+        {
+            WorkbookGenerationItem item = batch.Items.Single();
+            if (!item.Generated) throw new InvalidOperationException(item.Error);
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+            File.WriteAllText(outputPath, item.Json!, new UTF8Encoding(false));
+            Console.WriteLine(outputPath);
+        }
+        else
+        {
+            Directory.CreateDirectory(outputPath);
+            foreach (WorkbookGenerationItem item in batch.Items.Where(item => item.Generated))
+            {
+                string file = Path.Combine(outputPath, $"workbook-{SafeFileName(item.CaseId)}.json");
+                File.WriteAllText(file, item.Json!, new UTF8Encoding(false));
+            }
+            Console.WriteLine(JsonSerializer.Serialize(batch, GeneratorJson.Options));
+        }
+        return;
+    }
+    catch (Exception exception) when (exception is IOException or InvalidDataException or InvalidOperationException)
+    {
+        Console.Error.WriteLine($"TQC-XLSX-CLI-001: {exception.Message}");
+        Environment.ExitCode = 2;
+        return;
+    }
 }
 
 if (args.Contains("--ai-status", StringComparer.OrdinalIgnoreCase))
@@ -193,3 +255,6 @@ static string StripFence(string value)
     int lastFence = result.LastIndexOf("```", StringComparison.Ordinal);
     return firstLine >= 0 && lastFence > firstLine ? result[(firstLine + 1)..lastFence].Trim() : result;
 }
+
+static string SafeFileName(string value) => string.Concat(value.Select(character => char.IsLetterOrDigit(character) ? char.ToLowerInvariant(character) : '-')).Trim('-');
+

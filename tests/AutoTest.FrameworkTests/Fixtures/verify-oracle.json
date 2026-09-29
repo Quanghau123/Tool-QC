@@ -1,0 +1,8 @@
+{
+  "cases": [
+    { "id": "verify/1", "campaignCount": 3, "candidateKind": "Duration", "expectedValid": true, "syncDirection": "day1-to-day2" },
+    { "id": "verify/17", "campaignCount": 2, "candidateKind": "Spot", "expectedValid": false, "syncDirection": "day1-to-day2" },
+    { "id": "verify/54", "campaignCount": 3, "candidateKind": "Duration", "expectedValid": true, "syncDirection": "day2-to-day1" },
+    { "id": "verify/75", "campaignCount": 5, "candidateKind": "Duration", "expectedValid": true, "syncDirection": "day1-to-day2" }
+  ]
+}

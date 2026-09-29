@@ -8,4 +8,8 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.5.0" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AutoTest.Workbooks\AutoTest.Workbooks.csproj" />
+    <ProjectReference Include="..\..\src\AutoTest.ProjectAdapters.BeBooking\AutoTest.ProjectAdapters.BeBooking.csproj" />
+  </ItemGroup>
 </Project>

@@ -1,9 +1,9 @@
 # TDQ STATE (generated — do not hand-edit)
-Updated: 2026-09-25T16:27:52+07:00 · Project: D:\works\projects\Tool-QC · schema 3
+Updated: 2026-09-28T13:58:57+07:00 · Project: D:\works\projects\Tool-QC · schema 3
 
 | Field | Value |
 |---|---|
-| Request | 2026-09-25-1625-campaign-reset-ui |
+| Request | 2026-09-28-1038-workbook-adapter-generalization |
 | Lane | full |
 | Phase | analyze |
 | Spec | (none) |

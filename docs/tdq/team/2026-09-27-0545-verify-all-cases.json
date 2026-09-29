@@ -1,0 +1,170 @@
+{
+  "slug": "2026-09-27-0545-verify-all-cases",
+  "plan_file": "docs\\tdq\\plan\\2026-09-27-0545-verify-all-cases.md",
+  "plan_sha": "376d4f14b6fb7c579454c4c1ad46cfe6c4acb1d838849d0209a14efbebab4878",
+  "tasks": {
+    "T1.1": {
+      "quyet_dinh": "giao",
+      "ly_do": "",
+      "vung_file": [
+        "tests/AutoTest.FrameworkTests/Program.cs",
+        "tests/AutoTest.FrameworkTests/WorkbookTests/WorkbookTestHarness.cs",
+        "tests/AutoTest.FrameworkTests/Fixtures/verify-oracle.json"
+      ],
+      "dot": 1
+    },
+    "T1.2": {
+      "quyet_dinh": "giao",
+      "ly_do": "",
+      "vung_file": [
+        "tests/AutoTest.FrameworkTests/WorkbookTests/VerifyWorkbookParserTests.cs"
+      ],
+      "dot": 2
+    },
+    "T1.3": {
+      "quyet_dinh": "giao",
+      "ly_do": "",
+      "vung_file": [
+        "src/AutoTest.ProjectAdapters.BeBooking/VerifyCaseModel.cs",
+        "src/AutoTest.ProjectAdapters.BeBooking/VerifyWorkbookParser.cs",
+        "src/AutoTest.ProjectAdapters.BeBooking/VerifyWorkbookAdapter.cs"
+      ],
+      "dot": 3
+    },
+    "T2.1": {
+      "quyet_dinh": "giao",
+      "ly_do": "",
+      "vung_file": [
+        "tests/AutoTest.FrameworkTests/WorkbookTests/VerifyTestcaseBuilderTests.cs",
+        "tests/AutoTest.FrameworkTests/Fixtures/verify-coverage-matrix.json"
+      ],
+      "dot": 4
+    },
+    "T2.2": {
+      "quyet_dinh": "giao",
+      "ly_do": "",
+      "vung_file": [
+        "src/AutoTest.ProjectAdapters.BeBooking/VerifyTestcaseBuilder.cs",
+        "src/AutoTest.ProjectAdapters.BeBooking/VerifyWorkbookAdapter.cs"
+      ],
+      "dot": 5
+    },
+    "T2.3": {
+      "quyet_dinh": "giao",
+      "ly_do": "",
+      "vung_file": [
+        "src/AutoTest.ProjectAdapters.BeBooking/VerifyOutputIdentity.cs",
+        "src/AutoTest.ProjectAdapters.BeBooking/VerifyTestcaseBuilder.cs",
+        "tests/AutoTest.FrameworkTests/WorkbookTests/VerifyTestcaseBuilderTests.cs"
+      ],
+      "dot": 6
+    },
+    "T3.1": {
+      "quyet_dinh": "giao",
+      "ly_do": "",
+      "vung_file": [
+        "tests/AutoTest.FrameworkTests/WorkbookTests/WorkbookBatchTests.cs"
+      ],
+      "dot": 7
+    },
+    "T3.2": {
+      "quyet_dinh": "giao",
+      "ly_do": "",
+      "vung_file": [
+        "src/AutoTest.Workbooks/Contracts.cs",
+        "runner/AutoTest.Generator/WorkbookImport/WorkbookImportService.cs",
+        "runner/AutoTest.Generator/Program.cs"
+      ],
+      "dot": 8
+    },
+    "T3.3": {
+      "quyet_dinh": "giao",
+      "ly_do": "",
+      "vung_file": [
+        "runner/AutoTest.Web/Program.cs"
+      ],
+      "dot": 9
+    },
+    "T3.4": {
+      "quyet_dinh": "giao",
+      "ly_do": "",
+      "vung_file": [
+        "runner/AutoTest.Web/wwwroot/index.html",
+        "runner/AutoTest.Web/wwwroot/app.js",
+        "runner/AutoTest.Web/wwwroot/app.css"
+      ],
+      "dot": 10
+    },
+    "T4.1": {
+      "quyet_dinh": "giao",
+      "ly_do": "",
+      "vung_file": [
+        "projects/be-booking/workbook-import/workbook-import.json"
+      ],
+      "dot": 11
+    },
+    "T4.2": {
+      "quyet_dinh": "tu_lam",
+      "ly_do": "vung-khoa",
+      "vung_file": [],
+      "dot": 12
+    },
+    "T4.3": {
+      "quyet_dinh": "giao",
+      "ly_do": "",
+      "vung_file": [
+        "runner/AutoTest.Web/wwwroot/index.html"
+      ],
+      "dot": 11
+    },
+    "T5.1": {
+      "quyet_dinh": "tu_lam",
+      "ly_do": "vung-khoa",
+      "vung_file": [],
+      "dot": 12
+    },
+    "T5.2": {
+      "quyet_dinh": "tu_lam",
+      "ly_do": "vung-khoa",
+      "vung_file": [],
+      "dot": 13
+    },
+    "T5.3": {
+      "quyet_dinh": "tu_lam",
+      "ly_do": "vung-khoa",
+      "vung_file": [],
+      "dot": 14
+    },
+    "T5.4": {
+      "quyet_dinh": "tu_lam",
+      "ly_do": "vung-khoa",
+      "vung_file": [],
+      "dot": 15
+    },
+    "T5.5": {
+      "quyet_dinh": "tu_lam",
+      "ly_do": "vung-khoa",
+      "vung_file": [],
+      "dot": 16
+    },
+    "TX.1": {
+      "quyet_dinh": "giao",
+      "ly_do": "",
+      "vung_file": [
+        "src/AutoTest.Workbooks/WorkbookImportLogger.cs",
+        "runner/AutoTest.Generator/WorkbookImport/WorkbookImportService.cs"
+      ],
+      "dot": 9
+    },
+    "TX.2": {
+      "quyet_dinh": "giao",
+      "ly_do": "",
+      "vung_file": [
+        "tests/AutoTest.FrameworkTests/WorkbookTests/VerifyWorkbookParserTests.cs",
+        "tests/AutoTest.FrameworkTests/WorkbookTests/VerifyTestcaseBuilderTests.cs",
+        "tests/AutoTest.FrameworkTests/WorkbookTests/WorkbookBatchTests.cs"
+      ],
+      "dot": 9
+    }
+  }
+}

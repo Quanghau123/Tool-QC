@@ -182,9 +182,9 @@ không được xem là testcase đã chạy thành công. Báo cáo phải phâ
 secret, không được làm thay đổi dữ liệu nghiệp vụ.
 
 Trước khi gửi request, runner chạy preflight validation để phát hiện ID testcase
-trùng, biến chưa được khai báo, transport/executor mâu thuẫn, thiếu `expect`, cấu
-hình song song không hợp lệ và file tạm như `*.working.json` khi chạy toàn bộ dự
-án. Preflight thất bại trả exit code `3`; không có testcase phù hợp trả `2`.
+trùng, biến chưa được khai báo, transport/executor mâu thuẫn và thiếu `expect`.
+Nó cũng chặn cấu hình song song không hợp lệ và file tạm như `*.working.json` khi
+chạy toàn bộ dự án. Preflight thất bại trả exit code `3`; không có testcase phù hợp trả `2`.
 
 Assertion JSON hỗ trợ `equals`, `notEquals`, `exists`, `type`, `contains`,
 `matches`, `oneOf`, `count`, `greaterThan`, `greaterThanOrEqual`, `lessThan` và
@@ -688,4 +688,38 @@ cho tới khi đạt kết quả hoặc hết `timeoutMs`:
 ```json
 "retry": { "timeoutMs": 10000, "intervalMs": 500 }
 ```
+
+## Nhập testcase từ workbook XLSX
+
+Tool-QC có shared module `AutoTest.Workbooks` dùng Open XML để kiểm tra gói `.xlsx`, đọc
+sheet/cell/formula/merged range và tạo fingerprint SHA-256. Module này không chứa rule nghiệp
+vụ hoặc nhánh theo tên dự án. Mỗi dự án tự đăng ký adapter; release đầu có adapter
+`AutoTest.ProjectAdapters.BeBooking` cho family `VERIFY` của workbook Campaign.
+
+Phân tích workbook bằng CLI, không gọi API backend:
+
+```powershell
+dotnet run --project runner/AutoTest.Generator/AutoTest.Generator.csproj -c Release -- `
+  --workbook "C:\Users\quanghau\Downloads\Campaign (1).xlsx" `
+  --project be-booking `
+  --analyze-workbook
+```
+
+Sinh một case hoặc batch nhiều case với TimeFrame tính động tại thời điểm chạy:
+
+```powershell
+dotnet run --project runner/AutoTest.Generator/AutoTest.Generator.csproj -c Release -- `
+  --workbook "C:\Users\quanghau\Downloads\Campaign (1).xlsx" `
+  --project be-booking `
+  --case-ids verify/1,verify/54 `
+  --repository-root "$PWD" `
+  --output ".artifacts/generated-testcases/be-booking/verify"
+```
+
+Trên UI, mở `Công cụ` → `Nhập XLSX`, chọn file, phân tích, chọn một, nhiều hoặc tất cả case rồi sinh batch. Nếu chỉ chọn một case, UI chuyển JSON sang quy trình preflight/run/lưu hiện có; batch nhiều case được ghi trực tiếp vào thư mục output riêng để preflight toàn bộ. Khi lưu chính thức, testcase đi vào
+`projects/be-booking/testcases/workbook-generated/verify/`; file tồn tại phải được xác nhận
+và fingerprint phải còn khớp trước khi ghi đè.
+
+Adapter version 2 phát hiện và sinh đủ 69 case hiện có trong sheet `VERIFY`; mỗi case tạo một JSON schema v2 theo thứ tự workbook. Case lỗi hoặc thiếu được blocked riêng, không làm hỏng các case còn lại. Workbook
+gốc không được copy vào repository; Tool-QC chỉ giữ metadata/fingerprint và dọn file upload tạm.
 

@@ -28,6 +28,12 @@ test runner or shared step-executor contract to a specific backend.
 statistics, `Server-Timing` parsing, masking/hashing, JSONL compatibility and Markdown
 comparison. A project-specific load adapter owns routes, payloads and fixtures; shared
 load code must not branch on a project name.
+
+`AutoTest.Workbooks` is the reusable XLSX boundary. It validates the Open XML package,
+applies ZIP/resource guards, reads workbook primitives and emits fingerprinted models.
+It does not know Campaign, VERIFY, routes or project names. Project-specific interpretation
+lives in adapter modules such as `AutoTest.ProjectAdapters.BeBooking`; the generator and Web
+UI both call the same adapter registry and generation pipeline.
 ```
 
 `projects/<project-name>/` contains only configuration and declarative test cases.
@@ -65,7 +71,12 @@ sequence, timeout/delay, payload limit và capture; artifact module sở hữu J
 The current JSON contract and CLI remain version 1. Existing projects continue to
 live under `projects/<project-name>/testcases/**/*.json`.
 
+Workbook imports generate schema-v2 drafts. For `be-booking`, activated workbook cases live
+under `projects/be-booking/testcases/workbook-generated/verify/`, separate from handwritten
+Campaign suites. Adapter version 2 discovers and generates all 69 current `VERIFY` cases; invalid or missing selections remain individually blocked while valid cases continue. Source workbooks are temporary inputs and are not retained
+in the repository; only metadata and SHA-256 fingerprints cross the shared boundary.
+
 
 ## Khả năng vận hành
 
-Web UI chỉ truyền danh sách testcase ID chính xác tới runner, lưu snapshot lịch sử dưới `.artifacts/ui-runs`, hỗ trợ dừng process tree và mở lại báo cáo. Runner có thể chạy case song song theo `MAX_PARALLEL_CASES` và xuất cả HTML/JUnit. `AutoTest.Generator` quét controller .NET để tạo bản nháp schema v2; các coverage chưa xác minh luôn ở trạng thái blocked.
+Web UI chỉ truyền danh sách testcase ID chính xác tới runner, lưu snapshot lịch sử dưới `.artifacts/ui-runs`, hỗ trợ dừng process tree và mở lại báo cáo. Runner có thể chạy case song song theo `MAX_PARALLEL_CASES` và xuất cả HTML/JUnit. `AutoTest.Generator` quét controller .NET hoặc nhập workbook qua adapter để tạo bản nháp schema v2; các coverage chưa xác minh luôn ở trạng thái blocked. Analyze/generate workbook không gọi backend. Activation chạy preflight, preview trạng thái file và yêu cầu xác nhận kèm fingerprint trước khi overwrite.

@@ -11,8 +11,14 @@ using AutoTest.Integration.Artifacts;
 using AutoTest.Integration.Http;
 using AutoTest.LoadTesting;
 using AutoTest.Redis;
+using AutoTest.FrameworkTests.WorkbookTests;
 
 Environment.SetEnvironmentVariable("FRAMEWORK_TEST_URL", "http://localhost");
+string repositoryRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+WorkbookTestHarness.Run(repositoryRoot);
+VerifyWorkbookParserTests.Run(repositoryRoot);
+VerifyTestcaseBuilderTests.Run(repositoryRoot);
+WorkbookBatchTests.Run(repositoryRoot);
 var environment = EnvironmentStore.Load(Path.GetTempFileName());
 var variables = new Dictionary<string, string> { ["id"] = "42" };
 Equal("items/42", Templates.Resolve("items/${id}", variables, environment), "template variable");
@@ -241,11 +247,14 @@ Directory.Delete(junitDirectory, true);
 
 string generatorFixture = Path.Combine(Path.GetTempPath(), $"autotest-generator-{Guid.NewGuid():N}");
 Directory.CreateDirectory(generatorFixture);
-File.WriteAllText(Path.Combine(generatorFixture, "Fixture.cs"), """
+string generatorControllerDirectory = Path.Combine(generatorFixture, "Controllers", "Users");
+Directory.CreateDirectory(generatorControllerDirectory);
+File.WriteAllText(Path.Combine(generatorControllerDirectory, "Fixture.cs"), """
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json.Serialization;
-[ApiController, Route("api/orders")]
+[ApiController]
+[Route("api/orders")]
 public sealed class OrdersController : ControllerBase
 {
     [HttpPost, ProducesResponseType(typeof(OrderResponse), 201), ProducesResponseType(400)]
@@ -253,7 +262,8 @@ public sealed class OrdersController : ControllerBase
     [HttpGet, ProducesResponseType(typeof(OrderResponse), 200)]
     public Task<OrderResponse> Search([FromQuery] SearchRequest request) { if (request.Page < 1) throw new ArgumentOutOfRangeException(); return OrderService.LoadAsync(request); }
 }
-[ApiController, Route("api/users")]
+[ApiController]
+[Route("api/users")]
 public sealed class UsersController : ControllerBase
 {
     [AllowAnonymous, HttpPost("auth"), ProducesResponseType(typeof(AuthResponse), 200)]
@@ -276,7 +286,7 @@ var generatorAnalysis = new AutoTest.Generator.SourceContractAnalyzer().Analyze(
 var generatorModules = AutoTest.Generator.SourceContractAnalyzer.DiscoverModules(generatorFixture);
 Equal("true", generatorModules.Contains("Users", StringComparer.OrdinalIgnoreCase).ToString().ToLowerInvariant(), "generator discovers controller module");
 var usersModuleAnalysis = new AutoTest.Generator.SourceContractAnalyzer().Analyze(generatorFixture, "Users");
-Equal("2", usersModuleAnalysis.Endpoints.Count.ToString(), "generator module endpoint count");
+Equal("4", usersModuleAnalysis.Endpoints.Count.ToString(), "generator module endpoint count");
 Equal("4", generatorAnalysis.Endpoints.Count.ToString(), "generator endpoint count");
 Equal("3", generatorAnalysis.Endpoints.Single(endpoint => endpoint.Path == "/api/orders" && endpoint.Method == "POST").Validations.Count.ToString(), "generator validation count");
 Equal("3", generatorAnalysis.Types["OrderResponse"].Properties.Count.ToString(), "generator response DTO properties");

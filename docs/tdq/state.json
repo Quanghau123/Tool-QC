@@ -1,7 +1,7 @@
 {
   "schema_version": 6,
-  "active_request": "2026-09-25-1625-campaign-reset-ui",
-  "previous_request": "2026-09-25-0505-tqc-api-001",
+  "active_request": "2026-09-28-1038-workbook-adapter-generalization",
+  "previous_request": "2026-09-27-0545-verify-all-cases",
   "lane": "full",
   "phase": "analyze",
   "brief_file": null,
@@ -23,19 +23,19 @@
   "doc_lang": "vi",
   "muc_gat": "full",
   "muc_qc": "full",
-  "started_at": "2026-09-25T16:27:31+07:00",
-  "loai_request": null,
+  "started_at": "2026-09-28T13:39:34+07:00",
+  "loai_request": "refactor",
   "nhanh_goc": null,
   "nhanh_request": null,
   "phase_history": [
     {
       "phase": "idle",
-      "at": "2026-09-25T16:27:31+07:00"
+      "at": "2026-09-28T13:39:34+07:00"
     },
     {
       "phase": "analyze",
-      "at": "2026-09-25T16:27:52+07:00"
+      "at": "2026-09-28T13:58:57+07:00"
     }
   ],
-  "updated_at": "2026-09-25T16:27:52+07:00"
+  "updated_at": "2026-09-28T13:58:57+07:00"
 }

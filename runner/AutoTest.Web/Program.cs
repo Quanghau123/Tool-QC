@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Encodings.Web;
 using System.Text;
+using System.Security.Cryptography;
 using AutoTest.MessageScanner;
 
 // Backend UI: khai báo endpoint, khởi chạy runner nền và trả artifact cho trình duyệt.
@@ -18,6 +19,7 @@ string root = Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, "..
 string historyDirectory = Path.Combine(root, ".artifacts", "ui-runs");
 Directory.CreateDirectory(historyDirectory);
 ConcurrentDictionary<string, RunState> runs = new(StringComparer.OrdinalIgnoreCase);
+ConcurrentDictionary<string, WorkbookUploadState> workbookUploads = new(StringComparer.OrdinalIgnoreCase);
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
@@ -49,6 +51,73 @@ app.MapGet("/api/projects/{project}/tests", (string project) =>
         .ToArray();
 });
 
+app.MapPost("/api/projects/{project}/workbooks/analyze", async (string project, HttpRequest request, CancellationToken cancellationToken) =>
+{
+    _ = SafeProjectDirectory(root, project);
+    if (!request.HasFormContentType) return Results.BadRequest(new { code = "TQC-XLSX-001", message = "A multipart XLSX upload is required." });
+    IFormCollection form = await request.ReadFormAsync(cancellationToken);
+    IFormFile? file = form.Files.GetFile("workbook");
+    if (file is null || file.Length == 0) return Results.BadRequest(new { code = "TQC-XLSX-001", message = "The workbook file is missing." });
+    if (!Path.GetExtension(file.FileName).Equals(".xlsx", StringComparison.OrdinalIgnoreCase))
+        return Results.BadRequest(new { code = "TQC-XLSX-002", message = "Only .xlsx workbooks are supported." });
+
+    string uploadId = Guid.NewGuid().ToString("N");
+    string directory = Path.Combine(root, ".artifacts", "workbook-imports", project, uploadId);
+    Directory.CreateDirectory(directory);
+    string workbookPath = Path.Combine(directory, "source.xlsx");
+    try
+    {
+        await using (FileStream output = File.Create(workbookPath)) await file.CopyToAsync(output, cancellationToken);
+        ProcessResult result = await RunGeneratorAsync(root, ["--workbook", workbookPath, "--project", project, "--analyze-workbook"]);
+        if (result.ExitCode != 0)
+        {
+            Directory.Delete(directory, true);
+            return Results.BadRequest(new { code = "TQC-XLSX-003", message = "Workbook analysis failed.", detail = CleanGeneratorError(result.StandardError) });
+        }
+        if (!TryExtractJson(result.StandardOutput, out string analysisJson, out string analysisError))
+        {
+            Directory.Delete(directory, true);
+            return Results.BadRequest(new { code = "TQC-XLSX-004", message = "Workbook analysis returned invalid JSON.", detail = analysisError });
+        }
+        workbookUploads[uploadId] = new(uploadId, project, workbookPath, directory, file.FileName, DateTimeOffset.Now);
+        using JsonDocument analysis = JsonDocument.Parse(analysisJson);
+        return Results.Ok(new { uploadId, originalFileName = Path.GetFileName(file.FileName), result = analysis.RootElement.Clone() });
+    }
+    catch
+    {
+        if (Directory.Exists(directory)) Directory.Delete(directory, true);
+        throw;
+    }
+});
+
+app.MapPost("/api/projects/{project}/workbooks/generate", async (string project, WorkbookGenerateRequest request, CancellationToken cancellationToken) =>
+{
+    _ = SafeProjectDirectory(root, project);
+    if (!workbookUploads.TryRemove(request.UploadId, out WorkbookUploadState? upload) || !upload.Project.Equals(project, StringComparison.OrdinalIgnoreCase))
+        return Results.BadRequest(new { code = "TQC-XLSX-005", message = "The workbook upload is missing or expired." });
+    try
+    {
+        if (request.CaseIds is not { Length: > 0 })
+            return Results.BadRequest(new { code = "TQC-XLSX-006", message = "Select at least one supported workbook case." });
+        string reviewId = $"workbook-{DateTime.Now:yyyyMMdd-HHmmss}";
+        string output = Path.Combine(root, ".artifacts", "generated-testcases", project, reviewId);
+        ProcessResult result = await RunGeneratorAsync(root,
+        [
+            "--workbook", upload.WorkbookPath, "--project", project, "--case-ids", string.Join(',', request.CaseIds),
+            "--repository-root", root, "--output", output,
+        ]);
+        if (result.ExitCode != 0)
+            return Results.BadRequest(new { code = "TQC-XLSX-007", message = "Workbook testcase generation failed.", detail = CleanGeneratorError(result.StandardError) });
+        if (!TryExtractJson(result.StandardOutput, out string batchJson, out string batchError))
+            return Results.BadRequest(new { code = "TQC-XLSX-008", message = "Workbook batch generation returned invalid JSON.", detail = batchError });
+        using JsonDocument batch = JsonDocument.Parse(batchJson);
+        return Results.Ok(new { reviewId, output, group = "workbook-generated/verify", result = batch.RootElement.Clone() });
+    }
+    finally
+    {
+        if (Directory.Exists(upload.Directory)) Directory.Delete(upload.Directory, true);
+    }
+});
 app.MapGet("/api/archify/status", async (string? provider) =>
 {
     string archifyCli = ArchifyCliPath(root);
@@ -394,12 +463,23 @@ app.MapPost("/api/projects/{project}/generate/activate", async (string project, 
     await File.WriteAllTextAsync(Path.Combine(preflightDirectory, "suite.json"), normalized);
     ProcessResult result = await RunRunnerPreflightAsync(root, project, preflightDirectory, requireCompleteCoverage: true);
     if (result.ExitCode != 0) return Results.BadRequest(new { code = "TQC-GEN-005", message = "Testcase preflight failed.", detail = result.StandardError });
-    string group = SafeName(request.Group, "generated");
+    string group = SafeRelativeGroup(request.Group, "generated");
     string fileName = SafeName(request.FileName, $"source-{DateTime.Now:yyyyMMdd-HHmmss}") + ".json";
     string output = Path.Combine(projectDirectory, "testcases", group, fileName);
     Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+    if (File.Exists(output))
+    {
+        string currentHash = await Sha256Async(output);
+        string currentContent = await File.ReadAllTextAsync(output);
+        if (currentContent.Equals(normalized, StringComparison.Ordinal))
+            return Results.Ok(new { output, status = "unchanged", sha256 = currentHash, message = "The generated testcase is already up to date." });
+        if (!request.ConfirmOverwrite)
+            return Results.Conflict(new { code = "TQC-GEN-013", status = "update", message = "A generated testcase already exists. Review the diff and confirm overwrite.", output, currentHash });
+        if (!string.IsNullOrWhiteSpace(request.ExpectedSha256) && !currentHash.Equals(request.ExpectedSha256, StringComparison.OrdinalIgnoreCase))
+            return Results.Conflict(new { code = "TQC-GEN-014", status = "conflict", message = "The target changed after preview. Reload before overwriting.", output, currentHash });
+    }
     await File.WriteAllTextAsync(output, normalized);
-    return Results.Ok(new { output, message = "The testcase suite passed preflight and was activated." });
+    return Results.Ok(new { output, status = "saved", sha256 = await Sha256Async(output), message = "The testcase suite passed preflight and was activated." });
 });
 
 app.MapPost("/api/projects/{project}/generate/run", async (string project, DraftContentRequest request) =>
@@ -908,6 +988,22 @@ static string SafeName(string? value, string fallback)
     return string.IsNullOrWhiteSpace(cleaned) ? fallback : cleaned;
 }
 
+static string SafeRelativeGroup(string? value, string fallback)
+{
+    string[] segments = (string.IsNullOrWhiteSpace(value) ? fallback : value)
+        .Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Select(segment => SafeName(segment, "group"))
+        .Where(segment => segment is not "." and not "..")
+        .ToArray();
+    return segments.Length == 0 ? fallback : Path.Combine(segments);
+}
+
+static async Task<string> Sha256Async(string path)
+{
+    await using FileStream stream = File.OpenRead(path);
+    return Convert.ToHexString(await SHA256.HashDataAsync(stream)).ToLowerInvariant();
+}
+
 static async Task RunAsync(string root, RunState state)
 {
     try
@@ -960,7 +1056,8 @@ sealed record GenerateRequest(string SourcePath, string? Mode = "local", string?
 sealed record GenerateDraftRequest(string SourcePath, string[]? EndpointIds, string? Mode = "auto", string? Provider = "codex-cli");
 sealed record DraftContentRequest(string ReviewId, string Json, bool SequentialChain = false);
 sealed record RepairDraftRequest(string ReviewId, string Json, string SourcePath, string? Provider = "codex-cli", int MaxAttempts = 5);
-sealed record ActivateDraftRequest(string ReviewId, string Json, string? Group, string? FileName);
+sealed record ActivateDraftRequest(string ReviewId, string Json, string? Group, string? FileName, bool ConfirmOverwrite = false, string? ExpectedSha256 = null);
+sealed record WorkbookGenerateRequest(string UploadId, string[] CaseIds);
 sealed record ProcessResult(int ExitCode, string StandardOutput, string StandardError);
 sealed record DiagramSemantics(string NodeCollection, string RelationCollection, string[] NodeIds, string[] Relations);
 sealed record MessageScanRequest(string SourcePath);
@@ -968,6 +1065,7 @@ sealed record EnvironmentDefinition(string Key, string Group, string Scope, stri
 sealed record EnvironmentGroup(string Name, EnvironmentVariable[] Variables);
 sealed record EnvironmentVariable(string Key, string Value, string Source, bool Secret, bool Configured);
 sealed record GeneratorMetadata(string Provider, bool AiUsed, bool FellBack, string Message);
+sealed record WorkbookUploadState(string Id, string Project, string WorkbookPath, string Directory, string OriginalFileName, DateTimeOffset CreatedAt);
 
 sealed class RunState(string id, string project, string[] caseIds, DateTimeOffset startedAt, string historyDirectory, string? testcaseDirectory = null, bool sequentialChain = false)
 {
@@ -1052,4 +1150,5 @@ sealed class RunState(string id, string project, string[] caseIds, DateTimeOffse
     private RunSnapshot CreateSnapshot() => new(Id, Project, CaseIds, StartedAt, FinishedAt, Status, ExitCode, ReportPath, FailureType, FailureCategory, FailureMessage, FixHint, lines.ToArray());
     private void Save() => UiSupport.SaveHistory(historyDirectory, CreateSnapshot());
 }
+
 
