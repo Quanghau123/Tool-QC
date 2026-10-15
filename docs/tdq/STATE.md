@@ -1,27 +1,27 @@
 # TDQ STATE (generated — do not hand-edit)
-Updated: 2026-09-28T13:58:57+07:00 · Project: D:\works\projects\Tool-QC · schema 3
+Updated: 2026-10-15T09:10:09+07:00 · Project: D:\works\projects\Tool-QC · schema 3
 
 | Field | Value |
 |---|---|
-| Request | 2026-09-28-1038-workbook-adapter-generalization |
-| Lane | full |
-| Phase | analyze |
+| Request | 2026-10-15-1040-campaign-date-test |
+| Lane | quick |
+| Phase | idle |
 | Spec | (none) |
-| Plan | (none) |
-| Quick approval | (not applicable) |
+| Plan | docs/tdq/plan/2026-10-15-1040-campaign-date-test.md — ⏳ awaiting approval |
+| Quick approval | ✔ approved |
 | Doc language | vi |
 | Lean level | full |
 | QC level | full |
-| Run mode | (not settled) |
+| Run mode | main |
 
 ## Where we are
-A request is open, deep mode. Forbidden: Writing the spec while anything is still vague.
+Finished, or no request opened yet. Forbidden: Overwriting an unfinished request without asking the user.
 
 ## What comes next
-Read the code, research, interview the user until nothing is vague.
+Wait for a new request from the user.
 ```
-python3 scripts/tdq_state.py set phase=spec
+python3 scripts/tdq_state.py init <YYYY-MM-DD-HHMM-slug> <nhanh|chuyen-sau> [--lang <code>]
 ```
-Done when: No question is left that would change the outcome
+Done when: A new request is open
 
 > Write state only through `python3 scripts/tdq_state.py …`. Unsure where you stand → run `tdq_state.py next`.

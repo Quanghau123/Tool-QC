@@ -1,41 +1,49 @@
 {
   "schema_version": 6,
-  "active_request": "2026-09-28-1038-workbook-adapter-generalization",
-  "previous_request": "2026-09-27-0545-verify-all-cases",
-  "lane": "full",
-  "phase": "analyze",
-  "brief_file": null,
+  "active_request": "2026-10-15-1040-campaign-date-test",
+  "previous_request": "2026-10-11-0308-workbook-selection-draft",
+  "lane": "quick",
+  "phase": "idle",
+  "brief_file": "docs/tdq/brief/2026-10-15-1040-campaign-date-test.md",
   "spec_file": null,
   "spec_approved": false,
   "spec_sha256": null,
   "spec_approved_at": null,
   "spec_approved_by": null,
-  "plan_file": null,
+  "plan_file": "docs/tdq/plan/2026-10-15-1040-campaign-date-test.md",
   "plan_approved": false,
   "plan_sha256": null,
   "plan_approved_at": null,
   "plan_approved_by": null,
-  "quick_approved": false,
-  "quick_approved_at": null,
-  "quick_approved_by": null,
-  "implement_mode": null,
+  "quick_approved": true,
+  "quick_approved_at": "2026-10-15T01:52:28+07:00",
+  "quick_approved_by": "1a duyệt nhanh",
+  "implement_mode": "main",
   "implement_pause": null,
   "doc_lang": "vi",
   "muc_gat": "full",
   "muc_qc": "full",
-  "started_at": "2026-09-28T13:39:34+07:00",
-  "loai_request": "refactor",
-  "nhanh_goc": null,
-  "nhanh_request": null,
+  "started_at": "2026-10-15T01:38:35+07:00",
+  "loai_request": "chore",
+  "nhanh_goc": "bugfix/archify-flow-quality",
+  "nhanh_request": "bugfix/archify-flow-quality",
   "phase_history": [
     {
       "phase": "idle",
-      "at": "2026-09-28T13:39:34+07:00"
+      "at": "2026-10-15T01:38:35+07:00"
     },
     {
       "phase": "analyze",
-      "at": "2026-09-28T13:58:57+07:00"
+      "at": "2026-10-15T01:39:00+07:00"
+    },
+    {
+      "phase": "implement",
+      "at": "2026-10-15T01:46:11+07:00"
+    },
+    {
+      "phase": "idle",
+      "at": "2026-10-15T08:19:23+07:00"
     }
   ],
-  "updated_at": "2026-09-28T13:58:57+07:00"
+  "updated_at": "2026-10-15T09:10:09+07:00"
 }
