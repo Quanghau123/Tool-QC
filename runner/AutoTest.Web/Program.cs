@@ -46,8 +46,9 @@ app.MapGet("/api/projects/{project}/tests", (string project) =>
         {
             test.Id, test.Name, test.Tags, test.Destructive, test.Group, test.StepCount,
         })
-        .OrderBy(test => test.Group)
-        .ThenBy(test => test.Name)
+        .OrderBy(test => test.Group, StringComparer.OrdinalIgnoreCase)
+        .ThenBy(test => TestcaseOrdinal(test.Name))
+        .ThenBy(test => test.Name, StringComparer.OrdinalIgnoreCase)
         .ToArray();
 });
 
@@ -768,6 +769,17 @@ static IEnumerable<TestItem> ReadTests(string directory, string project)
                 test.GetProperty("steps").GetArrayLength());
         }
     }
+}
+
+static int TestcaseOrdinal(string name)
+{
+    const string prefix = "Testcase ";
+    if (!name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return int.MaxValue;
+    int separator = name.IndexOf(':', prefix.Length);
+    if (separator <= prefix.Length) return int.MaxValue;
+    return int.TryParse(name.AsSpan(prefix.Length, separator - prefix.Length), out int ordinal)
+        ? ordinal
+        : int.MaxValue;
 }
 
 static EnvironmentGroup[] ReadEnvironmentConfiguration(string root, string projectDir)
