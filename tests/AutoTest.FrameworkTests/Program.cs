@@ -12,6 +12,8 @@ using AutoTest.Integration.Http;
 using AutoTest.LoadTesting;
 using AutoTest.Redis;
 using AutoTest.FrameworkTests.WorkbookTests;
+using AutoTest.Web;
+using AutoTest.UnitX;
 
 Environment.SetEnvironmentVariable("FRAMEWORK_TEST_URL", "http://localhost");
 string repositoryRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
@@ -19,6 +21,18 @@ WorkbookTestHarness.Run(repositoryRoot);
 VerifyWorkbookParserTests.Run(repositoryRoot);
 VerifyTestcaseBuilderTests.Run(repositoryRoot);
 WorkbookBatchTests.Run(repositoryRoot);
+var unitXResult = DecisionTableExecutor.Execute(new DecisionTable(
+    "Làm tròn phí",
+    [
+        new DecisionRule("tax", "multiply", ["amount", "rate"]),
+        new DecisionRule("rounded", "round", ["tax", "digits"]),
+        new DecisionRule("result", "ifGreaterThan", ["rounded", "threshold", "high", "low"])
+    ],
+    [new DecisionRow("Phí chuẩn", new Dictionary<string, decimal> { ["amount"] = 12.345m, ["rate"] = 1m, ["digits"] = 2m, ["threshold"] = 12m, ["high"] = 99m, ["low"] = 0m }, 99m)]));
+Equal("1", unitXResult.PassedCount.ToString(), "UnitX evaluates arithmetic comparison and conditional");
+Throws<InvalidDataException>(() => DecisionTableExecutor.Execute(new DecisionTable("Không hợp lệ", [new DecisionRule("result", "shell", ["amount"])], [new DecisionRow("Row", new Dictionary<string, decimal> { ["amount"] = 1m }, 1m)])), "UnitX rejects unknown operator");
+Throws<InvalidDataException>(() => DecisionTableExecutor.Execute(new DecisionTable("Vượt giới hạn", Enumerable.Range(0, 65).Select(index => new DecisionRule($"r{index}", "add", ["amount", "amount"])).ToArray(), [new DecisionRow("Row", new Dictionary<string, decimal> { ["amount"] = 1m }, 1m)])), "UnitX rejects rule budget");
+
 var environment = EnvironmentStore.Load(Path.GetTempFileName());
 var variables = new Dictionary<string, string> { ["id"] = "42" };
 Equal("items/42", Templates.Resolve("items/${id}", variables, environment), "template variable");
@@ -65,7 +79,7 @@ IReadOnlyList<ValidationIssue> redisIssues = TestcaseValidator.Validate(redisVal
     [new CaseSpec("redis.case", "Redis", ["redis"], false, null, [redisStep with { Expect = new ExpectSpec(null, null, null, null, null, null, null, new RedisExpectSpec(Exists: true)) }], null,
         new CoverageSpec(new SourceVerificationSpec(["source.cs"], DateTimeOffset.UtcNow.ToString("O"), null), new("covered", ["redis"], null), new("covered", ["redis"], null), new("notApplicable", null, "n/a"), new("notApplicable", null, "n/a"), new("notApplicable", null, "n/a"), new("notApplicable", null, "n/a"), new("notApplicable", null, "n/a"), new("covered", ["redis"], null)))],
     registry.All, validateTemporaryFiles: false);
-Equal("0", redisIssues.Count.ToString(), "Redis testcase preflight");var redisStreamStep = new StepSpec("redis stream", null, null,
+Equal("0", redisIssues.Count.ToString(), "Redis testcase preflight"); var redisStreamStep = new StepSpec("redis stream", null, null,
     new RequestSpec(null, null, null, null, null, null, null, null, null, null,
         new RedisRequestSpec("xreadgroup", "${env:REDIS_STREAM_KEY}", Group: "tool-qc-test", Consumer: "${unique}", PayloadField: "payload",
             Filters: new Dictionary<string, string> { ["$.CampaignId"] = "${campaignId}", ["$.Status"] = "1" }, Count: 32, BlockMs: 5000, AckMatch: true)),
@@ -297,6 +311,35 @@ Equal("login", generatorAnalysis.Endpoints.Single(endpoint => endpoint.Path == "
 Equal("user-create", generatorAnalysis.Endpoints.Single(endpoint => endpoint.Path == "/api/users" && endpoint.Method == "POST").AuthenticationRole, "generator create-user endpoint role");
 Equal("/api/users/auth", generatorAnalysis.Authentication.SuggestedConfiguration!.LoginPath, "generator suggested login path");
 Equal("AUTH_USERNAME", generatorAnalysis.Authentication.SuggestedConfiguration.RequiredEnvironmentVariables.First(), "generator auth environment variable");
+string openApiFixture = """
+{
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/orders/{orderId}": {
+      "post": {
+        "operationId": "CreateOrder",
+        "parameters": [{ "name": "orderId", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateOrderRequest" } } } },
+        "responses": { "201": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OrderResponse" } } } } }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CreateOrderRequest": { "type": "object", "required": ["code"], "properties": { "code": { "type": "string" } } },
+      "OrderResponse": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "format": "uuid" }, "orderCode": { "type": "string" } } }
+    }
+  }
+}
+""";
+var openApiAnalysis = AutoTest.Generator.OpenApiContractAdapter.Analyze(openApiFixture, "fixture.openapi.json");
+Equal("openapi-3.1", openApiAnalysis.AnalysisProvider, "OpenAPI analysis provider");
+Equal("POST", openApiAnalysis.Endpoints.Single().Method, "OpenAPI method");
+Equal("/api/orders/{orderId}", openApiAnalysis.Endpoints.Single().Path, "OpenAPI path");
+Equal("body", openApiAnalysis.Endpoints.Single().Parameters.Single(parameter => parameter.Name == "body").Source, "OpenAPI body parameter");
+Equal("OrderResponse", openApiAnalysis.Endpoints.Single().ResponseType!, "OpenAPI response type");
+Equal("orderCode", openApiAnalysis.Types["OrderResponse"].Properties.Single(property => property.Name == "orderCode").JsonName, "OpenAPI response property");
+Throws<InvalidDataException>(() => AutoTest.Generator.OpenApiContractAdapter.Analyze("{\"openapi\":\"3.0.0\"}", "invalid.openapi.json"), "OpenAPI invalid document");
 var generatedSuite = AutoTest.Generator.DraftSuiteBuilder.Build("ops-service", generatorAnalysis, null);
 var localGeneratorOptions = AutoTest.Generator.GeneratorExecutionOptions.From("local", null, null, null);
 Equal("0", localGeneratorOptions.TimeoutSeconds.ToString(), "hybrid generator has unlimited AI timeout by default");
@@ -332,7 +375,44 @@ Equal("0.8", coverageAnalysis.LineRate.ToString(System.Globalization.CultureInfo
 Equal("2", coverageAnalysis.Gaps.Count.ToString(), "generator coverage gaps");
 Directory.Delete(generatorFixture, true);
 
-Console.WriteLine("Framework tests passed: 57");
+string workspaceArtifacts = Path.Combine(Path.GetTempPath(), $"toolqc-api-builder-{Guid.NewGuid():N}");
+var workspaceStore = new ApiBuilderWorkspaceStore(workspaceArtifacts);
+ApiBuilderWorkspace workspace = await workspaceStore.CreateAsync("ops-service", "tester", CancellationToken.None);
+workspace = ApiBuilderWorkspaceStore.AddVariable(workspace, new("orderId", "Tạo đơn", "$.data.id", "string", ApiBuilderWorkspaceStore.RedactPreview("id", "order-1"), DateTimeOffset.UtcNow));
+workspace = workspace with
+{
+    Steps =
+    [
+        new ApiBuilderStep(
+            "Tạo đơn",
+            "POST",
+            "/api/orders",
+            [new ApiBuilderField("customerId", "$.customerId", "string", "${customerId}")],
+            [new ApiBuilderField("id", "$.data.id", "string", ""), new ApiBuilderField("status", "$.data.status", "string", "")])
+    ]
+};
+workspace = await workspaceStore.SaveAsync(workspace, workspace.Revision, CancellationToken.None);
+ApiBuilderWorkspace restoredWorkspace = await workspaceStore.LoadAsync("ops-service", workspace.Id, CancellationToken.None);
+Equal("orderId", restoredWorkspace.Variables.Single().Name, "workspace restores saved variable");
+Equal("${customerId}", restoredWorkspace.Steps.Single().RequestFields.Single().Value, "workspace restores request variable assignment");
+Equal("$.data.id", restoredWorkspace.Steps.Single().ResponseFields.First().JsonPath, "workspace restores response field tree");
+string compiledWorkspace = ApiBuilderCompiler.Compile(restoredWorkspace, "api-builder.orders");
+using JsonDocument compiledWorkspaceJson = JsonDocument.Parse(compiledWorkspace);
+Equal("orderId", compiledWorkspaceJson.RootElement.GetProperty("cases")[0].GetProperty("steps")[0].GetProperty("save").EnumerateObject().Single().Name, "workspace compiler saves response variable");
+Equal("${customerId}", compiledWorkspaceJson.RootElement.GetProperty("cases")[0].GetProperty("steps")[0].GetProperty("request").GetProperty("body").GetProperty("customerId").GetString()!, "workspace compiler keeps request variable");
+Throws<InvalidDataException>(() => ApiBuilderCompiler.Compile(restoredWorkspace with { Variables = [new ApiBuilderVariable("missing", "Tạo đơn", "$.data.missing", "string", "", DateTimeOffset.UtcNow)] }, "api-builder.invalid"), "workspace compiler rejects missing response mapping");
+Throws<InvalidDataException>(() => ApiBuilderWorkspaceStore.AddVariable(workspace, new("ORDERID", "Tạo đơn", "$.data.id", "string", "order-1", DateTimeOffset.UtcNow)), "workspace rejects duplicate variable");
+Throws<InvalidDataException>(() => ApiBuilderWorkspaceStore.AddVariable(workspace, new("unique", "Tạo đơn", "$.data.id", "string", "order-1", DateTimeOffset.UtcNow)), "workspace rejects built-in variable");
+Throws<InvalidDataException>(() => new ApiBuilderWorkspaceStore(workspaceArtifacts).CreateAsync("../outside", "tester", CancellationToken.None).GetAwaiter().GetResult(), "workspace rejects project traversal");
+Equal("***", ApiBuilderWorkspaceStore.RedactPreview("accessToken", "secret-value"), "workspace redacts sensitive preview");
+Throws<ApiBuilderWorkspaceConflictException>(() => workspaceStore.SaveAsync(workspace, workspace.Revision - 1, CancellationToken.None).GetAwaiter().GetResult(), "workspace rejects stale revision");
+string workspaceFile = Path.Combine(workspaceArtifacts, "api-builder", "ops-service", workspace.Id, "workspace.json");
+File.SetLastWriteTimeUtc(workspaceFile, DateTime.UtcNow.AddDays(-15));
+Equal("1", workspaceStore.DeleteExpiredWorkspaces(DateTimeOffset.UtcNow).ToString(), "workspace removes expired draft");
+Equal("0", workspaceStore.DeleteExpiredWorkspaces(DateTimeOffset.UtcNow).ToString(), "workspace keeps no deleted draft");
+Directory.Delete(workspaceArtifacts, true);
+
+Console.WriteLine("Framework tests passed: 66");
 return 0;
 
 static StepSpec Step(string? method, string? path, DatabaseRequestSpec? database, MqttRequestSpec? mqtt)
@@ -341,4 +421,18 @@ static void Equal(string expected, string actual, string name)
 {
     if (!string.Equals(expected, actual, StringComparison.Ordinal))
         throw new InvalidOperationException($"{name}: expected '{expected}', actual '{actual}'");
+}
+
+static void Throws<TException>(Action action, string name) where TException : Exception
+{
+    try
+    {
+        action();
+    }
+    catch (TException)
+    {
+        return;
+    }
+
+    throw new InvalidOperationException($"{name}: expected {typeof(TException).Name}.");
 }

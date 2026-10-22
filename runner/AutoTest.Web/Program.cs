@@ -6,6 +6,8 @@ using System.Text.Encodings.Web;
 using System.Text;
 using System.Security.Cryptography;
 using AutoTest.MessageScanner;
+using AutoTest.Web;
+using AutoTest.UnitX;
 
 // Backend UI: khai báo endpoint, khởi chạy runner nền và trả artifact cho trình duyệt.
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
@@ -20,6 +22,11 @@ string historyDirectory = Path.Combine(root, ".artifacts", "ui-runs");
 Directory.CreateDirectory(historyDirectory);
 ConcurrentDictionary<string, RunState> runs = new(StringComparer.OrdinalIgnoreCase);
 ConcurrentDictionary<string, WorkbookUploadState> workbookUploads = new(StringComparer.OrdinalIgnoreCase);
+ApiBuilderWorkspaceStore apiBuilderWorkspaces = new(Path.Combine(root, ".artifacts"));
+UnitXWorkspaceStore unitXWorkspaces = new(Path.Combine(root, ".artifacts"));
+int expiredApiBuilderWorkspaces = apiBuilderWorkspaces.DeleteExpiredWorkspaces(DateTimeOffset.UtcNow);
+if (expiredApiBuilderWorkspaces > 0)
+    app.Logger.LogInformation("ApiBuilder workspace cleanup removed {Count} expired workspaces.", expiredApiBuilderWorkspaces);
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
@@ -44,12 +51,120 @@ app.MapGet("/api/projects/{project}/tests", (string project) =>
     return ReadTests(Path.Combine(projectDir, "testcases"), projectName)
         .Select(test => new
         {
-            test.Id, test.Name, test.Tags, test.Destructive, test.Group, test.StepCount,
+            test.Id,
+            test.Name,
+            test.Tags,
+            test.Destructive,
+            test.Group,
+            test.StepCount,
         })
         .OrderBy(test => test.Group, StringComparer.OrdinalIgnoreCase)
         .ThenBy(test => TestcaseOrdinal(test.Name))
         .ThenBy(test => test.Name, StringComparer.OrdinalIgnoreCase)
         .ToArray();
+});
+
+app.MapPost("/api/projects/{project}/api-builder/workspaces", async (string project, ApiBuilderWorkspaceCreateRequest request, CancellationToken cancellationToken) =>
+{
+    _ = SafeProjectDirectory(root, project);
+    ApiBuilderWorkspace workspace = await apiBuilderWorkspaces.CreateAsync(project, request.Owner, cancellationToken);
+    app.Logger.LogInformation("ApiBuilder workspace created for project {Project}.", project);
+    return Results.Created($"/api/projects/{project}/api-builder/workspaces/{workspace.Id}", workspace);
+});
+
+app.MapGet("/api/projects/{project}/api-builder/workspaces/{workspaceId}", async (string project, string workspaceId, CancellationToken cancellationToken) =>
+{
+    _ = SafeProjectDirectory(root, project);
+    try
+    {
+        return Results.Ok(await apiBuilderWorkspaces.LoadAsync(project, workspaceId, cancellationToken));
+    }
+    catch (FileNotFoundException)
+    {
+        return Results.NotFound(new { code = "TQC-AB-001", message = "Không tìm thấy workspace API Builder." });
+    }
+    catch (InvalidDataException exception)
+    {
+        return Results.BadRequest(new { code = "TQC-AB-002", message = exception.Message });
+    }
+});
+
+app.MapPut("/api/projects/{project}/api-builder/workspaces/{workspaceId}", async (string project, string workspaceId, ApiBuilderWorkspaceSaveRequest request, CancellationToken cancellationToken) =>
+{
+    _ = SafeProjectDirectory(root, project);
+    if (!workspaceId.Equals(request.Workspace.Id, StringComparison.OrdinalIgnoreCase) || !project.Equals(request.Workspace.Project, StringComparison.OrdinalIgnoreCase))
+        return Results.BadRequest(new { code = "TQC-AB-003", message = "Project hoặc workspace ID không khớp." });
+    try
+    {
+        ApiBuilderWorkspace workspace = await apiBuilderWorkspaces.SaveAsync(request.Workspace, request.ExpectedRevision, cancellationToken);
+        app.Logger.LogInformation("ApiBuilder workspace saved for project {Project}.", project);
+        return Results.Ok(workspace);
+    }
+    catch (ApiBuilderWorkspaceConflictException exception)
+    {
+        return Results.Conflict(new { code = "TQC-AB-004", message = exception.Message });
+    }
+    catch (InvalidDataException exception)
+    {
+        return Results.BadRequest(new { code = "TQC-AB-005", message = exception.Message });
+    }
+});
+
+app.MapPost("/api/projects/{project}/api-builder/workspaces/{workspaceId}/compile", async (string project, string workspaceId, ApiBuilderCompileRequest request, CancellationToken cancellationToken) =>
+{
+    _ = SafeProjectDirectory(root, project);
+    try
+    {
+        ApiBuilderWorkspace workspace = await apiBuilderWorkspaces.LoadAsync(project, workspaceId, cancellationToken);
+        string caseId = SafeName(request.CaseId, "api-builder.draft");
+        string json = ApiBuilderCompiler.Compile(workspace, caseId);
+        return Results.Ok(new { json, caseId });
+    }
+    catch (FileNotFoundException)
+    {
+        return Results.NotFound(new { code = "TQC-AB-001", message = "Không tìm thấy workspace API Builder." });
+    }
+    catch (InvalidDataException exception)
+    {
+        return Results.BadRequest(new { code = "TQC-AB-006", message = exception.Message });
+    }
+});
+
+app.MapPost("/api/projects/{project}/unitx/workspaces", async (string project, CancellationToken cancellationToken) =>
+{
+    _ = SafeProjectDirectory(root, project);
+    UnitXWorkspace workspace = await unitXWorkspaces.CreateAsync(project, cancellationToken);
+    return Results.Created($"/api/projects/{project}/unitx/workspaces/{workspace.Id}", workspace);
+});
+
+app.MapGet("/api/projects/{project}/unitx/workspaces/{workspaceId}", async (string project, string workspaceId, CancellationToken cancellationToken) =>
+{
+    _ = SafeProjectDirectory(root, project);
+    try { return Results.Ok(await unitXWorkspaces.LoadAsync(project, workspaceId, cancellationToken)); }
+    catch (FileNotFoundException) { return Results.NotFound(new { code = "TQC-UX-001", message = "Không tìm thấy workspace UnitX." }); }
+    catch (InvalidDataException exception) { return Results.BadRequest(new { code = "TQC-UX-002", message = exception.Message }); }
+});
+
+app.MapPut("/api/projects/{project}/unitx/workspaces/{workspaceId}", async (string project, string workspaceId, UnitXWorkspaceSaveRequest request, CancellationToken cancellationToken) =>
+{
+    _ = SafeProjectDirectory(root, project);
+    if (!workspaceId.Equals(request.Workspace.Id, StringComparison.OrdinalIgnoreCase) || !project.Equals(request.Workspace.Project, StringComparison.OrdinalIgnoreCase))
+        return Results.BadRequest(new { code = "TQC-UX-003", message = "Project hoặc workspace ID không khớp." });
+    try { return Results.Ok(await unitXWorkspaces.SaveAsync(request.Workspace, request.ExpectedRevision, cancellationToken)); }
+    catch (ApiBuilderWorkspaceConflictException exception) { return Results.Conflict(new { code = "TQC-UX-004", message = exception.Message }); }
+    catch (InvalidDataException exception) { return Results.BadRequest(new { code = "TQC-UX-005", message = exception.Message }); }
+});
+
+app.MapPost("/api/projects/{project}/unitx/workspaces/{workspaceId}/run", async (string project, string workspaceId, CancellationToken cancellationToken) =>
+{
+    _ = SafeProjectDirectory(root, project);
+    try
+    {
+        UnitXWorkspace workspace = await unitXWorkspaces.LoadAsync(project, workspaceId, cancellationToken);
+        return Results.Ok(DecisionTableExecutor.Execute(workspace.Table));
+    }
+    catch (FileNotFoundException) { return Results.NotFound(new { code = "TQC-UX-001", message = "Không tìm thấy workspace UnitX." }); }
+    catch (InvalidDataException exception) { return Results.BadRequest(new { code = "TQC-UX-006", message = exception.Message }); }
 });
 
 app.MapPost("/api/projects/{project}/workbooks/analyze", async (string project, HttpRequest request, CancellationToken cancellationToken) =>
@@ -1064,6 +1179,10 @@ sealed record RunRequest(string Project, string[]? CaseIds, bool SequentialChain
 sealed record TestItem(string Id, string Name, string[] Tags, bool Destructive, string Group, int StepCount);
 sealed record EnvironmentUpdate(Dictionary<string, string> Values);
 sealed record ArchifyRequest(string? SourcePath, string Description, string? DiagramType = "architecture", string? Provider = "codex-cli", string? VisualPreset = "classic", string? Animation = "none");
+sealed record ApiBuilderWorkspaceCreateRequest(string? Owner);
+sealed record ApiBuilderWorkspaceSaveRequest(ApiBuilderWorkspace Workspace, int? ExpectedRevision);
+sealed record ApiBuilderCompileRequest(string? CaseId);
+sealed record UnitXWorkspaceSaveRequest(UnitXWorkspace Workspace, int? ExpectedRevision);
 sealed record GenerateRequest(string SourcePath, string? Mode = "local", string? Module = null, string? Provider = "codex-cli");
 sealed record GenerateDraftRequest(string SourcePath, string[]? EndpointIds, string? Mode = "auto", string? Provider = "codex-cli");
 sealed record DraftContentRequest(string ReviewId, string Json, bool SequentialChain = false);

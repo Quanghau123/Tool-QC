@@ -31,6 +31,14 @@ projects/*/
 !projects/project-template/
 !projects/project-template/**
 
+# Local agent worktrees and code-analysis caches
+.claude/worktrees/
+graphify-out/
+
+# TDQ runtime state; authored brief/spec/plan/QC/report documents remain tracked
+docs/tdq/.tdq-*
+docs/tdq/stop_streak.json
+
 # Build output
 bin/
 obj/

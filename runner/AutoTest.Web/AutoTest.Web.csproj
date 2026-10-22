@@ -5,6 +5,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\AutoTest.MessageScanner\AutoTest.MessageScanner.csproj" />
+    <ProjectReference Include="..\..\src\AutoTest.MessageScanner\AutoTest.MessageScanner.csproj" /><ProjectReference Include="..\..\src\AutoTest.UnitX\AutoTest.UnitX.csproj" />
   </ItemGroup>
 </Project>

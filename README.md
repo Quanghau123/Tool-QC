@@ -57,6 +57,12 @@ Có thể ép chế độ sinh bằng tham số cuối: `auto`, `ai` hoặc `loc
 
 Generator chỉ sinh bản nháp; các coverage chưa xác minh giữ trạng thái `blocked` để người kiểm thử hoàn thiện trước khi chạy. Trên UI, bản nháp có thể được preflight và chạy trực tiếp từ thư mục artifact tạm trước khi kích hoạt; kết quả vẫn xuất hiện trong panel chạy, lịch sử và báo cáo mà không ghi vào `projects/<project>/testcases`.
 
+### API Builder
+
+API Builder cho phép tạo chuỗi step, lưu JSON path của field phản hồi thành biến và gán biến đó vào request của step sau mà không cần sửa JSON. Workspace được lưu cục bộ tại `.artifacts/api-builder/<project>/<workspace-id>/workspace.json`; catalog biến không phân biệt hoa/thường, hiển thị theo A–Z và workspace dùng revision để phát hiện xung đột khi lưu.
+
+Nút **Biên dịch và kiểm tra** chỉ chuyển workspace thành bản nháp testcase schema-v2 với `steps[].save` và `${variable}`, rồi đưa bản nháp vào cùng luồng **1. Kiểm tra** → **2. Chạy thử API** → **3. Lưu testcase** của Generator. API Builder không ghi trực tiếp vào `projects/<project>/testcases`. Preflight cơ bản có thể hợp lệ nhưng vẫn không cho lưu chính thức khi coverage evidence còn `blocked`; chỉ activation sau preflight đầy đủ mới áp dụng guard SHA-256 khi ghi đè.
+
 Generator hỗ trợ ba chế độ: `auto` ưu tiên AI rồi tự quay về Roslyn local, `ai` bắt buộc AI, và `local` chỉ dùng Roslyn. Provider hỗ trợ `codex-cli` và `claude-cli`; chọn bằng `TESTCASE_GENERATOR_PROVIDER` hoặc UI. AI chạy read-only/restricted trên source backend, không được đọc `.env` hoặc secret; kết quả vẫn phải qua preflight, chạy thử và người dùng lưu chính thức.
 
 Máy dùng Codex cần cài và đăng nhập `codex`; máy dùng Claude cần cài `claude` và đăng nhập `claude auth login`. Tool-QC chỉ gọi CLI đã chọn và không lưu API key của provider.
@@ -72,6 +78,10 @@ Generator còn dùng Roslyn SemanticModel để nhận diện service call, guar
 ```
 
 AutoFixture và xUnit không nằm trong luồng API testcase mặc định: chúng chỉ phù hợp với renderer unit-test C# tùy chọn, trong khi Tool-QC tiếp tục dùng testcase JSON và API/database thật.
+
+### UnitX
+
+UnitX V1 cho phép tester tạo bảng quyết định decimal bằng operator whitelist: `add`, `subtract`, `multiply`, `divide`, `round`, `ifGreaterThan`; kết quả trả actual/expected theo từng dòng. Draft UnitX lưu dưới `.artifacts/unitx`. UnitX không thực thi JavaScript, C#, shell hoặc biểu thức tự do. Hỗ trợ source .NET/xUnit là Phase 2 chỉ có design boundary/review/sandbox cô lập, chưa được triển khai.
 
 Các lệnh khác:
 
