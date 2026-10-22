@@ -1,11 +1,11 @@
 # TDQ STATE (generated — do not hand-edit)
-Updated: 2026-10-22T22:43:31+07:00 · Project: D:\works\projects\Tool-QC · schema 3
+Updated: 2026-10-23T01:31:49+07:00 · Project: D:\works\projects\Tool-QC · schema 3
 
 | Field | Value |
 |---|---|
 | Request | 2026-10-22-1725-tool-qc-upgrade |
 | Lane | full |
-| Phase | report |
+| Phase | idle |
 | Spec | docs/tdq/spec/2026-10-22-1725-tool-qc-upgrade.md — ✔ approved |
 | Plan | docs/tdq/plan/2026-10-22-1725-tool-qc-upgrade.md — ✔ approved |
 | Quick approval | (not applicable) |
@@ -15,13 +15,13 @@ Updated: 2026-10-22T22:43:31+07:00 · Project: D:\works\projects\Tool-QC · sche
 | Run mode | main |
 
 ## Where we are
-QC has PASSed. Forbidden: Committing or pushing before the user asks for it.
+Finished, or no request opened yet. Forbidden: Overwriting an unfinished request without asking the user.
 
 ## What comes next
-Write a short report (10-20 lines recommended, no hard limit) then ask the user about committing.
+Wait for a new request from the user.
 ```
-python3 "C:/Users/quanghau/.claude/plugins/cache/tdq-local/tdq-workflow/0.73.1/scripts/tdq_state.py" set phase=idle
+python3 "C:/Users/quanghau/.claude/plugins/cache/tdq-local/tdq-workflow/0.73.1/scripts/tdq_state.py" init <YYYY-MM-DD-HHMM-slug> <nhanh|chuyen-sau> [--lang <code>]
 ```
-Done when: The report is written and the user has been asked about committing
+Done when: A new request is open
 
 > Write state only through `python3 "C:/Users/quanghau/.claude/plugins/cache/tdq-local/tdq-workflow/0.73.1/scripts/tdq_state.py" …`. Unsure where you stand → run `tdq_state.py next`.

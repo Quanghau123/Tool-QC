@@ -4,12 +4,12 @@ Soul: chất lượng > runtime > context cost · luật gốc: skills/tdq-conve
 
 **Đã làm:** Contract trung gian có adapter OpenAPI/Roslyn; API Builder có workspace artifact, catalog biến, compile sang schema-v2 và luồng draft/preflight/activation hiện hữu; UnitX V1 decision-table whitelist và UI/workspace riêng; cập nhật public contract và boundary Phase 2.
 **Kết quả:** Framework regression `66` PASS; API Builder runtime xác nhận 2 step/1 variable và compile-preflight `passed=True`, `readyToSave=False`, warnings=4 — coverage gate không bị bypass.
-**Kiểm:** `dotnet build ApiAutoTest.sln` PASS 0 warning/0 error · `dotnet build runner/AutoTest.Web/AutoTest.Web.csproj` PASS 0/0 · `node --check` PASS · QC 9/9 DoD ký nhận, trong đó Q2/Q9 là lệch browser chờ duyệt.
+**Kiểm:** `dotnet build ApiAutoTest.sln` PASS 0 warning/0 error · `dotnet build runner/AutoTest.Web/AutoTest.Web.csproj` PASS 0/0 · `node --check` PASS · QC 9/9 DoD ký nhận; deviations Q2/Q9 về browser đã được duyệt, giữ evidence BLOCKED thay vì tuyên bố click-through PASS.
 **Đầu ra:** `runner/AutoTest.Web/ApiBuilderWorkspace.cs` · `runner/AutoTest.Web/ApiBuilderCompiler.cs` · `src/AutoTest.UnitX/` · `docs/tdq/qc/2026-10-22-1725-tool-qc-upgrade.md`.
 **Giới hạn:** Không có browser driver/automation nên chưa có click-through evidence; local `be-booking` API từ chối kết nối `localhost:5018`, smoke 0/2 PASS được báo là `ENVIRONMENT_BLOCKER`; UnitX source .NET/xUnit vẫn chỉ là Phase 2 design boundary.
-**Lệch spec chờ duyệt:** #1 Q2 · browser click-through → không có browser automation · ghi BLOCKED, giữ runtime/compiler evidence.
-**Lệch spec chờ duyệt:** #2 Q9 · UI click-through → không có browser automation · ghi BLOCKED, giữ syntax/build/text evidence.
-**Git:** chưa commit, chưa push.
+**Lệch spec đã duyệt:** #1 Q2 · browser click-through → không có browser automation · ghi BLOCKED, giữ runtime/compiler evidence.
+**Lệch spec đã duyệt:** #2 Q9 · UI click-through → không có browser automation · ghi BLOCKED, giữ syntax/build/text evidence.
+**Git:** commit `5ca58bf` đã push lên `origin/feature/tool-qc-upgrade`.
 
 ## Thời gian
 

@@ -3,24 +3,24 @@
   "active_request": "2026-10-22-1725-tool-qc-upgrade",
   "previous_request": null,
   "lane": "full",
-  "phase": "report",
+  "phase": "idle",
   "brief_file": "docs/tdq/brief/2026-10-22-1725-tool-qc-upgrade.md",
   "spec_file": "docs/tdq/spec/2026-10-22-1725-tool-qc-upgrade.md",
   "spec_approved": true,
-  "spec_sha256": "d6bb93d5ec2d10a87b4fea2dd798ca18254b6de5570bc8b87d401ef7856cfb65",
-  "spec_approved_at": "2026-10-22T18:47:12+07:00",
+  "spec_sha256": "8ce036568cb2e98c558088195aa3a9aac67c35fcc215f8e18e96dcdb199137db",
+  "spec_approved_at": "2026-10-23T01:30:58+07:00",
   "spec_descriptor": {
     "target": "spec",
     "request": "2026-10-22-1725-tool-qc-upgrade",
     "lane": "full",
     "file": "docs/tdq/spec/2026-10-22-1725-tool-qc-upgrade.md",
-    "sha256": "d6bb93d5ec2d10a87b4fea2dd798ca18254b6de5570bc8b87d401ef7856cfb65",
-    "by": "duyệt spec",
-    "at": "2026-10-22T18:47:12+07:00",
+    "sha256": "8ce036568cb2e98c558088195aa3a9aac67c35fcc215f8e18e96dcdb199137db",
+    "by": "duyệt lại spec",
+    "at": "2026-10-23T01:30:58+07:00",
     "assurance": "cli-verified",
-    "version": 1
+    "version": 2
   },
-  "spec_approved_by": "duyệt spec",
+  "spec_approved_by": "duyệt lại spec",
   "spec_bo_qua_do": null,
   "lsp_bo_qua": {
     "ly_do": "đánh giá kiến trúc chỉ đọc, LSP theo module chưa khả dụng; dùng graphify và tìm kiếm mã nguồn thay thế",
@@ -122,7 +122,11 @@
     {
       "phase": "report",
       "at": "2026-10-22T20:33:49+07:00"
+    },
+    {
+      "phase": "idle",
+      "at": "2026-10-23T01:31:49+07:00"
     }
   ],
-  "updated_at": "2026-10-22T22:43:31+07:00"
+  "updated_at": "2026-10-23T01:31:49+07:00"
 }
