@@ -33,6 +33,7 @@ public sealed class ApiBuilderWorkspaceStore
             null,
             "not-run",
             [],
+            [],
             []);
         return await SaveAsync(workspace, null, cancellationToken);
     }
@@ -50,7 +51,8 @@ public sealed class ApiBuilderWorkspaceStore
         workspace = workspace with
         {
             Variables = workspace.Variables ?? [],
-            Steps = workspace.Steps ?? []
+            Steps = workspace.Steps ?? [],
+            Bindings = workspace.Bindings ?? []
         };
         Validate(workspace);
         return workspace;
@@ -113,7 +115,46 @@ public sealed class ApiBuilderWorkspaceStore
             throw new InvalidDataException("Tên biến bị trùng trong workspace.");
         foreach (ApiBuilderStep step in workspace.Steps)
             ValidateStep(step);
+        foreach (ApiBuilderBinding binding in workspace.Bindings ?? [])
+            ValidateBinding(workspace, binding);
     }
+
+    private static void ValidateBinding(ApiBuilderWorkspace workspace, ApiBuilderBinding binding)
+    {
+        int targetStepIndex = FindStepIndex(workspace.Steps, binding.TargetStep);
+        if (targetStepIndex < 1)
+            throw new InvalidDataException("Biến chỉ được bind vào step nằm sau step nguồn.");
+
+        ApiBuilderVariable source = workspace.Variables.SingleOrDefault(variable => variable.Name.Equals(binding.SourceVariable, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidDataException("Binding trỏ đến biến không tồn tại.");
+        int sourceStepIndex = FindStepIndex(workspace.Steps, source.SourceStep);
+        if (sourceStepIndex < 0 || sourceStepIndex >= targetStepIndex)
+            throw new InvalidDataException("Biến phải được lưu từ response của step trước.");
+
+        ApiBuilderStep sourceStep = workspace.Steps[sourceStepIndex];
+        ApiBuilderField sourceField = sourceStep.ResponseFields.SingleOrDefault(field => field.JsonPath.Equals(source.JsonPath, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidDataException("Biến không khớp field phản hồi của step nguồn.");
+        ApiBuilderStep targetStep = workspace.Steps[targetStepIndex];
+        ApiBuilderField targetField = targetStep.RequestFields.SingleOrDefault(field => string.Equals(field.Id, binding.TargetFieldId, StringComparison.Ordinal))
+            ?? throw new InvalidDataException("Binding trỏ đến field request không tồn tại.");
+        if (sourceField.Sensitive || targetField.Sensitive || IsCredentialTarget(targetField))
+            throw new InvalidDataException("Không được bind field nhạy cảm hoặc credential.");
+        if (!IsCompatible(sourceField.Type, targetField.Type))
+            throw new InvalidDataException("Kiểu dữ liệu của binding không tương thích.");
+        if (!string.IsNullOrEmpty(workspace.SourceFingerprint) && !workspace.Steps.All(step => string.IsNullOrEmpty(step.ContractFingerprint) || step.ContractFingerprint.Equals(workspace.SourceFingerprint, StringComparison.Ordinal)))
+            throw new InvalidDataException("Contract đã thay đổi; cần chọn lại operation trước khi lưu.");
+    }
+
+    private static int FindStepIndex(IReadOnlyList<ApiBuilderStep> steps, string name)
+        => steps.Select((step, index) => new { step, index }).Where(item => item.step.Name.Equals(name, StringComparison.OrdinalIgnoreCase)).Select(item => item.index).DefaultIfEmpty(-1).Single();
+
+    private static bool IsCompatible(string sourceType, string targetType)
+        => sourceType.Equals(targetType, StringComparison.OrdinalIgnoreCase)
+            || (sourceType.Equals("int", StringComparison.OrdinalIgnoreCase) && targetType.Equals("decimal", StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsCredentialTarget(ApiBuilderField field)
+        => string.Equals(field.Location, "header", StringComparison.OrdinalIgnoreCase)
+            && (field.Name.Equals("authorization", StringComparison.OrdinalIgnoreCase) || IsSensitive(field.Name));
 
     private static void ValidateStep(ApiBuilderStep step)
     {
@@ -175,20 +216,26 @@ public sealed record ApiBuilderWorkspace(
     string? SourceFingerprint,
     string PreflightStatus,
     IReadOnlyList<ApiBuilderVariable> Variables,
-    IReadOnlyList<ApiBuilderStep> Steps);
+    IReadOnlyList<ApiBuilderStep> Steps,
+    IReadOnlyList<ApiBuilderBinding>? Bindings = null);
 
 public sealed record ApiBuilderStep(
     string Name,
     string Method,
     string Path,
     IReadOnlyList<ApiBuilderField> RequestFields,
-    IReadOnlyList<ApiBuilderField> ResponseFields);
+    IReadOnlyList<ApiBuilderField> ResponseFields,
+    string? OperationId = null,
+    string? ContractFingerprint = null);
 
 public sealed record ApiBuilderField(
     string Name,
     string JsonPath,
     string Type,
-    string Value);
+    string Value,
+    string? Id = null,
+    string? Location = null,
+    bool Sensitive = false);
 
 public sealed record ApiBuilderVariable(
     string Name,
@@ -197,3 +244,8 @@ public sealed record ApiBuilderVariable(
     string Type,
     string Preview,
     DateTimeOffset CreatedAt);
+
+public sealed record ApiBuilderBinding(
+    string SourceVariable,
+    string TargetStep,
+    string TargetFieldId);

@@ -36,16 +36,27 @@ public static class ApiBuilderCompiler
 
     private static JsonObject CompileStep(ApiBuilderWorkspace workspace, ApiBuilderStep step)
     {
+        Dictionary<string, string> values = Values(workspace, step);
         JsonObject request = new()
         {
             ["method"] = step.Method,
-            ["path"] = Path(step)
+            ["path"] = Path(step, values)
         };
         JsonObject body = new();
-        foreach (ApiBuilderField field in step.RequestFields.Where(field => !step.Path.Contains($"{{{field.Name}}}", StringComparison.OrdinalIgnoreCase)))
-            body[field.Name] = field.Value;
+        Dictionary<string, string> headers = new(StringComparer.OrdinalIgnoreCase);
+        foreach (ApiBuilderField field in step.RequestFields)
+        {
+            string location = Location(step, field);
+            string value = values[field.Id ?? field.Name];
+            if (location == "body")
+                body[field.Name] = value;
+            else if (location == "header")
+                headers[field.Name] = value;
+        }
         if (body.Count > 0)
             request["body"] = body;
+        if (headers.Count > 0)
+            request["headers"] = JsonSerializer.SerializeToNode(headers);
 
         Dictionary<string, string> saved = workspace.Variables
             .Where(variable => variable.SourceStep.Equals(step.Name, StringComparison.OrdinalIgnoreCase))
@@ -65,13 +76,25 @@ public static class ApiBuilderCompiler
         return result;
     }
 
-    private static string Path(ApiBuilderStep step)
+    private static Dictionary<string, string> Values(ApiBuilderWorkspace workspace, ApiBuilderStep step)
+    {
+        Dictionary<string, string> values = step.RequestFields.ToDictionary(field => field.Id ?? field.Name, field => field.Value, StringComparer.Ordinal);
+        foreach (ApiBuilderBinding binding in workspace.Bindings?.Where(binding => binding.TargetStep.Equals(step.Name, StringComparison.OrdinalIgnoreCase)) ?? [])
+            values[binding.TargetFieldId] = $"${{{binding.SourceVariable}}}";
+        return values;
+    }
+
+    private static string Path(ApiBuilderStep step, IReadOnlyDictionary<string, string> values)
     {
         string path = step.Path;
-        foreach (ApiBuilderField field in step.RequestFields)
-            path = path.Replace($"{{{field.Name}}}", field.Value, StringComparison.OrdinalIgnoreCase);
-        return path;
+        foreach (ApiBuilderField field in step.RequestFields.Where(field => Location(step, field) == "path"))
+            path = path.Replace($"{{{field.Name}}}", values[field.Id ?? field.Name], StringComparison.OrdinalIgnoreCase);
+        string query = string.Join("&", step.RequestFields.Where(field => Location(step, field) == "query").Select(field => $"{field.Name}={values[field.Id ?? field.Name]}"));
+        return query.Length == 0 ? path : $"{path}?{query}";
     }
+
+    private static string Location(ApiBuilderStep step, ApiBuilderField field)
+        => field.Location?.ToLowerInvariant() ?? (step.Path.Contains($"{{{field.Name}}}", StringComparison.OrdinalIgnoreCase) ? "path" : "body");
 
     private static JsonObject Coverage(ApiBuilderWorkspace workspace, string[] stepNames)
     {
