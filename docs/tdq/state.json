@@ -1,49 +1,132 @@
 {
   "schema_version": 6,
-  "active_request": "2026-10-15-1040-campaign-date-test",
-  "previous_request": "2026-10-11-0308-workbook-selection-draft",
-  "lane": "quick",
+  "active_request": "2026-10-22-1725-tool-qc-upgrade",
+  "previous_request": null,
+  "lane": "full",
   "phase": "idle",
-  "brief_file": "docs/tdq/brief/2026-10-15-1040-campaign-date-test.md",
-  "spec_file": null,
-  "spec_approved": false,
-  "spec_sha256": null,
-  "spec_approved_at": null,
-  "spec_approved_by": null,
-  "plan_file": "docs/tdq/plan/2026-10-15-1040-campaign-date-test.md",
-  "plan_approved": false,
-  "plan_sha256": null,
-  "plan_approved_at": null,
-  "plan_approved_by": null,
-  "quick_approved": true,
-  "quick_approved_at": "2026-10-15T01:52:28+07:00",
-  "quick_approved_by": "1a duyệt nhanh",
+  "brief_file": "docs/tdq/brief/2026-10-22-1725-tool-qc-upgrade.md",
+  "spec_file": "docs/tdq/spec/2026-10-22-1725-tool-qc-upgrade.md",
+  "spec_approved": true,
+  "spec_sha256": "8ce036568cb2e98c558088195aa3a9aac67c35fcc215f8e18e96dcdb199137db",
+  "spec_approved_at": "2026-10-23T01:30:58+07:00",
+  "spec_descriptor": {
+    "target": "spec",
+    "request": "2026-10-22-1725-tool-qc-upgrade",
+    "lane": "full",
+    "file": "docs/tdq/spec/2026-10-22-1725-tool-qc-upgrade.md",
+    "sha256": "8ce036568cb2e98c558088195aa3a9aac67c35fcc215f8e18e96dcdb199137db",
+    "by": "duyệt lại spec",
+    "at": "2026-10-23T01:30:58+07:00",
+    "assurance": "cli-verified",
+    "version": 2
+  },
+  "spec_approved_by": "duyệt lại spec",
+  "spec_bo_qua_do": null,
+  "lsp_bo_qua": {
+    "ly_do": "đánh giá kiến trúc chỉ đọc, LSP theo module chưa khả dụng; dùng graphify và tìm kiếm mã nguồn thay thế",
+    "at": "2026-10-22T17:27:16+07:00",
+    "module": [
+      "csharp:. → CHUA_KIEM (chưa chạy kịch bản)",
+      "csharp:runner/AutoTest.Generator → CHUA_KIEM (chưa chạy kịch bản)",
+      "csharp:src/AutoTest.Abstractions → CHUA_KIEM (chưa chạy kịch bản)",
+      "csharp:src/AutoTest.Core → CHUA_KIEM (chưa chạy kịch bản)",
+      "csharp:src/AutoTest.LoadTesting → CHUA_KIEM (chưa chạy kịch bản)",
+      "csharp:src/AutoTest.ProjectAdapters.BeBooking → CHUA_KIEM (chưa chạy kịch bản)",
+      "csharp:src/AutoTest.Workbooks → CHUA_KIEM (chưa chạy kịch bản)",
+      "csharp:tests/AutoTest.FrameworkTests → CHUA_KIEM (chưa chạy kịch bản)",
+      "javascript:. → CHUA_KIEM (chưa chạy kịch bản)"
+    ]
+  },
+  "plan_file": "docs/tdq/plan/2026-10-22-1725-tool-qc-upgrade.md",
+  "plan_approved": true,
+  "plan_sha256": "936102845e1fdb6919257935784414ccc9371eac97df4fe652232adf6d0488b0",
+  "plan_approved_at": "2026-10-22T18:50:55+07:00",
+  "plan_approved_by": "duyệt plan",
+  "plan_descriptor": {
+    "target": "plan",
+    "request": "2026-10-22-1725-tool-qc-upgrade",
+    "lane": "full",
+    "file": "docs/tdq/plan/2026-10-22-1725-tool-qc-upgrade.md",
+    "sha256": "936102845e1fdb6919257935784414ccc9371eac97df4fe652232adf6d0488b0",
+    "by": "duyệt plan",
+    "at": "2026-10-22T18:50:55+07:00",
+    "assurance": "cli-verified",
+    "version": 1
+  },
+  "quick_approved": false,
+  "quick_approved_at": null,
+  "quick_approved_by": null,
+  "quick_descriptor": null,
   "implement_mode": "main",
   "implement_pause": null,
+  "lech_spec": [
+    {
+      "id": 1,
+      "q": "Q2",
+      "nguong": "Browser journey API Builder phải có bằng chứng click-through",
+      "do": "Không có trình duyệt hoặc browser automation command trên máy; API host đã chạy và endpoint create-save-restore đã được kiểm chứng runtime.",
+      "chon": "Ghi BLOCKED browser journey, giữ build/framework/API runtime evidence; tiếp tục compiler/publish.",
+      "ly_do": "Không thể đo UI click-through mà không có browser driver, nhưng không được dừng hoặc tuyên bố PASS thiếu bằng chứng.",
+      "trang_thai": "duyet",
+      "at": "2026-10-22T19:33:58+07:00",
+      "by": "claude",
+      "quyet_at": "2026-10-22T22:43:31+07:00",
+      "quyet_by": "duyệt lệch 1 và 2"
+    },
+    {
+      "id": 2,
+      "q": "Q9",
+      "nguong": "Browser journey UI tiếng Việt phải có bằng chứng click-through",
+      "do": "Không có trình duyệt hoặc browser automation command trên máy; node --check, build Web và framework runtime API đã chạy.",
+      "chon": "Ghi BLOCKED UI journey; kiểm tra tĩnh text tiếng Việt và giữ Q9 không PASS cho đến khi có browser evidence.",
+      "ly_do": "Không thể kiểm chứng thao tác UI của tester mà không có browser driver; không được suy diễn từ HTML hoặc build.",
+      "trang_thai": "duyet",
+      "at": "2026-10-22T20:31:08+07:00",
+      "by": "claude",
+      "quyet_at": "2026-10-22T22:43:31+07:00",
+      "quyet_by": "duyệt lệch 1 và 2"
+    }
+  ],
   "doc_lang": "vi",
   "muc_gat": "full",
   "muc_qc": "full",
-  "started_at": "2026-10-15T01:38:35+07:00",
-  "loai_request": "chore",
-  "nhanh_goc": "bugfix/archify-flow-quality",
-  "nhanh_request": "bugfix/archify-flow-quality",
+  "started_at": "2026-10-22T17:27:16+07:00",
+  "loai_request": "feature",
+  "nhanh_goc": "main",
+  "nhanh_request": "feature/tool-qc-upgrade",
   "phase_history": [
     {
       "phase": "idle",
-      "at": "2026-10-15T01:38:35+07:00"
+      "at": "2026-10-22T17:27:16+07:00"
     },
     {
       "phase": "analyze",
-      "at": "2026-10-15T01:39:00+07:00"
+      "at": "2026-10-22T17:27:17+07:00"
+    },
+    {
+      "phase": "spec",
+      "at": "2026-10-22T18:06:26+07:00"
+    },
+    {
+      "phase": "plan",
+      "at": "2026-10-22T18:47:12+07:00"
     },
     {
       "phase": "implement",
-      "at": "2026-10-15T01:46:11+07:00"
+      "at": "2026-10-22T18:51:26+07:00"
+    },
+    {
+      "phase": "qc",
+      "at": "2026-10-22T20:27:43+07:00"
+    },
+    {
+      "phase": "report",
+      "at": "2026-10-22T20:33:49+07:00"
     },
     {
       "phase": "idle",
-      "at": "2026-10-15T08:19:23+07:00"
+      "at": "2026-10-23T01:31:49+07:00"
     }
   ],
-  "updated_at": "2026-10-16T11:59:12+07:00"
+  "updated_at": "2026-10-23T01:31:49+07:00"
 }

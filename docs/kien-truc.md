@@ -18,6 +18,17 @@
 - `runner/AutoTest.Generator/WorkbookImport` — registry và orchestration CLI/Web.
 - `runner/AutoTest.Web/Program.cs` và `runner/AutoTest.Web/wwwroot/app.js` — upload, catalog, draft review và activation.
 - `projects/be-booking/workbook-import/workbook-import.json` — profile giới hạn release và output group.
+- `src/AutoTest.UnitX` — evaluator bảng quyết định typed, deterministic và operator whitelist; không tham chiếu HTTP, source compiler hay I/O.
+- `runner/AutoTest.Web/ApiBuilderWorkspace.cs` + `ApiBuilderCompiler.cs` — workspace API Builder tách theo project tại `.artifacts/api-builder/`, biên dịch ra draft schema-v2 dùng lại `save`/`${variable}` và luồng preflight/activation hiện hữu; không ghi testcase chính thức trực tiếp.
+- `runner/AutoTest.Web/UnitXWorkspace.cs` — persistence draft `.artifacts/unitx` và Web facade gọi evaluator.
+
+## UnitX Phase 2 — boundary source .NET/xUnit
+
+Phase 2 chỉ được xem xét sau khi V1 decision table có review vận hành. Input bắt buộc là metadata bất biến của source đã chọn: repository fingerprint, relative path allowlisted, type/method signature, target framework, package-lock fingerprint và lý do nghiệp vụ. Người dùng xem và duyệt generated xUnit artifact trước khi bất kỳ build nào diễn ra; artifact, review decision, build log và test result được giữ riêng trong `.artifacts/unitx-review/`, không được ghi vào project source.
+
+Build/run chỉ trong môi trường cô lập có filesystem tạm, mạng bị tắt, secret/environment production bị loại, time/memory/process quota và allowlist SDK/package cache. Source scan phải từ chối P/Invoke, process/shell spawn, reflection/dynamic load, file write, network client, credential API và dependency chưa duyệt. Mọi timeout, scan violation hoặc hash thay đổi sau review là `BLOCKED`, không retry bằng cách nới guard.
+
+Không thuộc Phase 2: chạy C# tự do từ textarea, JavaScript/expression evaluator, sửa source của người dùng, tải package/network trong sandbox, test production, hoặc tự động publish generated tests. UnitX V1 tiếp tục chỉ hỗ trợ decimal decision table với operator whitelist.
 
 ## Đã chốt
 - 2026-09-28: adapter version 2 sinh đủ 69 case trên sheet `VERIFY`, hỗ trợ batch theo thứ tự workbook và blocked riêng từng case thay vì fail toàn workbook.

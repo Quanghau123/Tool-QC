@@ -1,13 +1,13 @@
 {
   "dong": [
     {
-      "dong_luc": null,
+      "dong_luc": "2026-10-22T17:24:55",
       "duong_dan": "D:\\works\\projects\\Tool-QC\\.tdq-worktrees\\2026-09-27-0545-verify-all-cases\\t1.1",
       "ma_task": "T1.1",
       "nhanh": "tdq/2026-09-27-0545-verify-all-cases/t1.1",
       "slug": "2026-09-27-0545-verify-all-cases",
       "tao_luc": "2026-09-27T23:44:42",
-      "trang_thai": "mo"
+      "trang_thai": "dong"
     }
   ],
   "schema_version": 1
