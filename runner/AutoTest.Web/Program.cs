@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using System.Text.Encodings.Web;
 using System.Text;
 using System.Security.Cryptography;
+using AutoTest.Generator;
 using AutoTest.MessageScanner;
 using AutoTest.Web;
 using AutoTest.UnitX;
@@ -62,6 +63,20 @@ app.MapGet("/api/projects/{project}/tests", (string project) =>
         .ThenBy(test => TestcaseOrdinal(test.Name))
         .ThenBy(test => test.Name, StringComparer.OrdinalIgnoreCase)
         .ToArray();
+});
+
+app.MapPost("/api/projects/{project}/api-builder/contract", (string project, ApiBuilderContractRequest request) =>
+{
+    _ = SafeProjectDirectory(root, project);
+    try
+    {
+        ApiBuilderContract contract = BuildApiBuilderContract(root, request);
+        return Results.Ok(contract);
+    }
+    catch (InvalidDataException exception)
+    {
+        return Results.BadRequest(new { code = "TQC-AB-007", message = exception.Message });
+    }
 });
 
 app.MapPost("/api/projects/{project}/api-builder/workspaces", async (string project, ApiBuilderWorkspaceCreateRequest request, CancellationToken cancellationToken) =>
@@ -704,6 +719,45 @@ app.MapGet("/api/reports/{runId}", (string runId) =>
 app.MapFallbackToFile("index.html");
 app.Run();
 
+static ApiBuilderContract BuildApiBuilderContract(string root, ApiBuilderContractRequest request)
+{
+    string? openApiPath = SafeContractPath(root, request.OpenApiPath);
+    string? sourcePath = SafeContractPath(root, request.SourcePath);
+    if (openApiPath is not null)
+    {
+        try
+        {
+            GeneratorAnalysis analysis = OpenApiContractAdapter.Analyze(File.ReadAllText(openApiPath), Path.GetRelativePath(root, openApiPath));
+            return ApiBuilderContractProjection.Create(analysis);
+        }
+        catch (Exception exception) when (exception is InvalidDataException or JsonException)
+        {
+            if (sourcePath is null)
+                throw new InvalidDataException($"OpenAPI không hợp lệ: {exception.Message}");
+            GeneratorAnalysis fallback = new SourceContractAnalyzer().Analyze(sourcePath);
+            return ApiBuilderContractProjection.Create(fallback) with { Warnings = fallback.Warnings.Append("OpenAPI không hợp lệ; đã dùng Roslyn fallback.").ToArray() };
+        }
+    }
+    if (sourcePath is null)
+        throw new InvalidDataException("Cần chọn tệp OpenAPI hoặc thư mục source đã được phép.");
+    return ApiBuilderContractProjection.Create(new SourceContractAnalyzer().Analyze(sourcePath));
+}
+
+static string? SafeContractPath(string root, string? path)
+{
+    if (string.IsNullOrWhiteSpace(path))
+        return null;
+    if (Uri.TryCreate(path, UriKind.Absolute, out Uri? uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+        throw new InvalidDataException("Không hỗ trợ URL contract từ xa.");
+    string fullPath = Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(root, path));
+    string rootPath = Path.GetFullPath(root) + Path.DirectorySeparatorChar;
+    if (!fullPath.StartsWith(rootPath, StringComparison.OrdinalIgnoreCase) || fullPath.Contains($"{Path.DirectorySeparatorChar}.env", StringComparison.OrdinalIgnoreCase))
+        throw new InvalidDataException("Đường dẫn contract nằm ngoài phạm vi cho phép.");
+    if (!File.Exists(fullPath) && !Directory.Exists(fullPath))
+        throw new InvalidDataException("Đường dẫn contract không tồn tại.");
+    return fullPath;
+}
+
 static string SafeProjectDirectory(string root, string project)
 {
     if (string.IsNullOrWhiteSpace(project) || project.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
@@ -1179,6 +1233,7 @@ sealed record RunRequest(string Project, string[]? CaseIds, bool SequentialChain
 sealed record TestItem(string Id, string Name, string[] Tags, bool Destructive, string Group, int StepCount);
 sealed record EnvironmentUpdate(Dictionary<string, string> Values);
 sealed record ArchifyRequest(string? SourcePath, string Description, string? DiagramType = "architecture", string? Provider = "codex-cli", string? VisualPreset = "classic", string? Animation = "none");
+sealed record ApiBuilderContractRequest(string? OpenApiPath, string? SourcePath);
 sealed record ApiBuilderWorkspaceCreateRequest(string? Owner);
 sealed record ApiBuilderWorkspaceSaveRequest(ApiBuilderWorkspace Workspace, int? ExpectedRevision);
 sealed record ApiBuilderCompileRequest(string? CaseId);

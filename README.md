@@ -23,6 +23,28 @@ Load test JMeter dùng shared launcher tại `scripts/jmeter/Invoke-JMeter.ps1`.
 Mỗi dự án giữ JMX, CSV adapter và properties riêng dưới `projects/<project-name>/load/`;
 shared launcher chỉ quản lý tiến trình JMeter và cấu trúc JTL/HTML chung.
 
+## Bắt đầu nhanh cho người mới
+
+Tool-QC là framework kiểm thử API theo dữ liệu: cấu hình môi trường một lần, mô tả testcase bằng JSON, sau đó chạy runner và đọc báo cáo HTML. Bạn không cần viết test C# riêng cho từng dịch vụ.
+
+1. Cài .NET SDK 8 và Node.js LTS.
+2. Sao chép `.env.example` thành `.env`, chỉ điền cấu hình local/test của bạn; không commit file này.
+3. Chọn một project có sẵn dưới `projects/`, hoặc sao chép `projects/project-template` thành project mới.
+4. Khởi động UI bằng `npm start`, chọn project và bắt đầu từ smoke test không thay đổi dữ liệu.
+5. Mở báo cáo HTML trong `.artifacts/test-runs/` sau mỗi lần chạy để xem kết quả từng case và step.
+
+### Chọn đúng công cụ
+
+| Nhu cầu | Dùng gì | Kết quả |
+| --- | --- | --- |
+| Chạy testcase JSON hiện có | **Chạy testcase** trên UI hoặc `toolqc.ps1 test` | Kết quả PASS/FAIL và báo cáo HTML |
+| Tạo testcase từ API .NET | **Generator** | Bản nháp schema-v2, cần preflight và duyệt trước khi lưu |
+| Dựng chuỗi API không cần sửa JSON | **Công cụ → API Builder** | Workspace contract-driven, biên dịch thành bản nháp schema-v2 |
+| Kiểm bảng quyết định số học | **Công cụ → UnitX** | Draft decision table chạy an toàn với operator whitelist |
+| Quét message backend ra Excel | **Công cụ → Cào message** | Workbook message để rà soát nội dung song ngữ |
+
+> Bắt đầu bằng smoke test. Chỉ chạy case có `destructive: true` khi môi trường là local/test cô lập và bạn chủ động bật guard tương ứng.
+
 ## Cấu hình
 
 1. Sao chép `.env.example` thành `.env` để cấu hình dùng chung.
@@ -38,10 +60,10 @@ Lệnh đơn giản nhất để mở Tool-QC:
 npm start
 ```
 
-Không cần chạy `npm install` vì UI không dùng package JavaScript bên ngoài. Lệnh PowerShell
+Dùng UI hằng ngày không cần package JavaScript production. Chỉ khi chạy browser E2E cho người phát triển mới cần `npm install` để cài `@playwright/test`, sau đó chạy `npm run test:e2e`. Lệnh PowerShell
 `.\toolqc.ps1` vẫn được giữ cho automation và các chức năng nâng cao.
 
-UI hỗ trợ chọn chính xác testcase theo ID, dừng workload đang chạy, xem lịch sử và báo cáo cũ, chỉnh cấu hình dự án và kiểm tra nhanh các URL đã cấu hình. Runner hỗ trợ `MAX_PARALLEL_CASES`, báo cáo JUnit, bước Redis và `expect.jsonSchema` cho JSON Schema cơ bản.
+UI hỗ trợ chọn chính xác testcase theo ID, dừng workload đang chạy, xem lịch sử và báo cáo cũ, chỉnh cấu hình dự án và kiểm tra nhanh các URL đã cấu hình. Runner hiện hỗ trợ HTTP JSON, multipart form, PostgreSQL fixture command, MQTT, request đồng thời trong một step, retry giới hạn, assertion JSON, biến liên bước, preflight và báo cáo HTML. Redis assertions, JSON Schema/OpenAPI validation đầy đủ, JUnit reporting và parallel case scheduling chưa được triển khai.
 
 Sinh testcase bản nháp từ controller .NET:
 
@@ -59,7 +81,9 @@ Generator chỉ sinh bản nháp; các coverage chưa xác minh giữ trạng th
 
 ### API Builder
 
-API Builder cho phép tạo chuỗi step, lưu JSON path của field phản hồi thành biến và gán biến đó vào request của step sau mà không cần sửa JSON. Workspace được lưu cục bộ tại `.artifacts/api-builder/<project>/<workspace-id>/workspace.json`; catalog biến không phân biệt hoa/thường, hiển thị theo A–Z và workspace dùng revision để phát hiện xung đột khi lưu.
+API Builder lấy contract theo thứ tự ưu tiên OpenAPI 3.1 local, rồi Roslyn source local khi OpenAPI không hợp lệ. UI chỉ nhận đường dẫn nằm trong repository (từ chối URL HTTP/HTTPS, traversal và `.env`), hiển thị operation/request/response fields từ contract thay vì step mẫu. Workspace được lưu cục bộ tại `.artifacts/api-builder/<project>/<workspace-id>/workspace.json`; catalog biến không phân biệt hoa/thường, hiển thị theo A–Z và workspace dùng revision để phát hiện xung đột khi lưu.
+
+Mỗi step giữ `operationId` và contract fingerprint. Variable chỉ bind vào field request có `targetFieldId` tại step sau, cùng kiểu tương thích; credential hoặc field nhạy cảm bị từ chối. Contract fingerprint thay đổi yêu cầu chọn lại operation, không ghi đè workspace cũ. Browser journey dùng `@playwright/test` ở dev dependency: `npm run test:e2e` chạy Chromium local, giữ trace/screenshot khi thất bại và không dùng credential hay API production.
 
 Nút **Biên dịch và kiểm tra** chỉ chuyển workspace thành bản nháp testcase schema-v2 với `steps[].save` và `${variable}`, rồi đưa bản nháp vào cùng luồng **1. Kiểm tra** → **2. Chạy thử API** → **3. Lưu testcase** của Generator. API Builder không ghi trực tiếp vào `projects/<project>/testcases`. Preflight cơ bản có thể hợp lệ nhưng vẫn không cho lưu chính thức khi coverage evidence còn `blocked`; chỉ activation sau preflight đầy đủ mới áp dụng guard SHA-256 khi ghi đè.
 

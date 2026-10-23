@@ -42,3 +42,6 @@ docs/tdq/stop_streak.json
 # Build output
 bin/
 obj/
+
+# Node development dependencies
+node_modules/

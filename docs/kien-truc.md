@@ -19,7 +19,10 @@
 - `runner/AutoTest.Web/Program.cs` và `runner/AutoTest.Web/wwwroot/app.js` — upload, catalog, draft review và activation.
 - `projects/be-booking/workbook-import/workbook-import.json` — profile giới hạn release và output group.
 - `src/AutoTest.UnitX` — evaluator bảng quyết định typed, deterministic và operator whitelist; không tham chiếu HTTP, source compiler hay I/O.
-- `runner/AutoTest.Web/ApiBuilderWorkspace.cs` + `ApiBuilderCompiler.cs` — workspace API Builder tách theo project tại `.artifacts/api-builder/`, biên dịch ra draft schema-v2 dùng lại `save`/`${variable}` và luồng preflight/activation hiện hữu; không ghi testcase chính thức trực tiếp.
+- `runner/AutoTest.Generator/ApiBuilderContractProjection.cs` — projection Builder dùng chung cho OpenAPI/Roslyn, trả fingerprint, provenance, operation và field metadata; Web không tạo parser contract thứ hai.
+- `runner/AutoTest.Web/ApiBuilderWorkspace.cs` + `ApiBuilderCompiler.cs` — workspace API Builder tách theo project tại `.artifacts/api-builder/`, giữ `operationId`/fingerprint và typed binding `sourceVariable` → `targetFieldId`, biên dịch path/query/header/body ra draft schema-v2 dùng lại `save`/`${variable}` và luồng preflight/activation hiện hữu; không ghi testcase chính thức trực tiếp.
+- `runner/AutoTest.Web/Program.cs` — facade Builder OpenAPI-first/Roslyn fallback chỉ nhận path local nằm trong root repository, chặn URL remote, traversal và `.env`.
+- `tests/e2e/api-builder.spec.js` + `playwright.config.js` — Chromium journey development-only chạy host local, tạo workspace → operation → variable/binding → save/reload → compile; trace và screenshot chỉ giữ khi failure.
 - `runner/AutoTest.Web/UnitXWorkspace.cs` — persistence draft `.artifacts/unitx` và Web facade gọi evaluator.
 
 ## UnitX Phase 2 — boundary source .NET/xUnit

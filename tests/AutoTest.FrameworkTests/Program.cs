@@ -339,6 +339,12 @@ Equal("/api/orders/{orderId}", openApiAnalysis.Endpoints.Single().Path, "OpenAPI
 Equal("body", openApiAnalysis.Endpoints.Single().Parameters.Single(parameter => parameter.Name == "body").Source, "OpenAPI body parameter");
 Equal("OrderResponse", openApiAnalysis.Endpoints.Single().ResponseType!, "OpenAPI response type");
 Equal("orderCode", openApiAnalysis.Types["OrderResponse"].Properties.Single(property => property.Name == "orderCode").JsonName, "OpenAPI response property");
+var builderContract = AutoTest.Generator.ApiBuilderContractProjection.Create(openApiAnalysis);
+Equal("CreateOrder", builderContract.Operations.Single().Id, "builder contract operation id");
+Equal("path", builderContract.Operations.Single().RequestFields.Single(field => field.Name == "orderId").Location, "builder contract path field location");
+Equal("$.data.orderCode", builderContract.Operations.Single().ResponseFields.Single(field => field.Name == "orderCode").JsonPath, "builder contract response JSON path");
+var roslynBuilderContract = AutoTest.Generator.ApiBuilderContractProjection.Create(generatorAnalysis);
+Equal("body", roslynBuilderContract.Operations.Single(operation => operation.Path == "/api/orders" && operation.Method == "POST").RequestFields.Single(field => field.Name == "Code").Location, "Roslyn builder contract body field location");
 Throws<InvalidDataException>(() => AutoTest.Generator.OpenApiContractAdapter.Analyze("{\"openapi\":\"3.0.0\"}", "invalid.openapi.json"), "OpenAPI invalid document");
 var generatedSuite = AutoTest.Generator.DraftSuiteBuilder.Build("ops-service", generatorAnalysis, null);
 var localGeneratorOptions = AutoTest.Generator.GeneratorExecutionOptions.From("local", null, null, null);
@@ -406,6 +412,47 @@ Throws<InvalidDataException>(() => ApiBuilderWorkspaceStore.AddVariable(workspac
 Throws<InvalidDataException>(() => new ApiBuilderWorkspaceStore(workspaceArtifacts).CreateAsync("../outside", "tester", CancellationToken.None).GetAwaiter().GetResult(), "workspace rejects project traversal");
 Equal("***", ApiBuilderWorkspaceStore.RedactPreview("accessToken", "secret-value"), "workspace redacts sensitive preview");
 Throws<ApiBuilderWorkspaceConflictException>(() => workspaceStore.SaveAsync(workspace, workspace.Revision - 1, CancellationToken.None).GetAwaiter().GetResult(), "workspace rejects stale revision");
+ApiBuilderWorkspace bindingWorkspace = workspace with
+{
+    SourceFingerprint = "contract-v1",
+    Steps =
+    [
+        new ApiBuilderStep("Tạo đơn", "POST", "/api/orders", [], [new ApiBuilderField("id", "$.data.id", "string", "", "response:id")], "CreateOrder", "contract-v1"),
+        new ApiBuilderStep("Xem đơn", "GET", "/api/orders/{id}", [new ApiBuilderField("id", "$.path.id", "string", "", "path:id")], [], "GetOrder", "contract-v1")
+    ],
+    Variables = [new ApiBuilderVariable("orderId", "Tạo đơn", "$.data.id", "string", "", DateTimeOffset.UtcNow)],
+    Bindings = [new ApiBuilderBinding("orderId", "Xem đơn", "path:id")]
+};
+await workspaceStore.SaveAsync(bindingWorkspace, bindingWorkspace.Revision, CancellationToken.None);
+string compiledBindingWorkspace = ApiBuilderCompiler.Compile(bindingWorkspace with
+{
+    Bindings = [new ApiBuilderBinding("orderId", "Xem đơn", "path:id"), new ApiBuilderBinding("orderId", "Xem đơn", "header:correlationId")],
+    Steps =
+    [
+        bindingWorkspace.Steps[0],
+        bindingWorkspace.Steps[1] with
+        {
+            Path = "/api/orders/{id}",
+            RequestFields =
+            [
+                new ApiBuilderField("id", "$.path.id", "string", "", "path:id", "path"),
+                new ApiBuilderField("include", "$.query.include", "string", "full", "query:include", "query"),
+                new ApiBuilderField("correlationId", "$.header.correlationId", "string", "trace", "header:correlationId", "header"),
+                new ApiBuilderField("note", "$.body.note", "string", "approved", "body:note", "body")
+            ]
+        }
+    ]
+}, "api-builder.binding");
+using JsonDocument compiledBindingWorkspaceJson = JsonDocument.Parse(compiledBindingWorkspace);
+JsonElement boundRequest = compiledBindingWorkspaceJson.RootElement.GetProperty("cases")[0].GetProperty("steps")[1].GetProperty("request");
+Equal("/api/orders/${orderId}?include=full", boundRequest.GetProperty("path").GetString()!, "workspace compiler maps path and query binding");
+Equal("${orderId}", boundRequest.GetProperty("headers").GetProperty("correlationId").GetString()!, "workspace compiler maps header binding");
+Equal("approved", boundRequest.GetProperty("body").GetProperty("note").GetString()!, "workspace compiler maps body field");
+Throws<InvalidDataException>(() => workspaceStore.SaveAsync(bindingWorkspace with { Bindings = [new ApiBuilderBinding("orderId", "Tạo đơn", "path:id")] }, null, CancellationToken.None).GetAwaiter().GetResult(), "workspace rejects binding into earlier-or-same step");
+Throws<InvalidDataException>(() => workspaceStore.SaveAsync(bindingWorkspace with { Bindings = [new ApiBuilderBinding("orderId", "Xem đơn", "missing")] }, null, CancellationToken.None).GetAwaiter().GetResult(), "workspace rejects missing binding target");
+Throws<InvalidDataException>(() => workspaceStore.SaveAsync(bindingWorkspace with { Steps = [bindingWorkspace.Steps[0], bindingWorkspace.Steps[1] with { RequestFields = [new ApiBuilderField("id", "$.path.id", "int", "", "path:id")] }] }, null, CancellationToken.None).GetAwaiter().GetResult(), "workspace rejects incompatible binding type");
+Throws<InvalidDataException>(() => workspaceStore.SaveAsync(bindingWorkspace with { Steps = [bindingWorkspace.Steps[0], bindingWorkspace.Steps[1] with { RequestFields = [new ApiBuilderField("authorization", "$.header.authorization", "string", "", "header:authorization", "header", true)] }] }, null, CancellationToken.None).GetAwaiter().GetResult(), "workspace rejects credential binding target");
+Throws<InvalidDataException>(() => workspaceStore.SaveAsync(bindingWorkspace with { Steps = [bindingWorkspace.Steps[0], bindingWorkspace.Steps[1] with { ContractFingerprint = "contract-v2" }] }, null, CancellationToken.None).GetAwaiter().GetResult(), "workspace rejects contract drift");
 string workspaceFile = Path.Combine(workspaceArtifacts, "api-builder", "ops-service", workspace.Id, "workspace.json");
 File.SetLastWriteTimeUtc(workspaceFile, DateTime.UtcNow.AddDays(-15));
 Equal("1", workspaceStore.DeleteExpiredWorkspaces(DateTimeOffset.UtcNow).ToString(), "workspace removes expired draft");
