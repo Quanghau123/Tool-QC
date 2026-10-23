@@ -123,6 +123,12 @@ Trạng thái plan: HOÀN THÀNH
 - [x] Q7 Build và framework regression pass; runtime/preflight evidence tách riêng với blocker — commands chạy hiện tại pass/blocked chính xác.
 - [x] Q8 README/kiến trúc mô tả đúng contract, browser evidence và giới hạn coverage — doc lint pass.
 
+## QC vòng 1 — fix
+
+- [x] **QC1.1** Khôi phục npm scripts khởi động/UI bị ghi đè khi thêm Playwright, giữ `test:e2e` dev-only — Test: `npm start` mở `AutoTest.Web`, `npm run test:e2e` PASS.
+  - Evidence: `npm start` build generator/runner 0 warning/0 error và host lắng nghe `http://127.0.0.1:5080`; Chromium E2E 1/1 PASS.
+  - Chạm: `package.json`, `README.md` → manifest npm là entrypoint UI/E2E; README phải chỉ lệnh chạy đúng.
+
 ## Ước tính phút (eNm)
 
 Tổng: 256 phút thực thi ước tính, không gồm approval, download browser hay external environment blocker.

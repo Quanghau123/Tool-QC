@@ -17,6 +17,7 @@ Ngày: 2026-10-23 · Plan: ../plan/2026-10-23-0136-api-builder-full.md · Vòng:
 | QC-F2 | Regression vùng chạm | `node --check ...app.js`; `dotnet build ...Runner`; `dotnet build ...Web`; framework harness; Playwright | JavaScript syntax pass; Runner/Web 0 warning/0 error; framework 66; E2E 1/1 | PASS |
 | QC-F3 | Ràng buộc kiến trúc §5 | `Grep` guards ở `Program.cs`, `ApiBuilderWorkspace.cs`, `package.json`, `playwright.config.js` | Local-only/`.env` containment; sensitive binding guard; dev-only Playwright + failure artifacts | PASS |
 | QC-F4 | Clean code | Self-check dưới đây | 5/5 Có | PASS |
+| QC1.1 | npm UI entrypoint | `npm start`; `npm run test:e2e` | Build 0 warning/0 error, Web host `127.0.0.1:5080`; Chromium 1/1 | PASS |
 
 ## Bằng chứng
 
@@ -67,6 +68,20 @@ Program.cs: /api/projects/{project}/api-builder/contract
 Program.cs: SafeContractPath(...)
 package.json: @playwright/test nằm trong devDependencies
 playwright.config.js: trace: 'retain-on-failure'; screenshot: 'only-on-failure'
+```
+
+### QC1.1 — npm UI entrypoint
+```text
+> start
+> powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-ui.ps1
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+Now listening on: http://127.0.0.1:5080
+
+npm run test:e2e
+1 passed (7.2s)
 ```
 
 ### QC-F4 — Self-check

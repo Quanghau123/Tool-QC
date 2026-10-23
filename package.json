@@ -1,6 +1,14 @@
 {
   "private": true,
   "scripts": {
+    "start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-ui.ps1",
+    "ui": "npm run start",
+    "build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1",
+    "test:framework": "dotnet run --project tests/AutoTest.FrameworkTests/AutoTest.FrameworkTests.csproj -c Release",
+    "test": "powershell -NoProfile -ExecutionPolicy Bypass -File toolqc.ps1 test",
+    "test:ops": "powershell -NoProfile -ExecutionPolicy Bypass -File toolqc.ps1 test ops-service",
+    "generate": "powershell -NoProfile -ExecutionPolicy Bypass -File toolqc.ps1 generate",
+    "coverage:analyze": "powershell -NoProfile -ExecutionPolicy Bypass -File toolqc.ps1 coverage",
     "test:e2e": "playwright test"
   },
   "devDependencies": {
