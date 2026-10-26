@@ -14,8 +14,25 @@ using AutoTest.Redis;
 using AutoTest.FrameworkTests.WorkbookTests;
 using AutoTest.Web;
 using AutoTest.UnitX;
+using System.Diagnostics;
 
 Environment.SetEnvironmentVariable("FRAMEWORK_TEST_URL", "http://localhost");
+var stderrFixture = new ProcessStartInfo("cmd.exe")
+{
+    RedirectStandardOutput = true,
+    RedirectStandardError = true,
+    UseShellExecute = false,
+    CreateNoWindow = true,
+};
+stderrFixture.ArgumentList.Add("/c");
+stderrFixture.ArgumentList.Add("for /L %i in (1,1,20000) do @echo stderr-line 1>&2 & @echo stdout-line");
+using (CancellationTokenSource stderrTimeout = new(TimeSpan.FromSeconds(5)))
+{
+    ProcessExecutionResult stderrResult = await ProcessExecutor.RunAsync(stderrFixture, stderrTimeout.Token);
+    Equal("0", stderrResult.ExitCode.ToString(), "process executor completes stderr-heavy child");
+    Equal("true", stderrResult.StandardOutput.Contains("stdout-line", StringComparison.Ordinal).ToString().ToLowerInvariant(), "process executor captures stdout");
+    Equal("true", stderrResult.StandardError.Contains("stderr-line", StringComparison.Ordinal).ToString().ToLowerInvariant(), "process executor captures stderr");
+}
 string repositoryRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
 WorkbookTestHarness.Run(repositoryRoot);
 VerifyWorkbookParserTests.Run(repositoryRoot);
@@ -365,6 +382,11 @@ Equal("Orders", createOrderOperation.Group, "Roslyn builder contract groups cont
 Equal("true", searchOrderOperation.RequestFields.Select(field => field.JsonPath).OrderBy(path => path).SequenceEqual(["$.query.current", "$.query.keyword", "$.query.pageSize"]).ToString().ToLowerInvariant(), "Roslyn builder contract flattens query DTO fields");
 Equal("$.data.items", searchOrderOperation.ResponseFields.Single(field => field.Name == "Items").JsonPath, "Roslyn builder contract resolves generic response wrapper");
 Equal("OrderResponse", searchOrderOperation.ResponseFields.Single(field => field.Name == "Items").ItemType!, "Roslyn builder contract substitutes generic item type");
+Throws<InvalidDataException>(() => AutoTest.Generator.OpenApiContractAdapter.Analyze("[]", "array.openapi.json"), "OpenAPI rejects non-object document");
+Throws<InvalidDataException>(() => AutoTest.Generator.OpenApiContractAdapter.Analyze("{}", "missing.openapi.json"), "OpenAPI rejects missing version");
+Throws<InvalidDataException>(() => AutoTest.Generator.OpenApiContractAdapter.Analyze("{\"openapi\":null}", "null.openapi.json"), "OpenAPI rejects null version");
+Throws<InvalidDataException>(() => AutoTest.Generator.OpenApiContractAdapter.Analyze("{\"openapi\":3.1}", "number.openapi.json"), "OpenAPI rejects numeric version");
+Throws<InvalidDataException>(() => AutoTest.Generator.OpenApiContractAdapter.Analyze("{\"openapi\":\"\"}", "empty.openapi.json"), "OpenAPI rejects empty version");
 Throws<InvalidDataException>(() => AutoTest.Generator.OpenApiContractAdapter.Analyze("{\"openapi\":\"3.0.0\"}", "invalid.openapi.json"), "OpenAPI invalid document");
 var generatedSuite = AutoTest.Generator.DraftSuiteBuilder.Build("ops-service", generatorAnalysis, null);
 var localGeneratorOptions = AutoTest.Generator.GeneratorExecutionOptions.From("local", null, null, null);
@@ -477,6 +499,43 @@ string workspaceFile = Path.Combine(workspaceArtifacts, "api-builder", "ops-serv
 File.SetLastWriteTimeUtc(workspaceFile, DateTime.UtcNow.AddDays(-15));
 Equal("1", workspaceStore.DeleteExpiredWorkspaces(DateTimeOffset.UtcNow).ToString(), "workspace removes expired draft");
 Equal("0", workspaceStore.DeleteExpiredWorkspaces(DateTimeOffset.UtcNow).ToString(), "workspace keeps no deleted draft");
+ApiBuilderWorkspace concurrentWorkspace = await workspaceStore.CreateAsync("ops-service", "tester", CancellationToken.None);
+var secondWorkspaceStore = new ApiBuilderWorkspaceStore(workspaceArtifacts);
+Task<(bool Saved, Exception? Error)> apiSaveOne = CaptureSave(() => workspaceStore.SaveAsync(concurrentWorkspace, concurrentWorkspace.Revision, CancellationToken.None));
+Task<(bool Saved, Exception? Error)> apiSaveTwo = CaptureSave(() => secondWorkspaceStore.SaveAsync(concurrentWorkspace, concurrentWorkspace.Revision, CancellationToken.None));
+(bool Saved, Exception? Error)[] apiSaves = await Task.WhenAll(apiSaveOne, apiSaveTwo);
+Equal("1", apiSaves.Count(result => result.Saved).ToString(), "API Builder concurrent save allows one revision winner");
+Equal("1", apiSaves.Count(result => result.Error is ApiBuilderWorkspaceConflictException).ToString(), "API Builder concurrent save reports revision conflict");
+_ = await workspaceStore.LoadAsync("ops-service", concurrentWorkspace.Id, CancellationToken.None);
+
+var persistence = new WorkspacePersistence();
+string independentRoot = Path.Combine(Path.GetTempPath(), $"toolqc-workspace-lock-{Guid.NewGuid():N}");
+Directory.CreateDirectory(independentRoot);
+string firstPath = Path.Combine(independentRoot, "first.json");
+string secondPath = Path.Combine(independentRoot, "second.json");
+var firstEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+Task firstLock = persistence.WithWorkspaceLockAsync(firstPath, async _ =>
+{
+    firstEntered.SetResult();
+    await Task.Delay(500, CancellationToken.None);
+    return 0;
+}, CancellationToken.None);
+await firstEntered.Task;
+Task secondLock = persistence.WithWorkspaceLockAsync(secondPath, _ => Task.FromResult(0), CancellationToken.None);
+Equal("true", secondLock.IsCompleted.ToString().ToLowerInvariant(), "different workspaces do not share a critical section");
+await Task.WhenAll(firstLock, secondLock);
+Directory.Delete(independentRoot, true);
+
+string unitXArtifacts = Path.Combine(Path.GetTempPath(), $"toolqc-unitx-{Guid.NewGuid():N}");
+var unitXStore = new UnitXWorkspaceStore(unitXArtifacts);
+UnitXWorkspace unitXWorkspace = await unitXStore.CreateAsync("ops-service", CancellationToken.None);
+Task<(bool Saved, Exception? Error)> unitXSaveOne = CaptureSave(() => unitXStore.SaveAsync(unitXWorkspace, unitXWorkspace.Revision, CancellationToken.None));
+Task<(bool Saved, Exception? Error)> unitXSaveTwo = CaptureSave(() => unitXStore.SaveAsync(unitXWorkspace, unitXWorkspace.Revision, CancellationToken.None));
+(bool Saved, Exception? Error)[] unitXSaves = await Task.WhenAll(unitXSaveOne, unitXSaveTwo);
+Equal("1", unitXSaves.Count(result => result.Saved).ToString(), "UnitX concurrent save allows one revision winner");
+Equal("1", unitXSaves.Count(result => result.Error is ApiBuilderWorkspaceConflictException).ToString(), "UnitX concurrent save reports revision conflict");
+_ = await unitXStore.LoadAsync("ops-service", unitXWorkspace.Id, CancellationToken.None);
+Directory.Delete(unitXArtifacts, true);
 Directory.Delete(workspaceArtifacts, true);
 
 string contractProjectRoot = Path.Combine(Path.GetTempPath(), $"toolqc-api-builder-project-{Guid.NewGuid():N}");
@@ -534,6 +593,19 @@ static void Equal(string expected, string actual, string name)
 {
     if (!string.Equals(expected, actual, StringComparison.Ordinal))
         throw new InvalidOperationException($"{name}: expected '{expected}', actual '{actual}'");
+}
+
+static async Task<(bool Saved, Exception? Error)> CaptureSave(Func<Task> save)
+{
+    try
+    {
+        await save();
+        return (true, null);
+    }
+    catch (Exception error)
+    {
+        return (false, error);
+    }
 }
 
 static void Throws<TException>(Action action, string name) where TException : Exception

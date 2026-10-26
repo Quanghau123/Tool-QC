@@ -1,11 +1,14 @@
-(() => {
-  const byId = id => document.getElementById(id);
+import { $, json, readableError, state } from './ui/shared.js';
+
+export function initializeGeneratorRepair() {
+  const byId = $;
   const generatorMode = document.querySelector('.generator-mode');
   const analysisOptions = document.querySelector('.analysis-options');
   const providerStatus = byId('generatorProvider');
   if (generatorMode && providerStatus && !byId('draftRepairMode')) {
     const repairModeLabel = document.createElement('label');
-    repairModeLabel.innerHTML = 'Xử lý lỗi testcase<select id="draftRepairMode"><option value="auto">Tự sửa bằng AI và kiểm tra lại</option><option value="manual">Chỉ báo lỗi để sửa thủ công</option></select>';
+    repairModeLabel.innerHTML =
+      'Xử lý lỗi testcase<select id="draftRepairMode"><option value="auto">Tự sửa bằng AI và kiểm tra lại</option><option value="manual">Chỉ báo lỗi để sửa thủ công</option></select>';
     generatorMode.insertBefore(repairModeLabel, providerStatus);
   }
 
@@ -13,16 +16,36 @@
   const providerLabel = byId('generatorAiProvider')?.closest('label');
   const generationLabel = byId('generatorMode')?.closest('label');
   const repairModeLabel = byId('draftRepairMode')?.closest('label');
-  if (guide && generatorMode && analysisOptions && providerLabel && generationLabel && repairModeLabel && providerStatus) {
+  if (
+    guide &&
+    generatorMode &&
+    analysisOptions &&
+    providerLabel &&
+    generationLabel &&
+    repairModeLabel &&
+    providerStatus
+  ) {
     const createGroup = (className, title, description) => {
       const section = document.createElement('section');
       section.className = `generator-config-group ${className}`;
       section.innerHTML = `<div class="generator-config-heading"><b>${title}</b><small>${description}</small></div><div class="generator-config-fields"></div>`;
       return section;
     };
-    const aiGroup = createGroup('ai-provider-group', '1. Chọn AI', 'AI đọc source, bổ sung rule nghiệp vụ và hỗ trợ sửa testcase.');
-    const analysisGroup = createGroup('analysis-group', '2. Phân tích source', 'Chọn mức độ và phạm vi source cần phân tích.');
-    const generationGroup = createGroup('generation-group', '3. Sinh và kiểm tra testcase', 'Chọn cách sinh bản nháp và cách xử lý lỗi của testcase.');
+    const aiGroup = createGroup(
+      'ai-provider-group',
+      '1. Chọn AI',
+      'AI đọc source, bổ sung rule nghiệp vụ và hỗ trợ sửa testcase.',
+    );
+    const analysisGroup = createGroup(
+      'analysis-group',
+      '2. Phân tích source',
+      'Chọn mức độ và phạm vi source cần phân tích.',
+    );
+    const generationGroup = createGroup(
+      'generation-group',
+      '3. Sinh và kiểm tra testcase',
+      'Chọn cách sinh bản nháp và cách xử lý lỗi của testcase.',
+    );
     aiGroup.querySelector('.generator-config-fields').append(providerLabel, providerStatus);
     analysisGroup.querySelector('.generator-config-fields').append(...analysisOptions.querySelectorAll('label'));
     generationGroup.querySelector('.generator-config-fields').append(generationLabel, repairModeLabel);
@@ -46,13 +69,14 @@
 
   const status = byId('draftStatus');
   const observer = new MutationObserver(() => {
-    const isPreflightError = status.classList.contains('failed')
-      && (status.textContent.includes('TQC-GEN-005') || status.textContent.includes('preflight'));
+    const isPreflightError =
+      status.classList.contains('failed') &&
+      (status.textContent.includes('TQC-GEN-005') || status.textContent.includes('preflight'));
     repairButton.hidden = !isPreflightError;
   });
   observer.observe(status, { attributes: true, childList: true, characterData: true, subtree: true });
 
-  window.repairGeneratedDraft = async ({ automatic = false } = {}) => {
+  const repairGeneratedDraft = async ({ automatic = false } = {}) => {
     if (!state.generatorReviewId) return;
     const started = Date.now();
     repairButton.disabled = true;
@@ -96,5 +120,6 @@
       byId('preflightDraft').disabled = false;
     }
   };
-  repairButton.onclick = () => window.repairGeneratedDraft();
-})();
+  repairButton.onclick = () => repairGeneratedDraft();
+  return repairGeneratedDraft;
+}

@@ -9,9 +9,12 @@
     "test:ops": "powershell -NoProfile -ExecutionPolicy Bypass -File toolqc.ps1 test ops-service",
     "generate": "powershell -NoProfile -ExecutionPolicy Bypass -File toolqc.ps1 generate",
     "coverage:analyze": "powershell -NoProfile -ExecutionPolicy Bypass -File toolqc.ps1 coverage",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "format": "prettier --write runner/AutoTest.Web/wwwroot/**/*.{html,js,css}",
+    "check-format": "prettier --check runner/AutoTest.Web/wwwroot/**/*.{html,js,css}"
   },
   "devDependencies": {
-    "@playwright/test": "1.57.0"
+    "@playwright/test": "1.57.0",
+    "prettier": "^3.6.2"
   }
 }

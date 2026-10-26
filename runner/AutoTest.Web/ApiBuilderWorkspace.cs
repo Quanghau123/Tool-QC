@@ -13,14 +13,15 @@ public sealed class ApiBuilderWorkspaceStore
 
     private readonly string artifactsRoot;
     private readonly JsonSerializerOptions jsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
+    private readonly WorkspacePersistence persistence;
     private readonly TimeSpan retention;
 
-    public ApiBuilderWorkspaceStore(string artifactsRoot, TimeSpan? retention = null)
+    public ApiBuilderWorkspaceStore(string artifactsRoot, TimeSpan? retention = null, WorkspacePersistence? persistence = null)
     {
         this.artifactsRoot = Path.GetFullPath(artifactsRoot);
         this.retention = retention ?? TimeSpan.FromDays(14);
+        this.persistence = persistence ?? new WorkspacePersistence();
     }
-
     public async Task<ApiBuilderWorkspace> CreateAsync(string project, string? owner, CancellationToken cancellationToken)
     {
         string workspaceId = Guid.NewGuid().ToString("N");
@@ -62,18 +63,17 @@ public sealed class ApiBuilderWorkspaceStore
     {
         Validate(workspace);
         string path = WorkspacePath(workspace.Project, workspace.Id);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        int currentRevision = File.Exists(path) ? (await LoadAsync(workspace.Project, workspace.Id, cancellationToken)).Revision : 0;
-        if (expectedRevision is not null && expectedRevision != currentRevision)
-            throw new ApiBuilderWorkspaceConflictException();
+        return await persistence.WithWorkspaceLockAsync(path, async token =>
+        {
+            int currentRevision = File.Exists(path) ? (await LoadAsync(workspace.Project, workspace.Id, token)).Revision : 0;
+            if (expectedRevision is not null && expectedRevision != currentRevision)
+                throw new ApiBuilderWorkspaceConflictException();
 
-        ApiBuilderWorkspace saved = workspace with { Revision = currentRevision + 1, UpdatedAt = DateTimeOffset.UtcNow };
-        string temporaryPath = path + ".tmp";
-        await File.WriteAllTextAsync(temporaryPath, JsonSerializer.Serialize(saved, jsonOptions), cancellationToken);
-        File.Move(temporaryPath, path, true);
-        return saved;
+            ApiBuilderWorkspace saved = workspace with { Revision = currentRevision + 1, UpdatedAt = DateTimeOffset.UtcNow };
+            await WorkspacePersistence.WriteAsync(path, JsonSerializer.Serialize(saved, jsonOptions), token);
+            return saved;
+        }, cancellationToken);
     }
-
     public static ApiBuilderWorkspace AddVariable(ApiBuilderWorkspace workspace, ApiBuilderVariable variable)
     {
         ValidateVariable(variable);
