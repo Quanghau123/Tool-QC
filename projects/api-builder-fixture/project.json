@@ -1,0 +1,6 @@
+{
+  "name": "api-builder-fixture",
+  "apiBuilder": {
+    "openApiPath": "openapi/openapi.json"
+  }
+}

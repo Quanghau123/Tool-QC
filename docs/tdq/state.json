@@ -1,30 +1,30 @@
 {
   "schema_version": 6,
-  "active_request": "2026-10-23-0136-api-builder-full",
-  "previous_request": "2026-10-22-1725-tool-qc-upgrade",
+  "active_request": "2026-10-23-1034-api-builder-project-path",
+  "previous_request": "2026-10-23-0136-api-builder-full",
   "lane": "full",
-  "phase": "report",
+  "phase": "qc",
   "brief_file": null,
-  "spec_file": "docs/tdq/spec/2026-10-23-0136-api-builder-full.md",
+  "spec_file": "docs/tdq/spec/2026-10-23-1034-api-builder-project-path.md",
   "spec_approved": true,
-  "spec_sha256": "814d381797767d2aaf54749a4ea762df7fcd331ffe5c003364a3f11f8a18b84c",
-  "spec_approved_at": "2026-10-23T01:48:59+07:00",
+  "spec_sha256": "3f1fd5bab7224f823db9c94efde1272229dda9c4aa439d9bdf59c02c3c173da4",
+  "spec_approved_at": "2026-10-23T14:45:15+07:00",
   "spec_descriptor": {
     "target": "spec",
-    "request": "2026-10-23-0136-api-builder-full",
+    "request": "2026-10-23-1034-api-builder-project-path",
     "lane": "full",
-    "file": "docs/tdq/spec/2026-10-23-0136-api-builder-full.md",
-    "sha256": "814d381797767d2aaf54749a4ea762df7fcd331ffe5c003364a3f11f8a18b84c",
+    "file": "docs/tdq/spec/2026-10-23-1034-api-builder-project-path.md",
+    "sha256": "3f1fd5bab7224f823db9c94efde1272229dda9c4aa439d9bdf59c02c3c173da4",
     "by": "duyệt spec",
-    "at": "2026-10-23T01:48:59+07:00",
+    "at": "2026-10-23T14:45:15+07:00",
     "assurance": "cli-verified",
-    "version": 1
+    "version": 2
   },
   "spec_approved_by": "duyệt spec",
   "spec_bo_qua_do": null,
   "lsp_bo_qua": {
-    "ly_do": "JavaScript LSP không khởi động được vì thiếu typescript-language-server; npm không có trên PATH. Dùng graphify và grep thay thế cho frontend.",
-    "at": "2026-10-23T01:40:12+07:00",
+    "ly_do": "cho phép bỏ qua LSP vì MCP C# đã hoạt động, JavaScript LSP thiếu dependency",
+    "at": "2026-10-23T10:37:51+07:00",
     "module": [
       "csharp:. → CHUA_KIEM (chưa chạy kịch bản)",
       "csharp:runner/AutoTest.Generator → CHUA_KIEM (chưa chạy kịch bản)",
@@ -38,21 +38,21 @@
       "javascript:. → CHUA_KIEM (chưa chạy kịch bản)"
     ]
   },
-  "plan_file": "docs/tdq/plan/2026-10-23-0136-api-builder-full.md",
+  "plan_file": "docs/tdq/plan/2026-10-23-1034-api-builder-project-path.md",
   "plan_approved": true,
-  "plan_sha256": "2e634624f36d08e5295df478a5531172c8e78eb470d2ff7495f441794f371fd8",
-  "plan_approved_at": "2026-10-23T01:52:48+07:00",
+  "plan_sha256": "15734db10a0597cdb052caa62c82c0e53d9f2a70d5a990da52d54927d6274b60",
+  "plan_approved_at": "2026-10-23T14:48:15+07:00",
   "plan_approved_by": "duyệt plan",
   "plan_descriptor": {
     "target": "plan",
-    "request": "2026-10-23-0136-api-builder-full",
+    "request": "2026-10-23-1034-api-builder-project-path",
     "lane": "full",
-    "file": "docs/tdq/plan/2026-10-23-0136-api-builder-full.md",
-    "sha256": "2e634624f36d08e5295df478a5531172c8e78eb470d2ff7495f441794f371fd8",
+    "file": "docs/tdq/plan/2026-10-23-1034-api-builder-project-path.md",
+    "sha256": "15734db10a0597cdb052caa62c82c0e53d9f2a70d5a990da52d54927d6274b60",
     "by": "duyệt plan",
-    "at": "2026-10-23T01:52:48+07:00",
+    "at": "2026-10-23T14:48:15+07:00",
     "assurance": "cli-verified",
-    "version": 1
+    "version": 2
   },
   "quick_approved": false,
   "quick_approved_at": null,
@@ -60,55 +60,113 @@
   "quick_descriptor": null,
   "implement_mode": "main",
   "implement_pause": null,
-  "lech_spec": [],
+  "lech_spec": [
+    {
+      "id": 1,
+      "q": "Q7",
+      "nguong": "doc_lint README.md docs/kien-truc.md",
+      "do": "README.md 773 lines exceeds the linter's 500-line repository threshold",
+      "chon": "Keep the targeted source-first guidance; defer unrelated README reduction",
+      "ly_do": "Reducing 273+ existing lines is unrelated cleanup and would expand scope.",
+      "trang_thai": "cho",
+      "at": "2026-10-23T15:41:48+07:00",
+      "by": "claude"
+    },
+    {
+      "id": 2,
+      "q": "Q4",
+      "nguong": "npm run test:e2e PASS",
+      "do": "npm run test:e2e failed because playwright executable is unavailable",
+      "chon": "Keep the E2E regression test and report it as ENVIRONMENT_BLOCKER; do not install dependencies without authorization.",
+      "ly_do": "Installing Playwright may acquire packages and browser binaries over the network, which requires explicit authorization.",
+      "trang_thai": "cho",
+      "at": "2026-10-23T16:25:27+07:00",
+      "by": "claude"
+    },
+    {
+      "id": 3,
+      "q": "Q7",
+      "nguong": "doc_lint README.md docs/kien-truc.md PASS",
+      "do": "doc_lint failed only because README.md has 773 lines against the 500-line R6 threshold",
+      "chon": "Keep targeted source-first guidance and defer unrelated README reduction.",
+      "ly_do": "Reducing more than 273 existing README lines is unrelated cleanup and expands the approved scope.",
+      "trang_thai": "cho",
+      "at": "2026-10-23T16:25:58+07:00",
+      "by": "claude"
+    }
+  ],
   "doc_lang": "vi",
   "muc_gat": "full",
   "muc_qc": "full",
-  "started_at": "2026-10-23T01:40:12+07:00",
+  "started_at": "2026-10-23T10:37:51+07:00",
   "loai_request": "feature",
-  "nhanh_goc": "feature/tool-qc-upgrade",
-  "nhanh_request": "feature/api-builder-full",
+  "nhanh_goc": "main",
+  "nhanh_request": "feature/api-builder-project-path",
   "phase_history": [
     {
       "phase": "idle",
-      "at": "2026-10-23T01:40:12+07:00"
+      "at": "2026-10-23T10:37:51+07:00"
     },
     {
       "phase": "analyze",
-      "at": "2026-10-23T01:40:21+07:00"
+      "at": "2026-10-23T10:37:59+07:00"
     },
     {
       "phase": "spec",
-      "at": "2026-10-23T01:45:37+07:00"
+      "at": "2026-10-23T10:40:19+07:00"
     },
     {
       "phase": "plan",
-      "at": "2026-10-23T01:48:59+07:00"
+      "at": "2026-10-23T10:42:49+07:00"
     },
     {
       "phase": "implement",
-      "at": "2026-10-23T01:53:38+07:00"
+      "at": "2026-10-23T10:46:56+07:00"
+    },
+    {
+      "phase": "spec",
+      "at": "2026-10-23T14:40:05+07:00"
+    },
+    {
+      "phase": "plan",
+      "at": "2026-10-23T14:45:20+07:00"
     },
     {
       "phase": "qc",
-      "at": "2026-10-23T02:59:31+07:00"
+      "at": "2026-10-23T16:32:37+07:00"
     },
     {
       "phase": "report",
-      "at": "2026-10-23T03:03:48+07:00"
+      "at": "2026-10-23T16:33:30+07:00"
     },
     {
       "phase": "implement",
-      "at": "2026-10-23T09:58:32+07:00"
+      "at": "2026-10-23T16:58:28+07:00"
     },
     {
       "phase": "qc",
-      "at": "2026-10-23T10:01:55+07:00"
+      "at": "2026-10-23T17:01:41+07:00"
     },
     {
       "phase": "report",
-      "at": "2026-10-23T10:02:06+07:00"
+      "at": "2026-10-23T17:04:51+07:00"
+    },
+    {
+      "phase": "implement",
+      "at": "2026-10-23T17:11:29+07:00"
+    },
+    {
+      "phase": "qc",
+      "at": "2026-10-23T17:31:44+07:00"
+    },
+    {
+      "phase": "implement",
+      "at": "2026-10-23T17:46:24+07:00"
+    },
+    {
+      "phase": "qc",
+      "at": "2026-10-23T17:49:31+07:00"
     }
   ],
-  "updated_at": "2026-10-23T10:02:06+07:00"
+  "updated_at": "2026-10-23T17:49:31+07:00"
 }

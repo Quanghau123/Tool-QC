@@ -65,16 +65,24 @@ app.MapGet("/api/projects/{project}/tests", (string project) =>
         .ToArray();
 });
 
-app.MapPost("/api/projects/{project}/api-builder/contract", (string project, ApiBuilderContractRequest request) =>
+app.MapPost("/api/projects/{project}/api-builder/contract", (string project, ApiBuilderContractRequest? request) =>
 {
-    _ = SafeProjectDirectory(root, project);
+    string projectDirectory = SafeProjectDirectory(root, project);
     try
     {
-        ApiBuilderContract contract = BuildApiBuilderContract(root, request);
-        return Results.Ok(contract);
+        ApiBuilderProjectConfiguration configuration = ApiBuilderProjectConfiguration.Load(projectDirectory);
+        ApiBuilderContract contract = BuildApiBuilderContract(configuration, request?.LocalSourcePath);
+        if (!string.IsNullOrWhiteSpace(request?.LocalSourcePath))
+            ApiBuilderProjectConfiguration.SaveLocalSourcePath(projectDirectory, request.LocalSourcePath);
+        app.Logger.LogInformation(
+            "ApiBuilder contract discovery succeeded for project {Project} with provider {Provider}.",
+            project,
+            contract.Provider);
+        return Results.Ok(contract with { Source = string.Empty });
     }
     catch (InvalidDataException exception)
     {
+        app.Logger.LogWarning("ApiBuilder contract discovery was rejected for project {Project}.", project);
         return Results.BadRequest(new { code = "TQC-AB-007", message = exception.Message });
     }
 });
@@ -719,43 +727,68 @@ app.MapGet("/api/reports/{runId}", (string runId) =>
 app.MapFallbackToFile("index.html");
 app.Run();
 
-static ApiBuilderContract BuildApiBuilderContract(string root, ApiBuilderContractRequest request)
+static ApiBuilderContract BuildApiBuilderContract(ApiBuilderProjectConfiguration configuration, string? requestedLocalSourcePath)
 {
-    string? openApiPath = SafeContractPath(root, request.OpenApiPath);
-    string? sourcePath = SafeContractPath(root, request.SourcePath);
+    string? localSourcePath = string.IsNullOrWhiteSpace(requestedLocalSourcePath)
+        ? configuration.ResolveLocalSourcePath()
+        : requestedLocalSourcePath;
+    if (!string.IsNullOrWhiteSpace(localSourcePath))
+        return BuildLocalSourceContract(localSourcePath);
+
+    string? openApiPath = configuration.ResolveOpenApiPath();
+    string? sourcePath = configuration.ResolveSourcePath();
     if (openApiPath is not null)
     {
         try
         {
-            GeneratorAnalysis analysis = OpenApiContractAdapter.Analyze(File.ReadAllText(openApiPath), Path.GetRelativePath(root, openApiPath));
+            GeneratorAnalysis analysis = OpenApiContractAdapter.Analyze(
+                File.ReadAllText(openApiPath),
+                Path.GetRelativePath(configuration.ProjectDirectory, openApiPath));
             return ApiBuilderContractProjection.Create(analysis);
         }
         catch (Exception exception) when (exception is InvalidDataException or JsonException)
         {
             if (sourcePath is null)
                 throw new InvalidDataException($"OpenAPI không hợp lệ: {exception.Message}");
-            GeneratorAnalysis fallback = new SourceContractAnalyzer().Analyze(sourcePath);
-            return ApiBuilderContractProjection.Create(fallback) with { Warnings = fallback.Warnings.Append("OpenAPI không hợp lệ; đã dùng Roslyn fallback.").ToArray() };
+            return RoslynContract(sourcePath, "OpenAPI không hợp lệ; đã dùng Roslyn fallback.");
         }
     }
     if (sourcePath is null)
-        throw new InvalidDataException("Cần chọn tệp OpenAPI hoặc thư mục source đã được phép.");
-    return ApiBuilderContractProjection.Create(new SourceContractAnalyzer().Analyze(sourcePath));
+        throw new InvalidDataException(
+            "Project chưa cấu hình apiBuilder.openApiPath hoặc apiBuilder.sourcePath trong project.json.");
+    return RoslynContract(sourcePath, null);
 }
 
-static string? SafeContractPath(string root, string? path)
+static ApiBuilderContract BuildLocalSourceContract(string localSourcePath)
 {
-    if (string.IsNullOrWhiteSpace(path))
-        return null;
-    if (Uri.TryCreate(path, UriKind.Absolute, out Uri? uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
-        throw new InvalidDataException("Không hỗ trợ URL contract từ xa.");
-    string fullPath = Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(root, path));
-    string rootPath = Path.GetFullPath(root) + Path.DirectorySeparatorChar;
-    if (!fullPath.StartsWith(rootPath, StringComparison.OrdinalIgnoreCase) || fullPath.Contains($"{Path.DirectorySeparatorChar}.env", StringComparison.OrdinalIgnoreCase))
-        throw new InvalidDataException("Đường dẫn contract nằm ngoài phạm vi cho phép.");
-    if (!File.Exists(fullPath) && !Directory.Exists(fullPath))
-        throw new InvalidDataException("Đường dẫn contract không tồn tại.");
-    return fullPath;
+    IReadOnlyList<string> candidates = ApiBuilderProjectConfiguration.FindOpenApiCandidates(localSourcePath);
+    foreach (string candidate in candidates)
+    {
+        try
+        {
+            return ApiBuilderContractProjection.Create(OpenApiContractAdapter.Analyze(
+                File.ReadAllText(candidate),
+                Path.GetFileName(candidate)));
+        }
+        catch (Exception exception) when (exception is InvalidDataException or JsonException)
+        {
+        }
+    }
+    if (ApiBuilderProjectConfiguration.IsDotNetSource(localSourcePath))
+        return RoslynContract(localSourcePath, candidates.Count > 0
+            ? "Không có OpenAPI 3.1 hợp lệ; đã dùng Roslyn fallback."
+            : null);
+    throw new InvalidDataException(
+        "Source Node.js/TypeScript cần OpenAPI 3.1 (openapi.json hoặc swagger.json); Tool-QC chưa phân tích source Node.js.");
+}
+
+static ApiBuilderContract RoslynContract(string sourcePath, string? warning)
+{
+    GeneratorAnalysis analysis = new SourceContractAnalyzer().Analyze(sourcePath);
+    ApiBuilderContract contract = ApiBuilderContractProjection.Create(analysis);
+    return warning is null
+        ? contract
+        : contract with { Warnings = contract.Warnings.Append(warning).ToArray() };
 }
 
 static string SafeProjectDirectory(string root, string project)
@@ -915,6 +948,8 @@ static bool TryApplyArchifyWorkflowRouteRepair(string specificationPath, string 
 }
 static IEnumerable<TestItem> ReadTests(string directory, string project)
 {
+    if (!Directory.Exists(directory))
+        yield break;
     foreach (string path in Directory.EnumerateFiles(directory, "*.json", SearchOption.AllDirectories))
     {
         using JsonDocument document = JsonDocument.Parse(
@@ -1233,7 +1268,7 @@ sealed record RunRequest(string Project, string[]? CaseIds, bool SequentialChain
 sealed record TestItem(string Id, string Name, string[] Tags, bool Destructive, string Group, int StepCount);
 sealed record EnvironmentUpdate(Dictionary<string, string> Values);
 sealed record ArchifyRequest(string? SourcePath, string Description, string? DiagramType = "architecture", string? Provider = "codex-cli", string? VisualPreset = "classic", string? Animation = "none");
-sealed record ApiBuilderContractRequest(string? OpenApiPath, string? SourcePath);
+sealed record ApiBuilderContractRequest(string? LocalSourcePath);
 sealed record ApiBuilderWorkspaceCreateRequest(string? Owner);
 sealed record ApiBuilderWorkspaceSaveRequest(ApiBuilderWorkspace Workspace, int? ExpectedRevision);
 sealed record ApiBuilderCompileRequest(string? CaseId);
