@@ -8,6 +8,69 @@
       "slug": "2026-09-27-0545-verify-all-cases",
       "tao_luc": "2026-09-27T23:44:42",
       "trang_thai": "dong"
+    },
+    {
+      "dong_luc": "2026-10-23T14:39:53",
+      "duong_dan": "D:\\works\\projects\\Tool-QC\\.tdq-worktrees\\2026-10-23-1034-api-builder-project-path\\t2.1",
+      "ma_task": "T2.1",
+      "nhanh": "tdq/2026-10-23-1034-api-builder-project-path/t2.1",
+      "slug": "2026-10-23-1034-api-builder-project-path",
+      "tao_luc": "2026-10-23T10:59:05",
+      "trang_thai": "dong"
+    },
+    {
+      "dong_luc": "2026-10-23T14:39:55",
+      "duong_dan": "D:\\works\\projects\\Tool-QC\\.tdq-worktrees\\2026-10-23-1034-api-builder-project-path\\t4.1",
+      "ma_task": "T4.1",
+      "nhanh": "tdq/2026-10-23-1034-api-builder-project-path/t4.1",
+      "slug": "2026-10-23-1034-api-builder-project-path",
+      "tao_luc": "2026-10-23T10:59:08",
+      "trang_thai": "dong"
+    },
+    {
+      "dong_luc": "2026-10-23T14:39:56",
+      "duong_dan": "D:\\works\\projects\\Tool-QC\\.tdq-worktrees\\2026-10-23-1034-api-builder-project-path\\t3.1",
+      "ma_task": "T3.1",
+      "nhanh": "tdq/2026-10-23-1034-api-builder-project-path/t3.1",
+      "slug": "2026-10-23-1034-api-builder-project-path",
+      "tao_luc": "2026-10-23T11:29:12",
+      "trang_thai": "dong"
+    },
+    {
+      "dong_luc": "2026-10-23T15:44:10",
+      "duong_dan": "D:\\works\\projects\\Tool-QC\\.tdq-worktrees\\2026-10-23-1034-api-builder-project-path\\t3.1",
+      "ma_task": "T3.1",
+      "nhanh": "tdq/2026-10-23-1034-api-builder-project-path/t3.1",
+      "slug": "2026-10-23-1034-api-builder-project-path",
+      "tao_luc": "2026-10-23T15:42:30",
+      "trang_thai": "dong"
+    },
+    {
+      "dong_luc": "2026-10-23T15:47:13",
+      "duong_dan": "D:\\works\\projects\\Tool-QC\\.tdq-worktrees\\2026-10-23-1034-api-builder-project-path\\t2.2",
+      "ma_task": "T2.2",
+      "nhanh": "tdq/2026-10-23-1034-api-builder-project-path/t2.2",
+      "slug": "2026-10-23-1034-api-builder-project-path",
+      "tao_luc": "2026-10-23T15:42:39",
+      "trang_thai": "dong"
+    },
+    {
+      "dong_luc": "2026-10-23T16:32:29",
+      "duong_dan": "D:\\works\\projects\\Tool-QC\\.tdq-worktrees\\2026-10-23-1034-api-builder-project-path\\t3.1",
+      "ma_task": "T3.1",
+      "nhanh": "tdq/2026-10-23-1034-api-builder-project-path/t3.1",
+      "slug": "2026-10-23-1034-api-builder-project-path",
+      "tao_luc": "2026-10-23T15:47:27",
+      "trang_thai": "dong"
+    },
+    {
+      "dong_luc": "2026-10-23T16:32:30",
+      "duong_dan": "D:\\works\\projects\\Tool-QC\\.tdq-worktrees\\2026-10-23-1034-api-builder-project-path\\t2.2",
+      "ma_task": "T2.2",
+      "nhanh": "tdq/2026-10-23-1034-api-builder-project-path/t2.2",
+      "slug": "2026-10-23-1034-api-builder-project-path",
+      "tao_luc": "2026-10-23T15:47:49",
+      "trang_thai": "dong"
     }
   ],
   "schema_version": 1

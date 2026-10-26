@@ -2,7 +2,6 @@ using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.Operations;
 
 namespace AutoTest.Generator;
 
@@ -14,9 +13,7 @@ public sealed class SourceContractAnalyzer
     public GeneratorAnalysis Analyze(string sourceDirectory, string? module = null)
     {
         string root = Path.GetFullPath(sourceDirectory);
-        string[] sourceFiles = Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)
-            .Where(path => IsSourceFile(root, path))
-            .ToArray();
+        string[] sourceFiles = EnumerateSourceFiles(root).ToArray();
         string[] files = SelectModuleFiles(root, sourceFiles, module);
         List<string> warnings = [];
         List<SyntaxTree> trees = [];
@@ -56,8 +53,7 @@ public sealed class SourceContractAnalyzer
     public static IReadOnlyList<string> DiscoverModules(string sourceDirectory)
     {
         string root = Path.GetFullPath(sourceDirectory);
-        return Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)
-            .Where(path => IsSourceFile(root, path))
+        return EnumerateSourceFiles(root)
             .Select(path => ModuleName(root, path))
             .OfType<string>()
             .Where(module => !string.IsNullOrWhiteSpace(module))
@@ -305,7 +301,22 @@ public sealed class SourceContractAnalyzer
     private static string Slug(string value) => Regex.Replace(value.Trim('/').ToLowerInvariant(), @"[^a-z0-9]+", "-").Trim('-');
     private static string Camel(string value) => string.IsNullOrEmpty(value) ? value : char.ToLowerInvariant(value[0]) + value[1..];
     private static string? NullIfEmpty(string value) => string.IsNullOrWhiteSpace(value) ? null : value;
-    private static bool IsSourceFile(string root, string path) { string relative = Path.GetRelativePath(root, path); string[] ignored = ["bin", "obj", ".git", ".claude", ".codex", ".agents", "node_modules", ".artifacts", "test-results"]; return !relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(segment => ignored.Contains(segment, StringComparer.OrdinalIgnoreCase)); }
+    private static IEnumerable<string> EnumerateSourceFiles(string root)
+    {
+        Stack<string> directories = new([root]);
+        while (directories.Count > 0)
+        {
+            string directory = directories.Pop();
+            foreach (string child in Directory.EnumerateDirectories(directory))
+            {
+                DirectoryInfo info = new(child);
+                if ((info.Attributes & FileAttributes.ReparsePoint) == 0 && !IsIgnoredDirectory(info.Name)) directories.Push(child);
+            }
+            foreach (string file in Directory.EnumerateFiles(directory, "*.cs"))
+                if ((File.GetAttributes(file) & FileAttributes.ReparsePoint) == 0) yield return file;
+        }
+    }
+    private static bool IsIgnoredDirectory(string name) => new[] { "bin", "obj", ".git", ".claude", ".codex", ".agents", "node_modules", ".artifacts", "test-results" }.Contains(name, StringComparer.OrdinalIgnoreCase);
     private static bool IsModuleFile(string root, string path, string? module)
     {
         if (string.IsNullOrWhiteSpace(module)) return true;

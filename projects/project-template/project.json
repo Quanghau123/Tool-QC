@@ -1,6 +1,10 @@
 {
   "name": "replace-me",
   "baseUrlVariable": "API_BASE_URL",
+  "apiBuilder": {
+    "openApiPath": "openapi/openapi.json",
+    "sourcePath": "source"
+  },
   "defaultHeaders": { "Accept": "application/json" },
   "authentication": {
     "strategy": "login",

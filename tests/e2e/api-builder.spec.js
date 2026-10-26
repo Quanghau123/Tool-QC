@@ -1,13 +1,26 @@
+const path = require('node:path');
 const { test, expect } = require('@playwright/test');
 
-test('xây chuỗi API từ contract local và lưu binding typed', async ({ page }) => {
+test('xây chuỗi API từ cấu hình dự án và lưu binding typed', async ({ page }) => {
   await page.goto('/');
+  await page.locator('#project').selectOption('ops-service');
   await page.getByRole('button', { name: 'Công cụ' }).click();
   await page.getByRole('button', { name: 'API Builder' }).click();
-  await page.getByRole('button', { name: 'Tạo workspace' }).click();
-  await page.locator('#apiBuilderOpenApiPath').fill('.artifacts/api-builder-contract-fixture.json');
-  await page.getByRole('button', { name: 'Tải contract' }).click();
+  await expect(page.locator('#apiBuilderSourceStatus')).toContainText('Nhập thư mục source local hợp lệ');
+  await page.getByRole('button', { name: 'Testcases' }).click();
+  await page.locator('#project').selectOption('api-builder-fixture');
+  await page.getByRole('button', { name: 'Công cụ' }).click();
+  await page.getByRole('button', { name: 'API Builder' }).click();
+  const fixtureSource = path.resolve('projects/api-builder-fixture');
+  await page.locator('#apiBuilderLocalSourcePath').fill(fixtureSource);
+  await page.getByRole('button', { name: 'Tải operation' }).click();
+  await expect(page.locator('#apiBuilderSourceStatus')).toContainText('Nguồn contract');
   await expect(page.locator('#apiBuilderStatus')).toContainText('Đã tải');
+  await expect(page.locator('#apiBuilderLocalSourcePath')).toHaveValue(fixtureSource);
+  await page.getByRole('button', { name: 'Tạo workspace' }).click();
+  await expect(page.locator('#apiBuilderStatus')).toContainText('đã sẵn sàng');
+  await expect(page.locator('#apiBuilderOperation optgroup')).toHaveCount(1);
+  await expect(page.locator('#apiBuilderOperation optgroup')).toHaveAttribute('label', 'Orders');
   await page.locator('#apiBuilderOperation').selectOption('CreateOrder');
   await page.getByRole('button', { name: 'Thêm operation vào chuỗi' }).click();
   await page.once('dialog', dialog => dialog.accept('orderId'));
@@ -16,12 +29,19 @@ test('xây chuỗi API từ contract local và lưu binding typed', async ({ pag
   await page.getByRole('button', { name: 'Thêm operation vào chuỗi' }).click();
   await expect(page.locator('#apiBuilderSteps')).toContainText('GET');
   await page.locator('[data-api-request="1:0"]').selectOption('orderId');
+  await page.getByRole('button', { name: 'Xóa' }).first().click();
+  await expect(page.locator('#apiBuilderSteps')).not.toContainText('POST');
+  await expect(page.locator('#apiBuilderVariables')).toContainText('Chưa có biến nào');
   await page.getByRole('button', { name: 'Lưu workspace' }).click();
   await expect(page.locator('#apiBuilderStatus')).toContainText('Đã lưu workspace');
   await page.reload();
+  await page.locator('#project').selectOption('api-builder-fixture');
   await page.getByRole('button', { name: 'Công cụ' }).click();
   await page.getByRole('button', { name: 'API Builder' }).click();
   await expect(page.locator('[data-api-value="1:0"]')).toHaveValue('${orderId}');
+  await expect(page.locator('#apiBuilderLocalSourcePath')).toHaveValue('');
+  const browserStorage = await page.evaluate(() => Object.values(localStorage));
+  expect(browserStorage.join('\n')).not.toContain(fixtureSource);
   await page.getByRole('button', { name: 'Biên dịch và kiểm tra' }).click();
   await expect(page.locator('#draftEditor')).toBeVisible();
   await expect(page.locator('#draftStatus')).toContainText('Nhấn “1. Kiểm tra”');

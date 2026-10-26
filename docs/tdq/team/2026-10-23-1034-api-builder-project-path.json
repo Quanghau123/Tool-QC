@@ -1,0 +1,106 @@
+{
+  "slug": "2026-10-23-1034-api-builder-project-path",
+  "plan_file": "docs\\tdq\\plan\\2026-10-23-1034-api-builder-project-path.md",
+  "plan_sha": "2de8ba8e5ff30b540af03ba0fea5dd307c0cda6f75eb65fa69799baa593024ab",
+  "projection_version": "v1",
+  "projection_mode": "explicit",
+  "plan_assignment_sha": "0bc4273444edbaaba3c20a5c87cbb27b9c7e95c154afbaa5e2d0181dd919fff0",
+  "tasks": {
+    "T0.0": {
+      "quyet_dinh": "tu_lam",
+      "ly_do": "vung-khoa",
+      "vung_file": [],
+      "dot": 1
+    },
+    "T0.1": {
+      "quyet_dinh": "tu_lam",
+      "ly_do": "vung-khoa",
+      "vung_file": [],
+      "dot": 1
+    },
+    "T1.1": {
+      "quyet_dinh": "tu_lam",
+      "ly_do": "mcp",
+      "vung_file": [
+        "runner/AutoTest.Web/ApiBuilderProjectConfiguration.cs",
+        "tests/AutoTest.FrameworkTests/Program.cs"
+      ],
+      "dot": 1
+    },
+    "T1.2": {
+      "quyet_dinh": "tu_lam",
+      "ly_do": "vung-khoa",
+      "vung_file": [],
+      "dot": 2
+    },
+    "T2.1": {
+      "quyet_dinh": "tu_lam",
+      "ly_do": "mcp",
+      "vung_file": [
+        "runner/AutoTest.Web/Program.cs",
+        "runner/AutoTest.Web/ApiBuilderProjectConfiguration.cs",
+        "tests/AutoTest.FrameworkTests/Program.cs"
+      ],
+      "dot": 2
+    },
+    "T2.2": {
+      "quyet_dinh": "giao",
+      "ly_do": "",
+      "vung_file": [
+        "runner/AutoTest.Web/Program.cs",
+        "tests/AutoTest.FrameworkTests/Program.cs"
+      ],
+      "dot": 3
+    },
+    "T3.1": {
+      "quyet_dinh": "giao",
+      "ly_do": "",
+      "vung_file": [
+        "runner/AutoTest.Web/wwwroot/index.html",
+        "runner/AutoTest.Web/wwwroot/app.js",
+        "runner/AutoTest.Web/wwwroot/app.css",
+        "tests/e2e/api-builder.spec.js"
+      ],
+      "dot": 3
+    },
+    "T4.1": {
+      "quyet_dinh": "giao",
+      "ly_do": "",
+      "vung_file": [
+        "tests/AutoTest.FrameworkTests/Program.cs",
+        "tests/e2e/api-builder.spec.js"
+      ],
+      "dot": 4
+    },
+    "T4.2": {
+      "quyet_dinh": "tu_lam",
+      "ly_do": "vung-khoa",
+      "vung_file": [],
+      "dot": 3
+    },
+    "T4.3": {
+      "quyet_dinh": "giao",
+      "ly_do": "",
+      "vung_file": [
+        "runner/AutoTest.Web/Program.cs",
+        "runner/AutoTest.Web/ApiBuilderProjectConfiguration.cs",
+        "runner/AutoTest.Web/wwwroot/app.js",
+        "tests/AutoTest.FrameworkTests/Program.cs",
+        "tests/e2e/api-builder.spec.js"
+      ],
+      "dot": 5
+    },
+    "T5.1": {
+      "quyet_dinh": "tu_lam",
+      "ly_do": "vung-khoa",
+      "vung_file": [],
+      "dot": 4
+    },
+    "T5.2": {
+      "quyet_dinh": "tu_lam",
+      "ly_do": "vung-khoa",
+      "vung_file": [],
+      "dot": 5
+    }
+  }
+}

@@ -81,7 +81,21 @@ Generator chỉ sinh bản nháp; các coverage chưa xác minh giữ trạng th
 
 ### API Builder
 
-API Builder lấy contract theo thứ tự ưu tiên OpenAPI 3.1 local, rồi Roslyn source local khi OpenAPI không hợp lệ. UI chỉ nhận đường dẫn nằm trong repository (từ chối URL HTTP/HTTPS, traversal và `.env`), hiển thị operation/request/response fields từ contract thay vì step mẫu. Workspace được lưu cục bộ tại `.artifacts/api-builder/<project>/<workspace-id>/workspace.json`; catalog biến không phân biệt hoa/thường, hiển thị theo A–Z và workspace dùng revision để phát hiện xung đột khi lưu.
+API Builder nhận trực tiếp một thư mục source local của một project và chỉ quét read-only. Khi người dùng nhập source trong **Công cụ → API Builder**, Tool-QC ưu tiên tìm `openapi.json` hoặc `swagger.json` chuẩn OpenAPI 3.1; nếu không có contract hợp lệ nhưng source là .NET, Tool-QC dùng Roslyn để đọc controller/action/DTO/validation. Source Node.js/TypeScript chỉ được hỗ trợ khi có OpenAPI 3.1, không suy đoán route từ Express/Nest/Fastify.
+
+Mapping local được lưu riêng theo Tool-QC project tại `projects/<project>/project.local.json` và đã bị Git ignore:
+
+```json
+{
+  "apiBuilder": {
+    "localSourcePath": "<thu-muc-source-local>"
+  }
+}
+```
+
+Không cần sửa hoặc copy repository nguồn. `project.local.json` không được commit; `project.json` vẫn có thể giữ `apiBuilder.openApiPath`/`sourcePath` relative như fallback portable. Tool-QC từ chối URL, UNC/network path, reparse point và không quét `.env`, `.git`, dependencies, build output, artifacts, logs hoặc test output. Source path và source content không được ghi vào workspace, testcase, report hay browser localStorage. Workspace chỉ lưu contract fingerprint/operation tại `.artifacts/api-builder/<project>/<workspace-id>/workspace.json`; catalog biến không phân biệt hoa/thường, hiển thị theo A–Z và workspace dùng revision để phát hiện xung đột khi lưu.
+
+Để bắt đầu, chọn Tool-QC project, mở **Công cụ → API Builder**, nhập thư mục source project local rồi tải operation. Khi để trống input, API Builder dùng mapping local đã lưu hoặc portable configuration của project.
 
 Mỗi step giữ `operationId` và contract fingerprint. Variable chỉ bind vào field request có `targetFieldId` tại step sau, cùng kiểu tương thích; credential hoặc field nhạy cảm bị từ chối. Contract fingerprint thay đổi yêu cầu chọn lại operation, không ghi đè workspace cũ. Browser journey dùng `@playwright/test` ở dev dependency: `npm run test:e2e` chạy Chromium local, giữ trace/screenshot khi thất bại và không dùng credential hay API production.
 

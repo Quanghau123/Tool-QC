@@ -272,9 +272,9 @@ using System.Text.Json.Serialization;
 public sealed class OrdersController : ControllerBase
 {
     [HttpPost, ProducesResponseType(typeof(OrderResponse), 201), ProducesResponseType(400)]
-    public Task<OrderResponse> Create([FromBody] CreateOrderRequest request) => throw new NotImplementedException();
-    [HttpGet, ProducesResponseType(typeof(OrderResponse), 200)]
-    public Task<OrderResponse> Search([FromQuery] SearchRequest request) { if (request.Page < 1) throw new ArgumentOutOfRangeException(); return OrderService.LoadAsync(request); }
+    public Task<OrderDetailResponse> Create([FromBody] CreateOrderDetailsRequest request) => throw new NotImplementedException();
+    [HttpGet, ProducesResponseType(typeof(PageResponse<OrderResponse>), 200)]
+    public Task<PageResponse<OrderResponse>> Search([FromQuery] SearchRequest request) { if (request.Page < 1) throw new ArgumentOutOfRangeException(); return OrderService.LoadAsync(request); }
 }
 [ApiController]
 [Route("api/users")]
@@ -285,18 +285,30 @@ public sealed class UsersController : ControllerBase
     [Authorize, HttpPost, ProducesResponseType(typeof(OrderResponse), 200)]
     public Task<OrderResponse> CreateUser([FromForm] CreateUserRequest request) => throw new NotImplementedException();
 }
-public static class OrderService { public static Task<OrderResponse> LoadAsync(SearchRequest request) => throw new NotImplementedException(); }
+public static class OrderService { public static Task<PageResponse<OrderResponse>> LoadAsync(SearchRequest request) => throw new NotImplementedException(); }
 public sealed record AddressRequest(string Street, string City);
-public sealed class CreateOrderRequest { public required string Code { get; init; } public int Quantity { get; init; } public AddressRequest Address { get; init; } = default!; }
+public class CreateOrderRequest { public required string Code { get; init; } public int Quantity { get; init; } public AddressRequest Address { get; init; } = default!; }
 public class PagingRequest { public int Current { get; init; } public int PageSize { get; init; } }
 public sealed class SearchRequest : PagingRequest { public string? Keyword { get; init; } }
-public sealed class OrderResponse { public Guid Id { get; init; } [JsonPropertyName("orderCode")] public string Code { get; init; } = ""; public int Quantity { get; init; } }
+public sealed class CreateOrderDetailsRequest : CreateOrderRequest { public string? Notes { get; init; } }
+public class OrderResponse { public Guid Id { get; init; } [JsonPropertyName("orderCode")] public string Code { get; init; } = ""; public int Quantity { get; init; } }
+public sealed class OrderDetailResponse : OrderResponse { public string? Notes { get; init; } }
+public sealed class PageResponse<T> { public IEnumerable<T>? Items { get; init; } }
 public sealed record LoginRequest(string Username, string Password);
 public sealed record AuthResponse(string AccessToken, string RefreshToken);
 public sealed record CreateUserRequest(string Username, string Password);
-public sealed class CreateOrderValidator : AbstractValidator<CreateOrderRequest> { public const int MaxQuantity = 20; public CreateOrderValidator() { RuleFor(x => x.Code).NotEmpty().MaximumLength(10); RuleFor(x => x.Quantity).LessThanOrEqualTo(MaxQuantity); } }
+public sealed class CreateOrderValidator : AbstractValidator<CreateOrderDetailsRequest> { public const int MaxQuantity = 20; public CreateOrderValidator() { RuleFor(x => x.Code).NotEmpty().MaximumLength(10); RuleFor(x => x.Quantity).LessThanOrEqualTo(MaxQuantity); } }
 """);
 var generatorAnalysis = new AutoTest.Generator.SourceContractAnalyzer().Analyze(generatorFixture);
+string generatorLinkedDirectory = Path.Combine(generatorFixture, "linked-source");
+try
+{
+    Directory.CreateSymbolicLink(generatorLinkedDirectory, generatorControllerDirectory);
+    Equal("4", new AutoTest.Generator.SourceContractAnalyzer().Analyze(generatorFixture).Endpoints.Count.ToString(), "generator ignores reparse source directory");
+}
+catch (Exception exception) when (exception is UnauthorizedAccessException or IOException)
+{
+}
 var generatorModules = AutoTest.Generator.SourceContractAnalyzer.DiscoverModules(generatorFixture);
 Equal("true", generatorModules.Contains("Users", StringComparer.OrdinalIgnoreCase).ToString().ToLowerInvariant(), "generator discovers controller module");
 var usersModuleAnalysis = new AutoTest.Generator.SourceContractAnalyzer().Analyze(generatorFixture, "Users");
@@ -344,7 +356,15 @@ Equal("CreateOrder", builderContract.Operations.Single().Id, "builder contract o
 Equal("path", builderContract.Operations.Single().RequestFields.Single(field => field.Name == "orderId").Location, "builder contract path field location");
 Equal("$.data.orderCode", builderContract.Operations.Single().ResponseFields.Single(field => field.Name == "orderCode").JsonPath, "builder contract response JSON path");
 var roslynBuilderContract = AutoTest.Generator.ApiBuilderContractProjection.Create(generatorAnalysis);
-Equal("body", roslynBuilderContract.Operations.Single(operation => operation.Path == "/api/orders" && operation.Method == "POST").RequestFields.Single(field => field.Name == "Code").Location, "Roslyn builder contract body field location");
+var createOrderOperation = roslynBuilderContract.Operations.Single(operation => operation.Path == "/api/orders" && operation.Method == "POST");
+var searchOrderOperation = roslynBuilderContract.Operations.Single(operation => operation.Path == "/api/orders" && operation.Method == "GET");
+Equal("body", createOrderOperation.RequestFields.Single(field => field.Name == "Code").Location, "Roslyn builder contract body field location");
+Equal("true", createOrderOperation.RequestFields.Any(field => field.Name == "Notes").ToString().ToLowerInvariant(), "Roslyn builder contract includes inherited request fields");
+Equal("$.data.id", createOrderOperation.ResponseFields.First().JsonPath, "Roslyn builder contract includes inherited response fields");
+Equal("Orders", createOrderOperation.Group, "Roslyn builder contract groups controller operations");
+Equal("true", searchOrderOperation.RequestFields.Select(field => field.JsonPath).OrderBy(path => path).SequenceEqual(["$.query.current", "$.query.keyword", "$.query.pageSize"]).ToString().ToLowerInvariant(), "Roslyn builder contract flattens query DTO fields");
+Equal("$.data.items", searchOrderOperation.ResponseFields.Single(field => field.Name == "Items").JsonPath, "Roslyn builder contract resolves generic response wrapper");
+Equal("OrderResponse", searchOrderOperation.ResponseFields.Single(field => field.Name == "Items").ItemType!, "Roslyn builder contract substitutes generic item type");
 Throws<InvalidDataException>(() => AutoTest.Generator.OpenApiContractAdapter.Analyze("{\"openapi\":\"3.0.0\"}", "invalid.openapi.json"), "OpenAPI invalid document");
 var generatedSuite = AutoTest.Generator.DraftSuiteBuilder.Build("ops-service", generatorAnalysis, null);
 var localGeneratorOptions = AutoTest.Generator.GeneratorExecutionOptions.From("local", null, null, null);
@@ -459,7 +479,53 @@ Equal("1", workspaceStore.DeleteExpiredWorkspaces(DateTimeOffset.UtcNow).ToStrin
 Equal("0", workspaceStore.DeleteExpiredWorkspaces(DateTimeOffset.UtcNow).ToString(), "workspace keeps no deleted draft");
 Directory.Delete(workspaceArtifacts, true);
 
-Console.WriteLine("Framework tests passed: 66");
+string contractProjectRoot = Path.Combine(Path.GetTempPath(), $"toolqc-api-builder-project-{Guid.NewGuid():N}");
+Directory.CreateDirectory(Path.Combine(contractProjectRoot, "openapi"));
+Directory.CreateDirectory(Path.Combine(contractProjectRoot, "source"));
+File.WriteAllText(Path.Combine(contractProjectRoot, "project.json"), """{"name":"contract-fixture","apiBuilder":{"openApiPath":"openapi/openapi.json","sourcePath":"source"}}""");
+File.WriteAllText(Path.Combine(contractProjectRoot, "openapi", "openapi.json"), openApiFixture);
+ApiBuilderProjectConfiguration contractConfiguration = ApiBuilderProjectConfiguration.Load(contractProjectRoot);
+Equal("openapi/openapi.json", contractConfiguration.OpenApiPath!, "API Builder reads project-relative OpenAPI configuration");
+Equal("source", contractConfiguration.SourcePath!, "API Builder reads project-relative source configuration");
+Equal(Path.Combine(contractProjectRoot, "openapi", "openapi.json"), contractConfiguration.ResolveOpenApiPath()!, "API Builder resolves OpenAPI inside project");
+Equal(Path.Combine(contractProjectRoot, "source"), contractConfiguration.ResolveSourcePath()!, "API Builder resolves source inside project");
+string localSourceRoot = Path.Combine(contractProjectRoot, "local-source");
+Directory.CreateDirectory(localSourceRoot);
+Directory.CreateDirectory(Path.Combine(localSourceRoot, "src", "Web"));
+File.WriteAllText(Path.Combine(localSourceRoot, "src", "Web", "Web.csproj"), "<Project />");
+Equal("true", ApiBuilderProjectConfiguration.IsDotNetSource(localSourceRoot).ToString().ToLowerInvariant(), "API Builder detects nested .NET source project");
+ApiBuilderProjectConfiguration.SaveLocalSourcePath(contractProjectRoot, localSourceRoot);
+ApiBuilderProjectConfiguration localConfiguration = ApiBuilderProjectConfiguration.Load(contractProjectRoot);
+Equal(localSourceRoot, localConfiguration.ResolveLocalSourcePath()!, "API Builder reads local source override");
+Directory.CreateDirectory(Path.Combine(localSourceRoot, "node_modules", "ignored"));
+Directory.CreateDirectory(Path.Combine(localSourceRoot, "contracts"));
+File.WriteAllText(Path.Combine(localSourceRoot, "contracts", "openapi.json"), openApiFixture);
+File.WriteAllText(Path.Combine(localSourceRoot, "node_modules", "ignored", "openapi.json"), openApiFixture);
+Equal(Path.Combine(localSourceRoot, "contracts", "openapi.json"), ApiBuilderProjectConfiguration.FindOpenApiCandidates(localSourceRoot).Single(), "API Builder discovers allowed local OpenAPI candidate");
+Throws<InvalidDataException>(() => ApiBuilderProjectConfiguration.SaveLocalSourcePath(contractProjectRoot, "local-source"), "API Builder rejects relative local source override");
+File.WriteAllText(Path.Combine(contractProjectRoot, "project.local.json"), "{");
+Equal(string.Empty, ApiBuilderProjectConfiguration.Load(contractProjectRoot).ResolveLocalSourcePath() ?? string.Empty, "API Builder ignores malformed local override");
+File.WriteAllText(Path.Combine(contractProjectRoot, "project.local.json"), """{"apiBuilder":{"localSourcePath":"https://example.invalid/source"}}""");
+Throws<InvalidDataException>(() => ApiBuilderProjectConfiguration.Load(contractProjectRoot).ResolveLocalSourcePath(), "API Builder rejects remote local source override");
+File.WriteAllText(Path.Combine(contractProjectRoot, "project.local.json"), """{"apiBuilder":{"localSourcePath":"\\\\server\\share"}}""");
+Throws<InvalidDataException>(() => ApiBuilderProjectConfiguration.Load(contractProjectRoot).ResolveLocalSourcePath(), "API Builder rejects UNC local source override");
+File.WriteAllText(Path.Combine(contractProjectRoot, "project.json"), """{"name":"contract-fixture","apiBuilder":{"openApiPath":"../outside.json"}}""");
+Throws<InvalidDataException>(() => ApiBuilderProjectConfiguration.Load(contractProjectRoot).ResolveOpenApiPath(), "API Builder rejects project traversal");
+File.WriteAllText(Path.Combine(contractProjectRoot, "project.json"), """{"name":"contract-fixture","apiBuilder":{"openApiPath":"https://example.invalid/openapi.json"}}""");
+Throws<InvalidDataException>(() => ApiBuilderProjectConfiguration.Load(contractProjectRoot).ResolveOpenApiPath(), "API Builder rejects remote OpenAPI URL");
+File.WriteAllText(Path.Combine(contractProjectRoot, "project.json"), """{"name":"contract-fixture","apiBuilder":{"openApiPath":".env"}}""");
+File.WriteAllText(Path.Combine(contractProjectRoot, ".env"), "secret=value");
+Throws<InvalidDataException>(() => ApiBuilderProjectConfiguration.Load(contractProjectRoot).ResolveOpenApiPath(), "API Builder rejects environment file");
+File.WriteAllText(Path.Combine(contractProjectRoot, "project.json"), """{"name":"contract-fixture","apiBuilder":{"openApiPath":"C:\\outside.json"}}""");
+Throws<InvalidDataException>(() => ApiBuilderProjectConfiguration.Load(contractProjectRoot).ResolveOpenApiPath(), "API Builder rejects rooted OpenAPI path");
+File.WriteAllText(Path.Combine(contractProjectRoot, "project.json"), """{"name":"contract-fixture","apiBuilder":{"openApiPath":"missing.json"}}""");
+Throws<InvalidDataException>(() => ApiBuilderProjectConfiguration.Load(contractProjectRoot).ResolveOpenApiPath(), "API Builder rejects missing OpenAPI file");
+File.WriteAllText(Path.Combine(contractProjectRoot, "project.json"), """{"name":"contract-fixture","apiBuilder":{"openApiPath":"openapi","sourcePath":"openapi/openapi.json"}}""");
+Throws<InvalidDataException>(() => ApiBuilderProjectConfiguration.Load(contractProjectRoot).ResolveOpenApiPath(), "API Builder rejects OpenAPI directory");
+Throws<InvalidDataException>(() => ApiBuilderProjectConfiguration.Load(contractProjectRoot).ResolveSourcePath(), "API Builder rejects source file");
+Directory.Delete(contractProjectRoot, true);
+
+Console.WriteLine("Framework tests passed: 78");
 return 0;
 
 static StepSpec Step(string? method, string? path, DatabaseRequestSpec? database, MqttRequestSpec? mqtt)
