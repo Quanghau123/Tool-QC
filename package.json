@@ -1,6 +1,7 @@
 {
   "private": true,
   "scripts": {
+    "setup": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap.ps1",
     "start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-ui.ps1",
     "ui": "npm run start",
     "build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1",

@@ -16,6 +16,7 @@ Soul: chất lượng > runtime > context cost · luật gốc: skills/tdq-conve
 | QC-F2 | Touched-area regression | Framework tests, runner/Web build, scanner CLI, Playwright E2E | Framework 78, runner/Web builds 0 errors, scanner workbook created, browser 1/1 | PASS |
 | QC-F3 | Architecture constraints | Direct review of shared/project boundary and runner composition | Không có branch shared theo project; catalogue load tại composition root, path project-local | PASS |
 | QC-F4 | Clean code | Self-check theo `clean-code.md` | SRP/OCP/LSP/ISP/DIP: Có/Có/Có/Có/Có | PASS |
+| Q9 | Onboarding máy mới | `npm run setup` hai lần; framework regression; solution build | Lần hai: NuGet up-to-date, Node dependency sẵn sàng, Playwright Chromium setup thành công; framework 78 PASS; solution build 0 warning/0 error | PASS |
 
 ## Bằng chứng
 
@@ -58,6 +59,16 @@ Báo cáo HTML: test-results\ops-service\system\2026-10-26_162729_ops-service_sm
 ```text
 Direct working-tree review: no verified actionable finding after resolver regression fix.
 External worktree code/security reviewers: NOT ASSESSED for uncommitted diff because isolated worktrees had no main working-tree patch; not used as clean-review evidence.
+```
+
+### Q9
+```text
+npm run setup (second run): All projects are up-to-date for restore.
+Node dependencies are already ready.
+Ensuring the Playwright Chromium browser is available...
+Tool-QC setup is complete.
+Framework tests passed: 78
+Solution build: 0 Warning(s), 0 Error(s)
 ```
 
 ### QC-F1 đến QC-F4

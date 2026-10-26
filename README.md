@@ -27,11 +27,12 @@ shared launcher chỉ quản lý tiến trình JMeter và cấu trúc JTL/HTML c
 
 Tool-QC là framework kiểm thử API theo dữ liệu: cấu hình môi trường một lần, mô tả testcase bằng JSON, sau đó chạy runner và đọc báo cáo HTML. Bạn không cần viết test C# riêng cho từng dịch vụ.
 
-1. Cài .NET SDK 8 và Node.js LTS.
-2. Sao chép `.env.example` thành `.env`, chỉ điền cấu hình local/test của bạn; không commit file này.
-3. Chọn một project có sẵn dưới `projects/`, hoặc sao chép `projects/project-template` thành project mới.
-4. Khởi động UI bằng `npm start`, chọn project và bắt đầu từ smoke test không thay đổi dữ liệu.
-5. Mở báo cáo HTML trong `.artifacts/test-runs/` sau mỗi lần chạy để xem kết quả từng case và step.
+1. Cài Git, .NET SDK 8 và Node.js LTS (Node 18 trở lên).
+2. Chạy một lần `npm run setup`. Lệnh kiểm prerequisite, restore NuGet theo solution, cài đúng Node packages từ `package-lock.json` khi cần và chuẩn bị Chromium cho browser E2E. Lệnh không tự cài, nâng cấp, hạ cấp hoặc đổi SDK/toolchain hệ thống.
+3. Sao chép `.env.example` thành `.env`, chỉ điền cấu hình local/test của bạn; không commit file này.
+4. Chọn một project có sẵn dưới `projects/`, hoặc sao chép `projects/project-template` thành project mới.
+5. Khởi động UI bằng `npm start`, chọn project và bắt đầu từ smoke test không thay đổi dữ liệu.
+6. Mở báo cáo HTML trong `.artifacts/test-runs/` sau mỗi lần chạy để xem kết quả từng case và step.
 
 ### Chọn đúng công cụ
 
@@ -54,13 +55,21 @@ Tool-QC là framework kiểm thử API theo dữ liệu: cấu hình môi trư�
 
 Thứ tự ưu tiên là biến môi trường hệ điều hành/CI, `projects/<project>/.env`, rồi `.env` ở thư mục gốc.
 
-Lệnh đơn giản nhất để mở Tool-QC:
+Trên máy mới, chạy đúng một lệnh sau khi clone source:
+
+```powershell
+npm run setup
+```
+
+Lệnh này chỉ phục hồi dependency được khóa trong repository. Git, .NET SDK 8 và Node.js 18+ là prerequisite hệ thống: nếu thiếu hoặc không phù hợp, lệnh dừng với hướng dẫn cài đặt thay vì tự thay đổi môi trường của máy.
+
+Sau khi tạo `.env`, lệnh đơn giản nhất để mở Tool-QC là:
 
 ```powershell
 npm start
 ```
 
-Dùng UI hằng ngày không cần package JavaScript production. Chỉ khi chạy browser E2E cho người phát triển mới cần `npm install` để cài `@playwright/test`, sau đó chạy `npm run test:e2e`. Lệnh PowerShell
+Dùng UI hằng ngày không cần package JavaScript production. `npm run setup` cài development dependency và Chromium cần cho browser E2E; sau đó người phát triển có thể chạy `npm run test:e2e`. Lệnh PowerShell
 `.\toolqc.ps1` vẫn được giữ cho automation và các chức năng nâng cao.
 
 UI hỗ trợ chọn chính xác testcase theo ID, dừng workload đang chạy, xem lịch sử và báo cáo cũ, chỉnh cấu hình dự án và kiểm tra nhanh các URL đã cấu hình. Runner hiện hỗ trợ HTTP JSON, multipart form, PostgreSQL fixture command, MQTT, request đồng thời trong một step, retry giới hạn, assertion JSON, biến liên bước, preflight, báo cáo HTML và JUnit tùy chọn. Redis assertions, JSON Schema/OpenAPI validation đầy đủ và parallel case scheduling chưa được triển khai.

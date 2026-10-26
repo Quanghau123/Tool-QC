@@ -142,3 +142,8 @@ Trạng thái plan: HOÀN THÀNH
 ## QC vòng 1 — fix
 
 - [x] **QC1.1** Format các file Web đã thay đổi để Q6 pass mà không reformat vùng ngoài scope. — Test: `npx prettier --check` trên danh sách file Web đã thay đổi.
+
+## P5 — Onboarding máy mới
+
+- [x] **T5.1** (e16m) Bổ sung lệnh `npm run setup` idempotent để kiểm Git/.NET SDK 8/Node 18+, restore NuGet/Node package theo lockfile và chuẩn bị Playwright Chromium; không tự cài hay thay đổi SDK/toolchain hệ thống. — Test: chạy `npm run setup` hai lần; lần hai báo NuGet up-to-date và Node dependency sẵn sàng; framework regression PASS 78.
+  - Chạm: `scripts/bootstrap.ps1`, `package.json`, `README.md` → entrypoint onboarding độc lập; các script runtime hiện có không đổi contract.
