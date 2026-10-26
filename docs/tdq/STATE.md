@@ -1,13 +1,13 @@
 # TDQ STATE (generated — do not hand-edit)
-Updated: 2026-10-26T12:03:23+07:00 · Project: D:\works\projects\Tool-QC · schema 3
+Updated: 2026-10-26T16:32:39+07:00 · Project: D:\works\projects\Tool-QC · schema 3
 
 | Field | Value |
 |---|---|
-| Request | 2026-10-26-0957-code-quality-maintenance |
+| Request | 2026-10-26-1256-message-error-standard |
 | Lane | full |
 | Phase | report |
-| Spec | docs/tdq/spec/2026-10-26-0957-code-quality-maintenance.md — ✔ approved |
-| Plan | docs/tdq/plan/2026-10-26-0957-code-quality-maintenance.md — ✔ approved |
+| Spec | docs/tdq/spec/2026-10-26-1256-message-error-standard.md — ✔ approved |
+| Plan | docs/tdq/plan/2026-10-26-1256-message-error-standard.md — ✔ approved |
 | Quick approval | (not applicable) |
 | Doc language | vi |
 | Lean level | full |

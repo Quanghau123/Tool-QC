@@ -1,7 +1,6 @@
 using System.IO.Compression;
 using System.Security;
 using System.Text;
-using System.Text.RegularExpressions;
 
 namespace AutoTest.MessageScanner;
 
@@ -16,12 +15,16 @@ public sealed class MessageWorkbookWriter
 
         var sheets = new List<SheetData>
         {
-            new("Messages", result.Messages)
+            new("Messages", MessageRows(result.Messages))
         };
         sheets.AddRange(result.Messages
             .GroupBy(message => message.Module, StringComparer.OrdinalIgnoreCase)
             .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
-            .Select(group => new SheetData(SafeSheetName(group.Key, sheets.Select(x => x.Name)), group.ToArray())));
+            .Select(group => new SheetData(
+                SafeSheetName(group.Key, sheets.Select(x => x.Name)),
+                MessageRows(group.ToArray()))));
+        if (result.AuditFindings.Count > 0)
+            sheets.Add(new("Audit", AuditRows(result.AuditFindings)));
 
         using var archive = ZipFile.Open(fullPath, ZipArchiveMode.Create);
         Write(archive, "[Content_Types].xml", ContentTypes(sheets.Count));
@@ -32,24 +35,40 @@ public sealed class MessageWorkbookWriter
         Write(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationships(sheets.Count));
         Write(archive, "xl/styles.xml", Styles());
         for (int index = 0; index < sheets.Count; index++)
-            Write(archive, $"xl/worksheets/sheet{index + 1}.xml", Worksheet(sheets[index].Messages));
+            Write(archive, $"xl/worksheets/sheet{index + 1}.xml", Worksheet(sheets[index].Rows));
         return fullPath;
     }
 
-    private static string Worksheet(IReadOnlyList<MessageEntry> messages)
+    private static string Worksheet(IReadOnlyList<string[]> rows)
     {
+        int columnCount = rows[0].Length;
+        string lastColumn = ((char)('A' + columnCount - 1)).ToString();
         var xml = new StringBuilder();
-        xml.Append("<?xml version=\"1.0\" encoding=\"utf-8\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><dimension ref=\"A1:D")
-            .Append(messages.Count + 1).Append("\"/><sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews><cols><col min=\"1\" max=\"1\" width=\"8\" customWidth=\"1\"/><col min=\"2\" max=\"2\" width=\"65\" customWidth=\"1\"/><col min=\"3\" max=\"4\" width=\"45\" customWidth=\"1\"/></cols><sheetData>");
-        Row(xml, 1, true, "STT", "Messages", "Mes tiếng Việt", "Mes tiếng Anh");
-        for (int index = 0; index < messages.Count; index++)
-        {
-            MessageEntry message = messages[index];
-            Row(xml, index + 2, false, (index + 1).ToString(), message.Key, message.Vietnamese ?? "", message.English ?? "");
-        }
-        xml.Append("</sheetData><autoFilter ref=\"A1:D").Append(messages.Count + 1).Append("\"/></worksheet>");
+        xml.Append("<?xml version=\"1.0\" encoding=\"utf-8\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><dimension ref=\"A1:")
+            .Append(lastColumn).Append(rows.Count).Append("\"/><sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews><sheetData>");
+        for (int index = 0; index < rows.Count; index++)
+            Row(xml, index + 1, index == 0, rows[index]);
+        xml.Append("</sheetData><autoFilter ref=\"A1:").Append(lastColumn).Append(rows.Count).Append("\"/></worksheet>");
         return xml.ToString();
     }
+
+    private static IReadOnlyList<string[]> MessageRows(IReadOnlyList<MessageEntry> messages) =>
+        [
+            ["STT", "Messages", "Mes tiếng Việt", "Mes tiếng Anh"],
+            .. messages.Select((message, index) => new[]
+            {
+                (index + 1).ToString(), message.Key, message.Vietnamese ?? "", message.English ?? ""
+            })
+        ];
+
+    private static IReadOnlyList<string[]> AuditRows(IReadOnlyList<MessageAuditFinding> findings) =>
+        [
+            ["Loại", "Vị trí", "Dòng", "Chi tiết"],
+            .. findings.Select(finding => new[]
+            {
+                finding.Kind, finding.Location, finding.Line.ToString(), finding.Detail
+            })
+        ];
 
     private static void Row(StringBuilder xml, int row, bool header, params string[] values)
     {
@@ -118,5 +137,5 @@ public sealed class MessageWorkbookWriter
         writer.Write(content);
     }
 
-    private sealed record SheetData(string Name, IReadOnlyList<MessageEntry> Messages);
+    private sealed record SheetData(string Name, IReadOnlyList<string[]> Rows);
 }

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using AutoTest.Abstractions;
 
 namespace AutoTest.MessageScanner;
 
@@ -11,11 +12,20 @@ public sealed record MessageEntry(
     string? English,
     IReadOnlyList<string> SourceFiles);
 
+public sealed record MessageAuditFinding(
+    string Kind,
+    string Location,
+    int Line,
+    string Detail);
+
 public sealed record MessageScanResult(
     string SourceDirectory,
     IReadOnlyList<MessageEntry> Messages,
     int ScannedFileCount,
-    IReadOnlyList<string> SkippedFiles);
+    IReadOnlyList<string> SkippedFiles)
+{
+    public IReadOnlyList<MessageAuditFinding> AuditFindings { get; init; } = [];
+}
 
 // Quét source tìm message và bản dịch; lỗi thiếu key/module/source file kiểm tra tại đây.
 public sealed class SourceMessageScanner
@@ -28,6 +38,12 @@ public sealed class SourceMessageScanner
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.Singleline);
     private static readonly Regex DisplayNameRegex = new(
         @"\[\s*MessageDisplay\s*\(\s*""(?<name>[^""]+)""\s*\)\s*\]\s*(?:public\s+|internal\s+)?(?:sealed\s+|abstract\s+|partial\s+)*(?:class|record)\s+(?<type>[A-Za-z_][A-Za-z0-9_]*)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex ErrorCodeRegex = new(
+        @"\b[A-Z][A-Z0-9]{1,15}-[A-Z][A-Z0-9]*-\d{3}\b",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex StringLiteralRegex = new(
+        "(?:\\\"(?<text>(?:\\\\.|[^\\\"\\r\\n])*)\\\")|'(?<text>(?:\\\\.|[^'\\r\\n])*)'",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly HashSet<string> IgnoredDirectories = new(StringComparer.OrdinalIgnoreCase)
@@ -43,6 +59,12 @@ public sealed class SourceMessageScanner
     };
 
     public MessageScanResult Scan(string sourceDirectory, CancellationToken cancellationToken = default)
+        => Scan(sourceDirectory, null, cancellationToken);
+
+    public MessageScanResult Scan(
+        string sourceDirectory,
+        ErrorCatalogueSpec? catalogue,
+        CancellationToken cancellationToken = default)
     {
         string root = Path.GetFullPath(sourceDirectory);
         if (!Directory.Exists(root))
@@ -77,7 +99,7 @@ public sealed class SourceMessageScanner
                     files.Add(relative);
                 }
 
-                ReadTranslations(file, text, translations);
+                ReadTranslations(file, relative, text, translations);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
             {
@@ -108,12 +130,54 @@ public sealed class SourceMessageScanner
                     GetModule(key),
                     translation?.Vietnamese,
                     translation?.English,
-                    (files ?? []).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray());
+                    (files ?? translation?.SourceFiles ?? []).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray());
             })
             .ToArray();
 
-        return new(root, messages, scanned, skipped);
+        IReadOnlyList<MessageAuditFinding> auditFindings = Audit(sourceTexts, messages, catalogue);
+        return new(root, messages, scanned, skipped) { AuditFindings = auditFindings };
     }
+
+    private static IReadOnlyList<MessageAuditFinding> Audit(
+        IEnumerable<(string File, string Relative, string Text)> sourceTexts,
+        IReadOnlyList<MessageEntry> messages,
+        ErrorCatalogueSpec? catalogue)
+    {
+        var findings = new List<MessageAuditFinding>();
+        foreach (MessageEntry message in messages)
+        {
+            if (string.IsNullOrWhiteSpace(message.Vietnamese))
+                findings.Add(new("missing-vi", message.SourceFiles.FirstOrDefault() ?? message.Key, 0, message.Key));
+            if (string.IsNullOrWhiteSpace(message.English))
+                findings.Add(new("missing-en", message.SourceFiles.FirstOrDefault() ?? message.Key, 0, message.Key));
+        }
+
+        foreach (var source in sourceTexts.Where(item => IsAuditableSource(item.File)))
+        {
+            foreach (Match match in ErrorCodeRegex.Matches(source.Text))
+                if (catalogue is not null && !catalogue.Entries.Any(entry => entry.Code.Equals(match.Value, StringComparison.Ordinal)))
+                    findings.Add(new("unregistered-error-code", source.Relative, LineNumber(source.Text, match.Index), match.Value));
+            foreach (Match match in StringLiteralRegex.Matches(source.Text))
+            {
+                string text = match.Groups["text"].Value;
+                if (Regex.IsMatch(text, "[À-ỹ]", RegexOptions.CultureInvariant))
+                    findings.Add(new("hard-coded-message", source.Relative, LineNumber(source.Text, match.Index), text));
+            }
+        }
+
+        return findings;
+    }
+
+    private static bool IsAuditableSource(string file)
+        => Path.GetExtension(file).Equals(".cs", StringComparison.OrdinalIgnoreCase)
+            || Path.GetExtension(file).Equals(".ts", StringComparison.OrdinalIgnoreCase)
+            || Path.GetExtension(file).Equals(".tsx", StringComparison.OrdinalIgnoreCase)
+            || Path.GetExtension(file).Equals(".js", StringComparison.OrdinalIgnoreCase)
+            || Path.GetExtension(file).Equals(".jsx", StringComparison.OrdinalIgnoreCase)
+            || Path.GetExtension(file).Equals(".vue", StringComparison.OrdinalIgnoreCase);
+
+    private static int LineNumber(string text, int index)
+        => 1 + text.Take(index).Count(character => character == '\n');
 
     private static Dictionary<string, string> ReadDisplayNames(IEnumerable<(string File, string Relative, string Text)> sources)
     {
@@ -230,6 +294,7 @@ public sealed class SourceMessageScanner
 
     private static void ReadTranslations(
         string file,
+        string relative,
         string text,
         Dictionary<string, Translation> translations)
     {
@@ -242,7 +307,7 @@ public sealed class SourceMessageScanner
             {
                 string? key = data.Attribute("name")?.Value;
                 string? value = data.Element("value")?.Value;
-                SetTranslation(key, value, language, translations);
+                SetTranslation(key, value, language, relative, translations);
             }
             return;
         }
@@ -254,7 +319,7 @@ public sealed class SourceMessageScanner
                 AllowTrailingCommas = true,
                 CommentHandling = JsonCommentHandling.Skip
             });
-            ReadJson(document.RootElement, null, language, translations);
+            ReadJson(document.RootElement, null, language, relative, translations);
             return;
         }
 
@@ -266,7 +331,7 @@ public sealed class SourceMessageScanner
                 if (trimmed.Length == 0 || trimmed.StartsWith('#')) continue;
                 int separator = trimmed.IndexOf('=');
                 if (separator > 0)
-                    SetTranslation(trimmed[..separator].Trim(), trimmed[(separator + 1)..].Trim(), language, translations);
+                    SetTranslation(trimmed[..separator].Trim(), trimmed[(separator + 1)..].Trim(), language, relative, translations);
             }
         }
     }
@@ -275,6 +340,7 @@ public sealed class SourceMessageScanner
         JsonElement element,
         string? prefix,
         string language,
+        string relative,
         Dictionary<string, Translation> translations)
     {
         if (element.ValueKind != JsonValueKind.Object) return;
@@ -282,9 +348,9 @@ public sealed class SourceMessageScanner
         {
             string key = prefix is null ? property.Name : $"{prefix}.{property.Name}";
             if (property.Value.ValueKind == JsonValueKind.String)
-                SetTranslation(key, property.Value.GetString(), language, translations);
+                SetTranslation(key, property.Value.GetString(), language, relative, translations);
             else if (property.Value.ValueKind == JsonValueKind.Object)
-                ReadJson(property.Value, key, language, translations);
+                ReadJson(property.Value, key, language, relative, translations);
         }
     }
 
@@ -292,6 +358,7 @@ public sealed class SourceMessageScanner
         string? key,
         string? value,
         string language,
+        string relative,
         Dictionary<string, Translation> translations)
     {
         if (key is null || value is null || !MessageRegex.IsMatch(key)) return;
@@ -299,6 +366,7 @@ public sealed class SourceMessageScanner
         current ??= new();
         if (language == "vi") current.Vietnamese ??= value;
         else if (language == "en") current.English ??= value;
+        current.SourceFiles.Add(relative);
         translations[key] = current;
     }
 
@@ -324,5 +392,6 @@ public sealed class SourceMessageScanner
     {
         public string? Vietnamese { get; set; }
         public string? English { get; set; }
+        public HashSet<string> SourceFiles { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 }

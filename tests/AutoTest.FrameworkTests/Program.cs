@@ -14,6 +14,7 @@ using AutoTest.Redis;
 using AutoTest.FrameworkTests.WorkbookTests;
 using AutoTest.Web;
 using AutoTest.UnitX;
+using AutoTest.MessageScanner;
 using System.Diagnostics;
 
 Environment.SetEnvironmentVariable("FRAMEWORK_TEST_URL", "http://localhost");
@@ -34,6 +35,39 @@ using (CancellationTokenSource stderrTimeout = new(TimeSpan.FromSeconds(5)))
     Equal("true", stderrResult.StandardError.Contains("stderr-line", StringComparison.Ordinal).ToString().ToLowerInvariant(), "process executor captures stderr");
 }
 string repositoryRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+string templateProjectDirectory = Path.Combine(repositoryRoot, "projects", "project-template");
+ProjectSpec templateProject = SpecLoader.Project(Path.Combine(templateProjectDirectory, "project.json"));
+ErrorCatalogueSpec templateCatalogue = SpecLoader.ErrorCatalogue(templateProjectDirectory, templateProject);
+Equal("0", templateCatalogue.Entries.Count.ToString(), "project template loads empty error catalogue");
+string messageAuditDirectory = Path.Combine(Path.GetTempPath(), $"autotest-message-audit-{Guid.NewGuid():N}");
+Directory.CreateDirectory(Path.Combine(messageAuditDirectory, "node_modules"));
+File.WriteAllText(Path.Combine(messageAuditDirectory, "messages.vi.json"), """{"Mes.Ui.Loading":"Đang tải"}""");
+File.WriteAllText(Path.Combine(messageAuditDirectory, "view.js"), """const display = "Lỗi hiển thị"; const code = "TQC-UI-001";""");
+File.WriteAllText(Path.Combine(messageAuditDirectory, "node_modules", "ignored.js"), """const hidden = ""Lỗi bị loại trừ"";""");
+var messageAuditCatalogue = new ErrorCatalogueSpec(1, "TQC", [
+    new ErrorCatalogueEntrySpec("TQC-UI-002", 400, new("Lỗi catalogue.", "Catalogue error."))
+]);
+MessageScanResult messageAudit = new SourceMessageScanner().Scan(messageAuditDirectory, messageAuditCatalogue);
+Equal("true", messageAudit.AuditFindings.Any(finding => finding.Kind == "missing-en" && finding.Location == "messages.vi.json").ToString().ToLowerInvariant(), "scanner reports missing English translation");
+Equal("true", messageAudit.AuditFindings.Any(finding => finding.Kind == "unregistered-error-code" && finding.Location == "view.js").ToString().ToLowerInvariant(), "scanner reports unregistered error code");
+Equal("true", messageAudit.AuditFindings.Any(finding => finding.Kind == "hard-coded-message" && finding.Location == "view.js").ToString().ToLowerInvariant(), "scanner reports hard-coded UI message");
+Equal("false", messageAudit.AuditFindings.Any(finding => finding.Location.StartsWith("node_modules/", StringComparison.Ordinal)).ToString().ToLowerInvariant(), "scanner excludes dependency files from audit");
+string messageAuditWorkbook = Path.Combine(messageAuditDirectory, "audit.xlsx");
+new MessageWorkbookWriter().Write(messageAuditWorkbook, messageAudit);
+using (var messageAuditArchive = System.IO.Compression.ZipFile.OpenRead(messageAuditWorkbook))
+{
+    string workbook = new StreamReader(messageAuditArchive.GetEntry("xl/workbook.xml")!.Open()).ReadToEnd();
+    Equal("true", workbook.Contains("name=\"Messages\"", StringComparison.Ordinal).ToString().ToLowerInvariant(), "scanner workbook preserves Messages sheet");
+    Equal("true", workbook.Contains("name=\"Audit\"", StringComparison.Ordinal).ToString().ToLowerInvariant(), "scanner workbook exports Audit sheet");
+}
+Directory.Delete(messageAuditDirectory, true);
+Type uiSupportType = System.Reflection.Assembly.Load("AutoTest.Web").GetType("UiSupport")!;
+var diagnose = uiSupportType.GetMethod("Diagnose", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)!;
+object environmentDiagnosis = diagnose.Invoke(null, [new[] { "connection refused" }])!;
+Equal("TQC-ENV-003", environmentDiagnosis.GetType().GetProperty("Code")!.GetValue(environmentDiagnosis)!.ToString()!, "diagnostic resolves known TQC code");
+Equal("The target service refused the connection.", environmentDiagnosis.GetType().GetProperty("Message")!.GetValue(environmentDiagnosis)!.ToString()!, "diagnostic resolves TQC catalogue text");
+object legacyDiagnosis = diagnose.Invoke(null, [new[] { "unknown failure" }])!;
+Equal("TQC-RUN-999", legacyDiagnosis.GetType().GetProperty("Code")!.GetValue(legacyDiagnosis)!.ToString()!, "diagnostic retains legacy fallback code");
 WorkbookTestHarness.Run(repositoryRoot);
 VerifyWorkbookParserTests.Run(repositoryRoot);
 VerifyTestcaseBuilderTests.Run(repositoryRoot);
@@ -68,6 +102,38 @@ Equal("project", layeredEnvironment.Get("OVERRIDE_VALUE")!, "project environment
 File.Delete(commonEnvironmentPath);
 File.Delete(projectEnvironmentPath);
 
+string catalogueProjectDirectory = Path.Combine(Path.GetTempPath(), $"autotest-catalogue-{Guid.NewGuid():N}");
+Directory.CreateDirectory(catalogueProjectDirectory);
+string catalogueProjectPath = Path.Combine(catalogueProjectDirectory, "project.json");
+string cataloguePath = Path.Combine(catalogueProjectDirectory, "error-catalogue.json");
+File.WriteAllText(catalogueProjectPath, """{"name":"catalogue-fixture","baseUrlVariable":"FRAMEWORK_TEST_URL","errorCatalogue":{"path":"error-catalogue.json"}}""");
+File.WriteAllText(cataloguePath, """
+{
+  "schemaVersion": 1,
+  "prefix": "TQC",
+  "entries": [{
+    "code": "TQC-UI-001",
+    "httpStatus": 503,
+    "messages": { "vi": "Không thể kết nối.", "en": "Cannot connect." }
+  }]
+}
+""");
+ProjectSpec catalogueProject = SpecLoader.Project(catalogueProjectPath);
+ErrorCatalogueSpec catalogue = SpecLoader.ErrorCatalogue(catalogueProjectDirectory, catalogueProject);
+Equal("Cannot connect.", catalogue.Resolve("TQC-UI-001", "fr"), "catalogue falls back to English");
+Equal("Không thể kết nối.", catalogue.Resolve("TQC-UI-001", "vi"), "catalogue resolves Vietnamese");
+File.WriteAllText(cataloguePath, """{"schemaVersion":2,"prefix":"TQC","entries":[]}""");
+Throws<InvalidDataException>(() => SpecLoader.ErrorCatalogue(catalogueProjectDirectory, catalogueProject), "catalogue rejects unsupported schema version");
+File.WriteAllText(cataloguePath, """{"schemaVersion":1,"prefix":"TQC","entries":[{"code":"OPS-UI-001","httpStatus":400,"messages":{"vi":"Lỗi","en":"Error"}}]}""");
+Throws<InvalidDataException>(() => SpecLoader.ErrorCatalogue(catalogueProjectDirectory, catalogueProject), "catalogue rejects code prefix mismatch");
+File.WriteAllText(cataloguePath, """{"schemaVersion":1,"prefix":"TQC","entries":[{"code":"TQC-UI-001","httpStatus":99,"messages":{"vi":"Lỗi","en":"Error"}}]}""");
+Throws<InvalidDataException>(() => SpecLoader.ErrorCatalogue(catalogueProjectDirectory, catalogueProject), "catalogue rejects invalid HTTP status");
+File.WriteAllText(cataloguePath, """{"schemaVersion":1,"prefix":"TQC","entries":[{"code":"TQC-UI-001","httpStatus":400,"messages":{"vi":"Lỗi"}}]}""");
+Throws<InvalidDataException>(() => SpecLoader.ErrorCatalogue(catalogueProjectDirectory, catalogueProject), "catalogue rejects missing fallback");
+File.WriteAllText(cataloguePath, """{"schemaVersion":1,"prefix":"TQC","entries":[{"code":"TQC-UI-001","httpStatus":400,"messages":{"vi":"Lỗi","en":"Error"}},{"code":"TQC-UI-001","httpStatus":400,"messages":{"vi":"Lỗi khác","en":"Another error"}}]}""");
+Throws<InvalidDataException>(() => SpecLoader.ErrorCatalogue(catalogueProjectDirectory, catalogueProject), "catalogue rejects duplicate code");
+Directory.Delete(catalogueProjectDirectory, true);
+
 var registry = new StepExecutorRegistry(new ITestStepExecutor[]
 {
     new HttpStepExecutor(
@@ -78,6 +144,26 @@ var registry = new StepExecutorRegistry(new ITestStepExecutor[]
     new HttpStubStepExecutor(environment),
     new RedisStepExecutor(),
 });
+var errorCatalogue = new ErrorCatalogueSpec(1, "TQC", [
+    new ErrorCatalogueEntrySpec("TQC-VALIDATION-001", 400, new("Dữ liệu không hợp lệ.", "Invalid input."))
+]);
+var catalogueExpectation = new ExpectSpec(400, null, null, null, null, null, Error: new("TQC-VALIDATION-001"));
+var catalogueCase = new CaseSpec("catalogue.error", "Kiểm tra mã lỗi catalogue", ["smoke"], false, null,
+    [new StepSpec("Gọi API lỗi", null, null, new RequestSpec("GET", "/errors", null, null, null, null, null), catalogueExpectation, null, null, null, null)], null,
+    new CoverageSpec(new SourceVerificationSpec(["source.cs"], DateTimeOffset.UtcNow.ToString("O"), null), new("covered", ["Gọi API lỗi"], null), new("covered", ["Gọi API lỗi"], null), new("notApplicable", null, "n/a"), new("notApplicable", null, "n/a"), new("notApplicable", null, "n/a"), new("notApplicable", null, "n/a"), new("notApplicable", null, "n/a"), new("covered", ["Gọi API lỗi"], null)));
+IReadOnlyList<ValidationIssue> validCatalogueIssues = TestcaseValidator.Validate(Path.GetTempPath(),
+    new ProjectSpec("framework-test", "FRAMEWORK_TEST_URL", null, null, null), [catalogueCase], registry.All,
+    validateTemporaryFiles: false, catalogue: errorCatalogue);
+Equal("0", validCatalogueIssues.Count.ToString(), "catalogue error expectation preflight");
+IReadOnlyList<ValidationIssue> missingCatalogueIssues = TestcaseValidator.Validate(Path.GetTempPath(),
+    new ProjectSpec("framework-test", "FRAMEWORK_TEST_URL", null, null, null), [catalogueCase with { Id = "catalogue.missing", Steps = [catalogueCase.Steps.Single() with { Expect = catalogueExpectation with { Error = new("TQC-VALIDATION-999") } }] }], registry.All,
+    validateTemporaryFiles: false, catalogue: errorCatalogue);
+Equal("true", missingCatalogueIssues.Any(issue => issue.Message.Contains("không tồn tại", StringComparison.OrdinalIgnoreCase)).ToString().ToLowerInvariant(), "catalogue rejects missing error code");
+IReadOnlyList<ValidationIssue> statusCatalogueIssues = TestcaseValidator.Validate(Path.GetTempPath(),
+    new ProjectSpec("framework-test", "FRAMEWORK_TEST_URL", null, null, null), [catalogueCase with { Id = "catalogue.status", Steps = [catalogueCase.Steps.Single() with { Expect = catalogueExpectation with { Status = 422 } }] }], registry.All,
+    validateTemporaryFiles: false, catalogue: errorCatalogue);
+Equal("true", statusCatalogueIssues.Any(issue => issue.Message.Contains("HTTP status", StringComparison.OrdinalIgnoreCase)).ToString().ToLowerInvariant(), "catalogue rejects conflicting expected status");
+
 Equal("http", registry.Resolve(Step("GET", "/health", null, null)).Name, "HTTP executor");
 Equal("postgresql", registry.Resolve(Step(null, null, new("SELECT 1", null), null)).Name, "PostgreSQL executor");
 Equal("mqtt", registry.Resolve(Step(null, null, null, new("connect", null, null, null, null, null, null, null, null, null))).Name, "MQTT executor");
@@ -140,6 +226,85 @@ await using (var stubExecutor = new HttpStubStepExecutor(environment))
             new RequestSpec(null, null, null, null, null, null, null, request),
             new ExpectSpec(null, null, null, null, null, null, expect), null, null, null, null);
         return new(step, new ProjectSpec("framework-test", "FRAMEWORK_TEST_URL", null, null, null), environment, stubVariables, true, false);
+    }
+}
+
+await using (var errorStubExecutor = new HttpStubStepExecutor(environment))
+{
+    StepRunResult started = await errorStubExecutor.ExecuteAsync(Context(
+        new HttpStubRequestSpec("start", null, null, null, null, null, null, null), null), CancellationToken.None);
+    using JsonDocument startedDocument = JsonDocument.Parse(started.ActualResponse!);
+    string errorStubUrl = startedDocument.RootElement.GetProperty("baseUrl").GetString()!;
+    string runtimeEnvironmentPath = Path.GetTempFileName();
+    File.WriteAllText(runtimeEnvironmentPath, $"FRAMEWORK_RUNTIME_URL={errorStubUrl}");
+    var runtimeEnvironment = EnvironmentStore.Load(runtimeEnvironmentPath);
+    var runtimeProject = new ProjectSpec("framework-test", "FRAMEWORK_RUNTIME_URL", null, null, null);
+    var runtimeCatalogue = new ErrorCatalogueSpec(1, "TQC", [
+        new ErrorCatalogueEntrySpec("TQC-UI-001", 418, new("Lỗi tiếng Việt.", "English error."))
+    ]);
+    await using var runtimeExecutor = new HttpStepExecutor(runtimeProject, runtimeEnvironment);
+
+    await errorStubExecutor.ExecuteAsync(Context(
+        new HttpStubRequestSpec("configure", "GET", "/runtime-error", 418,
+            JsonDocument.Parse("""{"errorCode":"TQC-UI-001","message":"Lỗi tiếng Việt."}""").RootElement.Clone(), null, 0, null), null), CancellationToken.None);
+    var vietnameseErrorStep = new StepSpec("Nhận lỗi tiếng Việt", null, null,
+        new RequestSpec("GET", "/runtime-error", null, null, null, null, null),
+        new ExpectSpec(null, null, null, null, null, null, Error: new("TQC-UI-001", "vi")), null, null, null, null);
+    StepRunResult vietnameseError = await runtimeExecutor.ExecuteAsync(new StepExecutionContext(
+        vietnameseErrorStep, runtimeProject, runtimeEnvironment, new(), true, false,
+        ErrorCatalogue: runtimeCatalogue), CancellationToken.None);
+    Equal("true", vietnameseError.Passed.ToString().ToLowerInvariant(), "runtime error contract resolves Vietnamese");
+
+    await errorStubExecutor.ExecuteAsync(Context(
+        new HttpStubRequestSpec("configure", "GET", "/runtime-error", 418,
+            JsonDocument.Parse("""{"errorCode":"TQC-UI-001","message":"English error."}""").RootElement.Clone(), null, 0, null), null), CancellationToken.None);
+    var englishFallbackStep = vietnameseErrorStep with
+    {
+        Name = "Nhận lỗi English fallback",
+        Expect = vietnameseErrorStep.Expect! with { Error = new("TQC-UI-001", "fr") }
+    };
+    StepRunResult englishFallback = await runtimeExecutor.ExecuteAsync(new StepExecutionContext(
+        englishFallbackStep, runtimeProject, runtimeEnvironment, new(), true, false,
+        ErrorCatalogue: runtimeCatalogue), CancellationToken.None);
+    Equal("true", englishFallback.Passed.ToString().ToLowerInvariant(), "runtime error contract falls back to English");
+
+    var explicitAssertionStep = englishFallbackStep with
+    {
+        Name = "Giữ assertion error JSON explicit",
+        Expect = englishFallbackStep.Expect! with
+        {
+            Json = new Dictionary<string, AssertionSpec>
+            {
+                ["$.message"] = new() { ExpectedValue = JsonDocument.Parse("\"Expected explicit message.\"").RootElement.Clone() }
+            }
+        }
+    };
+    StepRunResult explicitAssertionResult = await runtimeExecutor.ExecuteAsync(new StepExecutionContext(
+        explicitAssertionStep, runtimeProject, runtimeEnvironment, new(), true, false,
+        ErrorCatalogue: runtimeCatalogue), CancellationToken.None);
+    Equal("false", explicitAssertionResult.Passed.ToString().ToLowerInvariant(), "runtime error contract preserves explicit JSON assertion");
+
+    var legacyStep = englishFallbackStep with
+    {
+        Name = "Giữ assertion JSON legacy",
+        Expect = new ExpectSpec(418, null, null, new Dictionary<string, AssertionSpec>
+        {
+            ["$.errorCode"] = new() { ExpectedValue = JsonDocument.Parse("\"TQC-UI-001\"").RootElement.Clone() },
+            ["$.message"] = new() { ExpectedValue = JsonDocument.Parse("\"English error.\"").RootElement.Clone() }
+        }, null, null)
+    };
+    StepRunResult legacyResult = await runtimeExecutor.ExecuteAsync(new StepExecutionContext(
+        legacyStep, runtimeProject, runtimeEnvironment, new(), true, false), CancellationToken.None);
+    Equal("true", legacyResult.Passed.ToString().ToLowerInvariant(), "runtime error contract preserves legacy JSON assertions");
+
+    File.Delete(runtimeEnvironmentPath);
+
+    StepExecutionContext Context(HttpStubRequestSpec request, HttpStubExpectSpec? expect)
+    {
+        var step = new StepSpec("Cấu hình HTTP stub", null, null,
+            new RequestSpec(null, null, null, null, null, null, null, request),
+            new ExpectSpec(null, null, null, null, null, null, expect), null, null, null, null);
+        return new(step, new ProjectSpec("framework-test", "FRAMEWORK_TEST_URL", null, null, null), environment, new(), true, false);
     }
 }
 

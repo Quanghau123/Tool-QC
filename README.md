@@ -63,7 +63,44 @@ npm start
 Dùng UI hằng ngày không cần package JavaScript production. Chỉ khi chạy browser E2E cho người phát triển mới cần `npm install` để cài `@playwright/test`, sau đó chạy `npm run test:e2e`. Lệnh PowerShell
 `.\toolqc.ps1` vẫn được giữ cho automation và các chức năng nâng cao.
 
-UI hỗ trợ chọn chính xác testcase theo ID, dừng workload đang chạy, xem lịch sử và báo cáo cũ, chỉnh cấu hình dự án và kiểm tra nhanh các URL đã cấu hình. Runner hiện hỗ trợ HTTP JSON, multipart form, PostgreSQL fixture command, MQTT, request đồng thời trong một step, retry giới hạn, assertion JSON, biến liên bước, preflight và báo cáo HTML. Redis assertions, JSON Schema/OpenAPI validation đầy đủ, JUnit reporting và parallel case scheduling chưa được triển khai.
+UI hỗ trợ chọn chính xác testcase theo ID, dừng workload đang chạy, xem lịch sử và báo cáo cũ, chỉnh cấu hình dự án và kiểm tra nhanh các URL đã cấu hình. Runner hiện hỗ trợ HTTP JSON, multipart form, PostgreSQL fixture command, MQTT, request đồng thời trong một step, retry giới hạn, assertion JSON, biến liên bước, preflight, báo cáo HTML và JUnit tùy chọn. Redis assertions, JSON Schema/OpenAPI validation đầy đủ và parallel case scheduling chưa được triển khai.
+
+### Catalogue mã lỗi và message
+
+Mỗi project có thể khai báo `errorCatalogue` trong `project.json`; đường dẫn catalogue phải nằm trong chính thư mục project. Catalogue version 1 dùng prefix viết hoa và entry có mã ổn định, HTTP status, bản dịch `vi` và `en`:
+
+```json
+{
+  "schemaVersion": 1,
+  "prefix": "TQC",
+  "entries": [
+    {
+      "code": "TQC-VALIDATION-001",
+      "httpStatus": 400,
+      "messages": {
+        "vi": "Dữ liệu không hợp lệ.",
+        "en": "The data is invalid."
+      }
+    }
+  ]
+}
+```
+
+Mã có dạng `<PREFIX>-<DOMAIN>-<NNN>`, ví dụ `TQC-VALIDATION-001`. Mã là contract machine-readable; HTTP status và `message` localized không thay thế cho mã. Project template đã có `error-catalogue.json` rỗng để khởi tạo catalogue mới. Không thêm mã business cho một API khi chưa có source hoặc response evidence hiện tại.
+
+Testcase schema-v2 có thể khai báo semantic expectation thay vì lặp lại status/JSON path:
+
+```json
+{
+  "expect": {
+    "error": { "code": "TQC-VALIDATION-001", "locale": "vi" }
+  }
+}
+```
+
+Preflight kiểm tra entry tồn tại, status (nếu khai báo thêm) khớp catalogue và locale. Khi chạy, runner assert status catalogue, `$.errorCode` và `$.message`; mọi assertion `expect.json` sẵn có vẫn được giữ. Locale không phải `vi` hoặc `en` fallback về `en`.
+
+UI mặc định là tiếng Việt. Người dùng có thể chọn English ở header; lựa chọn chỉ lưu cục bộ trong browser và thay đổi text hiển thị, không thay đổi request, project, workspace, testcase selection hoặc dữ liệu môi trường. Network/HTTP UI errors ưu tiên mã trả về từ API, sau đó mới dùng HTTP status hay fallback text.
 
 Sinh testcase bản nháp từ controller .NET:
 
@@ -170,10 +207,21 @@ phân nhóm theo module và xuất workbook `.xlsx`. Sheet `Messages` giữ đú
 một sheet riêng. Nếu source chứa resource JSON, RESX hoặc `.properties` có hậu tố/thư
 mục ngôn ngữ `vi` và `en`, nội dung dịch tương ứng cũng được điền tự động.
 
+Khi truyền project catalogue, scanner còn kiểm source read-only để phát hiện `missing-vi`,
+`missing-en`, `unregistered-error-code` và `hard-coded-message`. Findings có file, dòng và
+chi tiết; workbook giữ sheet `Messages` legacy và chỉ thêm sheet `Audit` khi có finding. Scanner
+không sửa source, không chạy source và không đọc `.env`.
+
 Chỉ cần cung cấp đường dẫn source:
 
 ```powershell
 dotnet run --project runner/AutoTest.MessageScanner -- --source "D:\works\projects\ops-service"
+```
+
+Để đối chiếu source với catalogue của một Tool-QC project:
+
+```powershell
+dotnet run --project runner/AutoTest.MessageScanner -- --source "D:\works\projects\ops-service" --catalogue "projects\my-project\project.json"
 ```
 
 Mặc định báo cáo nằm trong `.artifacts/message-scans/`. Có thể chọn tên file:

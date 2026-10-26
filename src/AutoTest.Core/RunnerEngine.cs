@@ -15,15 +15,20 @@ public sealed class RunnerEngine : IDisposable
 {
     private readonly ProjectSpec project;
     private readonly EnvironmentStore env;
+    private readonly ErrorCatalogueSpec? errorCatalogue;
     private readonly HttpClient http;
     private readonly StepExecutorRegistry executorRegistry;
     private string? token;
 
     // Khởi tạo các transport dùng chung và chặn URL không an toàn trước khi chạy.
-    public RunnerEngine(ProjectSpec project, EnvironmentStore env)
+    public RunnerEngine(
+        ProjectSpec project,
+        EnvironmentStore env,
+        ErrorCatalogueSpec? errorCatalogue = null)
     {
         this.project = project;
         this.env = env;
+        this.errorCatalogue = errorCatalogue;
         var url = env.Require(project.BaseUrlVariable);
         Guard(url);
         http = new HttpClient
@@ -114,7 +119,7 @@ public sealed class RunnerEngine : IDisposable
         if (step.Request is null)
             throw new InvalidDataException($"Thiếu request cho bước: {step.Name}");
         var context = new StepExecutionContext(step, project, env, variables, assertions, cleanup,
-            result => results.Add(result), ResolveAuthenticationTokenAsync, Redact);
+            result => results.Add(result), ResolveAuthenticationTokenAsync, Redact, errorCatalogue);
         StepRunResult moduleResult = await executorRegistry.Resolve(step).ExecuteAsync(context, cancellationToken);
         results.Add(moduleResult);
         if (!moduleResult.Passed) throw new InvalidOperationException(moduleResult.Error ?? $"Bước thất bại: {step.Name}");

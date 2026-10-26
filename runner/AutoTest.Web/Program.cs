@@ -5,6 +5,8 @@ using System.Text.Json.Nodes;
 using System.Text.Encodings.Web;
 using System.Text;
 using System.Security.Cryptography;
+using AutoTest.Abstractions;
+using AutoTest.Core;
 using AutoTest.Generator;
 using AutoTest.MessageScanner;
 using AutoTest.Web;
@@ -653,7 +655,10 @@ app.MapPost("/api/message-scans", (MessageScanRequest request) =>
         return Results.BadRequest(new { message = "Đường dẫn source không tồn tại." });
 
     string sourcePath = Path.GetFullPath(request.SourcePath);
-    MessageScanResult scan = new SourceMessageScanner().Scan(sourcePath);
+    var catalogue = string.IsNullOrWhiteSpace(request.Project)
+        ? null
+        : LoadProjectCatalogue(root, request.Project);
+    MessageScanResult scan = new SourceMessageScanner().Scan(sourcePath, catalogue);
     string scanId = Guid.NewGuid().ToString("N");
     string output = Path.Combine(root, ".artifacts", "message-scans",
         $"{Path.GetFileName(sourcePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))}-messages-{DateTime.Now:yyyyMMdd-HHmmss}.xlsx");
@@ -668,6 +673,7 @@ app.MapPost("/api/message-scans", (MessageScanRequest request) =>
         messageCount = scan.Messages.Count,
         moduleCount = scan.Messages.Select(message => message.Module).Distinct(StringComparer.OrdinalIgnoreCase).Count(),
         skippedFileCount = scan.SkippedFiles.Count,
+        auditFindingCount = scan.AuditFindings.Count,
         modules = scan.Messages.GroupBy(message => message.Module).OrderBy(group => group.Key).Select(group => new
         {
             name = group.Key,
@@ -788,6 +794,15 @@ static ApiBuilderContract RoslynContract(string sourcePath, string? warning)
     return warning is null
         ? contract
         : contract with { Warnings = contract.Warnings.Append(warning).ToArray() };
+}
+
+static ErrorCatalogueSpec? LoadProjectCatalogue(string root, string project)
+{
+    string projectDirectory = SafeProjectDirectory(root, project);
+    ProjectSpec projectSpec = SpecLoader.Project(Path.Combine(projectDirectory, "project.json"));
+    return projectSpec.ErrorCatalogue is null
+        ? null
+        : SpecLoader.ErrorCatalogue(projectDirectory, projectSpec);
 }
 
 static string SafeProjectDirectory(string root, string project)
@@ -1267,7 +1282,7 @@ sealed record ActivateDraftRequest(string ReviewId, string Json, string? Group, 
 sealed record WorkbookGenerateRequest(string UploadId, string[] CaseIds);
 sealed record ProcessResult(int ExitCode, string StandardOutput, string StandardError);
 sealed record DiagramSemantics(string NodeCollection, string RelationCollection, string[] NodeIds, string[] Relations);
-sealed record MessageScanRequest(string SourcePath);
+sealed record MessageScanRequest(string SourcePath, string? Project = null);
 sealed record EnvironmentDefinition(string Key, string Group, string Scope, string DefaultValue);
 sealed record EnvironmentGroup(string Name, EnvironmentVariable[] Variables);
 sealed record EnvironmentVariable(string Key, string Value, string Source, bool Secret, bool Configured);

@@ -1,4 +1,4 @@
-import { $, escapeHtml, json, readableError, state } from './shared.js';
+import { $, escapeHtml, json, readableError, state, translate } from './shared.js';
 
 export function initializeUnitX() {
   function workspaceUrl() {
@@ -25,7 +25,7 @@ export function initializeUnitX() {
     const row = table.rows[0];
     const values = row?.values || {};
     $('unitXEditor').innerHTML =
-      `<label>Tên bảng<input id="unitXName" value="${escapeHtml(table.name)}"></label><section class="unitx-card"><h3>Rule</h3><label>Đầu ra<input id="unitXOutput" value="${escapeHtml(rule?.output || 'result')}"></label><label>Operator<select id="unitXOperator">${['add', 'subtract', 'multiply', 'divide', 'round', 'ifGreaterThan'].map((operator) => `<option value="${operator}" ${rule?.operator === operator ? 'selected' : ''}>${operator}</option>`).join('')}</select></label><label>Input (cách nhau dấu phẩy)<input id="unitXInputs" value="${escapeHtml((rule?.inputs || ['amount', 'rate']).join(', '))}"></label></section><section class="unitx-card"><h3>Dòng kiểm thử</h3><label>Tên dòng<input id="unitXRowName" value="${escapeHtml(row?.name || 'Dòng 1')}"></label><label>Giá trị JSON object<input id="unitXValues" value="${escapeHtml(JSON.stringify(values))}"></label><label>Kết quả mong đợi<input id="unitXExpected" type="number" value="${row?.expected ?? 0}"></label></section>`;
+      `<label>${translate('TQC-UI-080')}<input id="unitXName" value="${escapeHtml(table.name)}"></label><section class="unitx-card"><h3>${translate('TQC-UI-087')}</h3><label>${translate('TQC-UI-081')}<input id="unitXOutput" value="${escapeHtml(rule?.output || 'result')}"></label><label>${translate('TQC-UI-088')}<select id="unitXOperator">${['add', 'subtract', 'multiply', 'divide', 'round', 'ifGreaterThan'].map((operator) => `<option value="${operator}" ${rule?.operator === operator ? 'selected' : ''}>${operator}</option>`).join('')}</select></label><label>${translate('TQC-UI-082')}<input id="unitXInputs" value="${escapeHtml((rule?.inputs || ['amount', 'rate']).join(', '))}"></label></section><section class="unitx-card"><h3>${translate('TQC-UI-083')}</h3><label>${translate('TQC-UI-084')}<input id="unitXRowName" value="${escapeHtml(row?.name || 'Dòng 1')}"></label><label>${translate('TQC-UI-085')}<input id="unitXValues" value="${escapeHtml(JSON.stringify(values))}"></label><label>${translate('TQC-UI-086')}<input id="unitXExpected" type="number" value="${row?.expected ?? 0}"></label></section>`;
   }
 
   function readEditor() {
@@ -60,7 +60,7 @@ export function initializeUnitX() {
         },
       };
       render();
-      status('Đã tạo bảng UnitX mới.', 'passed');
+      status(translate('TQC-UI-040'), 'passed');
     } catch (error) {
       status(readableError(error), 'failed');
     }
@@ -76,7 +76,7 @@ export function initializeUnitX() {
         body: JSON.stringify({ workspace, expectedRevision: workspace.revision }),
       });
       localStorage.setItem('toolqc.unitXWorkspace', state.unitXWorkspace.id);
-      status('Đã lưu bảng UnitX.', 'passed');
+      status(translate('TQC-UI-041'), 'passed');
       render();
     } catch (error) {
       status(readableError(error), 'failed');
@@ -93,11 +93,11 @@ export function initializeUnitX() {
       $('unitXResults').innerHTML = result.rows
         .map(
           (row) =>
-            `<article class="${row.passed ? 'passed' : 'failed'}"><b>${escapeHtml(row.name)}</b><span>Actual: ${escapeHtml(row.actual ?? '—')} · Expected: ${escapeHtml(row.expected)}</span>${row.error ? `<small>${escapeHtml(row.error)}</small>` : ''}</article>`,
+            `<article class="${row.passed ? 'passed' : 'failed'}"><b>${escapeHtml(row.name)}</b><span>${translate('TQC-UI-079', '', { actual: escapeHtml(row.actual ?? '—'), expected: escapeHtml(row.expected) })}</span>${row.error ? `<small>${escapeHtml(row.error)}</small>` : ''}</article>`,
         )
         .join('');
       status(
-        `${result.passedCount}/${result.rows.length} dòng đạt.`,
+        translate('TQC-UI-078', '', { passed: result.passedCount, total: result.rows.length }),
         result.passedCount === result.rows.length ? 'passed' : 'failed',
       );
     } catch (error) {
@@ -113,7 +113,7 @@ export function initializeUnitX() {
         `/api/projects/${encodeURIComponent($('project').value)}/unitx/workspaces/${encodeURIComponent(id)}`,
       );
       render();
-      status('Đã khôi phục bảng UnitX.', 'passed');
+      status(translate('TQC-UI-042'), 'passed');
     } catch {
       localStorage.removeItem('toolqc.unitXWorkspace');
     }

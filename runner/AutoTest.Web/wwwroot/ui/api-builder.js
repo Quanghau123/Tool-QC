@@ -1,4 +1,4 @@
-import { $, escapeHtml, json, readableError, state } from './shared.js';
+import { $, escapeHtml, json, locale, readableError, state, translate } from './shared.js';
 
 export function initializeApiBuilder({ showTool }) {
   function apiBuilderWorkspaceUrl() {
@@ -37,7 +37,7 @@ export function initializeApiBuilder({ showTool }) {
       operations = state.apiBuilderContract?.operations || [];
     select.disabled = !operations.length;
     const groups = operations.reduce((result, operation) => {
-        const group = operation.group || 'Khác';
+        const group = operation.group || translate('TQC-UI-057');
         (result[group] ??= []).push(operation);
         return result;
       }, {}),
@@ -49,8 +49,8 @@ export function initializeApiBuilder({ showTool }) {
         )
         .join('');
     select.innerHTML = operations.length
-      ? '<option value="">Chọn operation</option>' + options
-      : '<option value="">Chưa tải được contract</option>';
+      ? `<option value="">${translate('TQC-UI-058')}</option>` + options
+      : `<option value="">${translate('TQC-UI-059')}</option>`;
     $('addApiBuilderOperation').disabled = !state.apiBuilderWorkspace || !operations.length;
   }
   async function loadApiBuilderContract() {
@@ -61,38 +61,36 @@ export function initializeApiBuilder({ showTool }) {
       request.headers = { 'Content-Type': 'application/json' };
       request.body = JSON.stringify({ localSourcePath });
     }
-    apiBuilderSourceStatus(
-      localSourcePath ? 'Đang khám phá source local...' : 'Đang tải mapping hoặc cấu hình project...',
-    );
+    apiBuilderSourceStatus(localSourcePath ? translate('TQC-UI-060') : translate('TQC-UI-061'));
     try {
       state.apiBuilderContract = await json(apiBuilderContractUrl(), request);
       updateApiBuilderContractControls();
-      apiBuilderSourceStatus(`Nguồn contract: ${state.apiBuilderContract.provider}.`, 'passed');
+      apiBuilderSourceStatus(translate('TQC-UI-062', '', { provider: state.apiBuilderContract.provider }), 'passed');
       apiBuilderStatus(
-        `Đã tải ${state.apiBuilderContract.operations.length} operation từ ${state.apiBuilderContract.provider}. Chọn operation để thêm vào chuỗi.`,
+        translate('TQC-UI-063', '', {
+          count: state.apiBuilderContract.operations.length,
+          provider: state.apiBuilderContract.provider,
+        }),
         'passed',
       );
     } catch (error) {
       state.apiBuilderContract = null;
       updateApiBuilderContractControls();
-      const instruction = 'Nhập thư mục source local hợp lệ hoặc dùng mapping/cấu hình portable của project.';
+      const instruction = translate('TQC-UI-064');
       apiBuilderSourceStatus(instruction, 'failed');
       apiBuilderStatus(`${readableError(error)}\n\n${instruction}`, 'failed');
     }
   }
   function addApiBuilderOperation() {
-    if (!state.apiBuilderWorkspace) return apiBuilderStatus('Tạo workspace trước khi thêm operation.', 'failed');
+    if (!state.apiBuilderWorkspace) return apiBuilderStatus(translate('TQC-UI-065'), 'failed');
     const operation = selectedApiBuilderOperation();
-    if (!operation) return apiBuilderStatus('Chọn một operation trước khi thêm.', 'failed');
+    if (!operation) return apiBuilderStatus(translate('TQC-UI-066'), 'failed');
     state.apiBuilderWorkspace = {
       ...state.apiBuilderWorkspace,
       sourceFingerprint: state.apiBuilderContract.fingerprint,
       steps: [...state.apiBuilderWorkspace.steps, operationStep(operation, state.apiBuilderWorkspace.steps.length + 1)],
     };
-    apiBuilderStatus(
-      `Đã thêm ${operation.method} ${operation.path}. Lưu response thành biến rồi bind vào bước sau.`,
-      'passed',
-    );
+    apiBuilderStatus(translate('TQC-UI-067', '', { operation: `${operation.method} ${operation.path}` }), 'passed');
     renderApiBuilder();
   }
   function apiBuilderSourceStatus(message, kind = '') {
@@ -129,10 +127,10 @@ export function initializeApiBuilder({ showTool }) {
             `<option value="${escapeHtml(variable.name)}" ${binding?.sourceVariable === variable.name ? 'selected' : ''}>${escapeHtml(variable.name)} · ${escapeHtml(variable.sourceStep)}</option>`,
         )
         .join('');
-    return `<label class="api-builder-field"><span><b>${escapeHtml(field.name)}</b><small>${escapeHtml(field.type)} · ${escapeHtml(field.location || 'body')} · ${escapeHtml(field.jsonPath)}</small></span><span class="api-builder-controls"><input aria-label="Giá trị ${escapeHtml(field.name)}" data-api-value="${index}:${fieldIndex}" value="${escapeHtml(value)}" ${binding ? 'disabled' : ''}><select aria-label="Bind biến vào ${escapeHtml(field.name)}" data-api-request="${index}:${fieldIndex}" ${field.sensitive ? 'disabled' : ''}><option value="">Nhập thủ công</option>${options}</select></span></label>`;
+    return `<label class="api-builder-field"><span><b>${escapeHtml(field.name)}</b><small>${escapeHtml(field.type)} · ${escapeHtml(field.location || 'body')} · ${escapeHtml(field.jsonPath)}</small></span><span class="api-builder-controls"><input aria-label="${translate('TQC-UI-159', '', { field: escapeHtml(field.name) })}" data-api-value="${index}:${fieldIndex}" value="${escapeHtml(value)}" ${binding ? 'disabled' : ''}><select aria-label="${translate('TQC-UI-160', '', { field: escapeHtml(field.name) })}" data-api-request="${index}:${fieldIndex}" ${field.sensitive ? 'disabled' : ''}><option value="">${translate('TQC-UI-093')}</option>${options}</select></span></label>`;
   }
   function responseFieldMarkup(field, index, fieldIndex) {
-    return `<div class="api-builder-field"><span><b>${escapeHtml(field.name)}</b><small>${escapeHtml(field.type)} · ${escapeHtml(field.jsonPath)}</small></span><button type="button" class="compact" data-api-save="${index}:${fieldIndex}">Lưu thành biến</button></div>`;
+    return `<div class="api-builder-field"><span><b>${escapeHtml(field.name)}</b><small>${escapeHtml(field.type)} · ${escapeHtml(field.jsonPath)}</small></span><button type="button" class="compact" data-api-save="${index}:${fieldIndex}">${translate('TQC-UI-089')}</button></div>`;
   }
   function stepMarkup(workspace, variables, step, index) {
     const requestFields = step.requestFields
@@ -140,8 +138,8 @@ export function initializeApiBuilder({ showTool }) {
         .join(''),
       responseFields =
         step.responseFields.map((field, fieldIndex) => responseFieldMarkup(field, index, fieldIndex)).join('') ||
-        '<div class="empty">Contract chưa có field response.</div>';
-    return `<article class="api-builder-step"><div class="api-builder-step-title"><strong>Bước ${index + 1}: ${escapeHtml(step.name)}</strong><span class="method ${escapeHtml(step.method.toLowerCase())}">${escapeHtml(step.method)}</span><code>${escapeHtml(step.path)}</code><button type="button" class="compact api-builder-remove" data-api-remove="${index}">Xóa</button></div><section><h4>Request</h4>${requestFields}</section><section><h4>Response</h4>${responseFields}</section></article>`;
+        `<div class="empty">${translate('TQC-UI-033')}</div>`;
+    return `<article class="api-builder-step"><div class="api-builder-step-title"><strong>${translate('TQC-UI-077', '', { number: index + 1, name: escapeHtml(step.name) })}</strong><span class="method ${escapeHtml(step.method.toLowerCase())}">${escapeHtml(step.method)}</span><code>${escapeHtml(step.path)}</code><button type="button" class="compact api-builder-remove" data-api-remove="${index}">${translate('TQC-UI-090')}</button></div><section><h4>${translate('TQC-UI-091')}</h4>${requestFields}</section><section><h4>${translate('TQC-UI-092')}</h4>${responseFields}</section></article>`;
   }
   function renderApiBuilder() {
     const workspace = state.apiBuilderWorkspace;
@@ -155,7 +153,7 @@ export function initializeApiBuilder({ showTool }) {
     }
     const variables = apiBuilderVariables(),
       steps = workspace.steps.map((step, index) => stepMarkup(workspace, variables, step, index)).join('');
-    $('apiBuilderSteps').innerHTML = steps || '<div class="empty">Chọn operation để thêm bước đầu tiên.</div>';
+    $('apiBuilderSteps').innerHTML = steps || `<div class="empty">${translate('TQC-UI-032')}</div>`;
     $('apiBuilderVariables').innerHTML = variables.length
       ? variables
           .map(
@@ -163,7 +161,7 @@ export function initializeApiBuilder({ showTool }) {
               `<article><b>${escapeHtml(variable.name)}</b><small>${escapeHtml(variable.sourceStep)} · ${escapeHtml(variable.type)} · ${escapeHtml(variable.jsonPath)}</small></article>`,
           )
           .join('')
-      : '<div class="empty">Chưa có biến nào được lưu.</div>';
+      : `<div class="empty">${translate('TQC-UI-031')}</div>`;
     document
       .querySelectorAll('[data-api-request]')
       .forEach((select) => (select.onchange = () => assignApiBuilderVariable(select)));
@@ -221,7 +219,7 @@ export function initializeApiBuilder({ showTool }) {
         targetStep: renamedSteps.find((step) => step.from === binding.targetStep)?.to || binding.targetStep,
       }));
     state.apiBuilderWorkspace = { ...workspace, steps, variables: renamedVariables, bindings: renamedBindings };
-    apiBuilderStatus(`Đã xóa ${removed.method} ${removed.path} cùng biến và binding phụ thuộc.`, 'passed');
+    apiBuilderStatus(translate('TQC-UI-068', '', { operation: `${removed.method} ${removed.path}` }), 'passed');
     renderApiBuilder();
   }
   function assignApiBuilderVariable(select) {
@@ -242,13 +240,12 @@ export function initializeApiBuilder({ showTool }) {
     const [stepIndex, fieldIndex] = button.dataset.apiSave.split(':').map(Number),
       workspace = state.apiBuilderWorkspace,
       field = workspace.steps[stepIndex].responseFields[fieldIndex],
-      name = prompt(`Tên biến cho ${field.name}:`);
+      name = prompt(translate('TQC-UI-069', '', { field: field.name }));
     if (!name) return;
     const normalized = name.trim();
-    if (!/^[\p{L}\p{N}_]+$/u.test(normalized))
-      return apiBuilderStatus('Tên biến chỉ gồm chữ, số hoặc dấu gạch dưới.', 'failed');
+    if (!/^[\p{L}\p{N}_]+$/u.test(normalized)) return apiBuilderStatus(translate('TQC-UI-034'), 'failed');
     if (apiBuilderVariables().some((item) => item.name.toLowerCase() === normalized.toLowerCase()))
-      return apiBuilderStatus('Tên biến đã tồn tại trong workspace.', 'failed');
+      return apiBuilderStatus(translate('TQC-UI-035'), 'failed');
     const variable = {
       name: normalized,
       sourceStep: workspace.steps[stepIndex].name,
@@ -263,10 +260,7 @@ export function initializeApiBuilder({ showTool }) {
         left.name.localeCompare(right.name, 'vi', { sensitivity: 'base' }),
       ),
     };
-    apiBuilderStatus(
-      `Đã lưu biến ${normalized}. Chỉ bind được vào request của bước sau có kiểu tương thích.`,
-      'passed',
-    );
+    apiBuilderStatus(translate('TQC-UI-070', '', { name: normalized }), 'passed');
     renderApiBuilder();
   }
   async function createApiBuilderWorkspace() {
@@ -276,10 +270,7 @@ export function initializeApiBuilder({ showTool }) {
         `/api/projects/${encodeURIComponent($('project').value)}/api-builder/workspaces`,
         { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ owner: 'local' }) },
       );
-      apiBuilderStatus(
-        `Workspace ${state.apiBuilderWorkspace.id} đã sẵn sàng. Contract được tải tự động theo cấu hình dự án.`,
-        'passed',
-      );
+      apiBuilderStatus(translate('TQC-UI-071', '', { id: state.apiBuilderWorkspace.id }), 'passed');
       renderApiBuilder();
     } catch (error) {
       apiBuilderStatus(readableError(error), 'failed');
@@ -298,7 +289,10 @@ export function initializeApiBuilder({ showTool }) {
       });
       state.apiBuilderWorkspace = workspace;
       localStorage.setItem('toolqc.apiBuilderWorkspace', workspace.id);
-      apiBuilderStatus(`Đã lưu workspace lúc ${new Date(workspace.updatedAt).toLocaleTimeString('vi-VN')}.`, 'passed');
+      apiBuilderStatus(
+        translate('TQC-UI-072', '', { time: new Date(workspace.updatedAt).toLocaleTimeString(locale()) }),
+        'passed',
+      );
       renderApiBuilder();
       return true;
     } catch (error) {
@@ -313,7 +307,7 @@ export function initializeApiBuilder({ showTool }) {
       state.apiBuilderWorkspace = await json(
         `/api/projects/${encodeURIComponent($('project').value)}/api-builder/workspaces/${encodeURIComponent(id)}`,
       );
-      apiBuilderStatus(`Đã khôi phục workspace ${id}.`, 'passed');
+      apiBuilderStatus(translate('TQC-UI-073', '', { id }), 'passed');
       renderApiBuilder();
     } catch {
       localStorage.removeItem('toolqc.apiBuilderWorkspace');
@@ -335,19 +329,18 @@ export function initializeApiBuilder({ showTool }) {
       $('draftJson').value = result.json;
       $('draftGroup').value = 'api-builder';
       $('draftFileName').value = `${workspace.id}.json`;
-      $('draftArtifact').textContent = `Bản nháp từ API Builder workspace ${workspace.id}.`;
+      $('draftArtifact').textContent = translate('TQC-UI-074', '', { id: workspace.id });
       $('draftEditor').hidden = false;
       $('draftJsonPanel').hidden = true;
-      $('toggleDraftJson').textContent = 'Xem JSON';
+      $('toggleDraftJson').textContent = translate('TQC-UI-036');
       $('draftStatus').className = 'message-summary';
-      $('draftStatus').textContent =
-        'Bản nháp API Builder đã tạo. Nhấn “1. Kiểm tra” để xác nhận coverage và khả năng chạy.';
+      $('draftStatus').textContent = translate('TQC-UI-075');
       $('draftReportInfo').hidden = true;
       $('runDraft').disabled = true;
       $('activateDraft').disabled = true;
       showTool('generatorTool');
       $('draftEditor').scrollIntoView({ behavior: 'smooth', block: 'start' });
-      apiBuilderStatus('Đã biên dịch workspace thành draft schema-v2.', 'passed');
+      apiBuilderStatus(translate('TQC-UI-076'), 'passed');
     } catch (error) {
       apiBuilderStatus(readableError(error), 'failed');
     }

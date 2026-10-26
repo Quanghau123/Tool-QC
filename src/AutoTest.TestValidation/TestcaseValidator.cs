@@ -22,7 +22,8 @@ public static class TestcaseValidator
         IReadOnlyList<CaseSpec> cases,
         IReadOnlyCollection<ITestStepExecutor> executors,
         bool validateTemporaryFiles = true,
-        bool requireCompleteCoverage = true)
+        bool requireCompleteCoverage = true,
+        ErrorCatalogueSpec? catalogue = null)
     {
         var issues = new List<ValidationIssue>();
         var selectedGroups = cases.Select(test => test.SourceGroup).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -45,8 +46,8 @@ public static class TestcaseValidator
             if (test.Tags?.Any(string.IsNullOrWhiteSpace) == true)
                 issues.Add(new(test.Id, "Tag không được rỗng."));
             if (test.SchemaVersion >= 2) ValidateCoverage(test, issues, requireCompleteCoverage);
-            ValidateSteps(test.Id, test.Steps, test.Variables, executors, issues, cleanup: false);
-            ValidateSteps(test.Id, test.Cleanup ?? [], test.Variables, executors, issues, cleanup: true);
+            ValidateSteps(test.Id, test.Steps, test.Variables, executors, issues, cleanup: false, catalogue: catalogue);
+            ValidateSteps(test.Id, test.Cleanup ?? [], test.Variables, executors, issues, cleanup: true, catalogue: catalogue);
         }
         return issues;
     }
@@ -65,10 +66,14 @@ public static class TestcaseValidator
 
         var items = new Dictionary<string, CoverageItemSpec?>
         {
-            ["contract"] = test.Coverage.Contract, ["validation"] = test.Coverage.Validation,
-            ["authentication"] = test.Coverage.Authentication, ["scope"] = test.Coverage.Scope,
-            ["integrity"] = test.Coverage.Integrity, ["lifecycle"] = test.Coverage.Lifecycle,
-            ["concurrency"] = test.Coverage.Concurrency, ["reporting"] = test.Coverage.Reporting,
+            ["contract"] = test.Coverage.Contract,
+            ["validation"] = test.Coverage.Validation,
+            ["authentication"] = test.Coverage.Authentication,
+            ["scope"] = test.Coverage.Scope,
+            ["integrity"] = test.Coverage.Integrity,
+            ["lifecycle"] = test.Coverage.Lifecycle,
+            ["concurrency"] = test.Coverage.Concurrency,
+            ["reporting"] = test.Coverage.Reporting,
         };
         var stepNames = test.Steps.Select(x => x.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach ((string name, CoverageItemSpec? item) in items)
@@ -101,22 +106,48 @@ public static class TestcaseValidator
         foreach (StepSpec step in test.Steps)
         {
             if (step.Request is null || step.ConcurrentRequests is { Count: > 0 }) continue;
-            if (step.Request.Method is not null && step.Expect is { Status: not null } && step.Expect.Json is null && step.Expect.JsonSchema is null && step.Expect.Database is null && step.Expect.Mqtt is null && step.Expect.HttpStub is null && step.Request.Path?.Contains("health", StringComparison.OrdinalIgnoreCase) != true)
+            if (step.Request.Method is not null && step.Expect is { Status: not null } && step.Expect.Json is null && step.Expect.JsonSchema is null && step.Expect.Database is null && step.Expect.Mqtt is null && step.Expect.HttpStub is null && step.Expect.Error is null && step.Request.Path?.Contains("health", StringComparison.OrdinalIgnoreCase) != true)
                 issues.Add(new($"{test.Id} / {step.Name}", "HTTP step chỉ assert status; phải assert payload hoặc database, trừ health endpoint."));
             if (IsMutation(step) && step.Expect?.Status is >= 400 && !HasLaterDatabaseEvidence(test.Steps, step))
                 issues.Add(new($"{test.Id} / {step.Name}", "Mutation bị từ chối phải có bước database phía sau để chứng minh không đổi dữ liệu."));
         }
     }
 
+    private static void ValidateErrorExpectation(
+        string location,
+        StepSpec step,
+        ErrorExpectationSpec error,
+        ErrorCatalogueSpec? catalogue,
+        List<ValidationIssue> issues)
+    {
+        if (catalogue is null)
+        {
+            issues.Add(new(location, "expect.error yêu cầu project khai báo error catalogue."));
+            return;
+        }
+
+        ErrorCatalogueEntrySpec? entry = catalogue.Entries.SingleOrDefault(candidate => candidate.Code.Equals(error.Code, StringComparison.Ordinal));
+        if (entry is null)
+        {
+            issues.Add(new(location, $"Mã expect.error không tồn tại trong catalogue: {error.Code}"));
+            return;
+        }
+
+        if (step.Expect!.Status is not null && step.Expect.Status != entry.HttpStatus)
+            issues.Add(new(location, $"HTTP status expect.error không khớp catalogue: {error.Code}"));
+        if (step.Expect.StatusOneOf?.Contains(entry.HttpStatus) == false)
+            issues.Add(new(location, $"statusOneOf expect.error phải chứa HTTP status catalogue: {error.Code}"));
+    }
+
     private static void RequireCovered(CoverageItemSpec? item, string name, string location, List<ValidationIssue> issues)
     { if (!string.Equals(item?.Status, "covered", StringComparison.OrdinalIgnoreCase)) issues.Add(new(location, $"Bắt buộc coverage {name} phải là covered.")); }
     private static bool IsMutation(StepSpec step) => step.Request?.Database is not null || step.Request?.Mqtt is not null || step.Request?.HttpStub is not null || step.Request?.Redis?.Command.ToLowerInvariant() is "set" or "delete" || step.Request?.Method?.ToUpperInvariant() is "POST" or "PUT" or "PATCH" or "DELETE";
     private static bool HasLaterDatabaseEvidence(IReadOnlyList<StepSpec> steps, StepSpec current)
-    { int index=-1; for(int i=0;i<steps.Count;i++)if(ReferenceEquals(steps[i],current)){index=i;break;} return index>=0 && steps.Skip(index+1).Any(step=>step.Request?.Database is not null && step.Expect?.Database is not null); }
+    { int index = -1; for (int i = 0; i < steps.Count; i++) if (ReferenceEquals(steps[i], current)) { index = i; break; } return index >= 0 && steps.Skip(index + 1).Any(step => step.Request?.Database is not null && step.Expect?.Database is not null); }
 
     private static void ValidateSteps(string caseId, IReadOnlyList<StepSpec> steps,
         Dictionary<string, string>? caseVariables, IReadOnlyCollection<ITestStepExecutor> executors,
-        List<ValidationIssue> issues, bool cleanup)
+        List<ValidationIssue> issues, bool cleanup, ErrorCatalogueSpec? catalogue)
     {
         var variables = new HashSet<string>(BuiltInVariables, StringComparer.OrdinalIgnoreCase);
         for (int index = 1; index <= 32; index++) variables.Add($"guid{index}");
@@ -137,7 +168,7 @@ public static class TestcaseValidator
                         variable => variable,
                         _ => string.Empty,
                         StringComparer.OrdinalIgnoreCase);
-                    ValidateSteps(caseId, [child], inheritedVariables, executors, issues, cleanup);
+                    ValidateSteps(caseId, [child], inheritedVariables, executors, issues, cleanup, catalogue);
                 }
                 continue;
             }
@@ -158,6 +189,8 @@ public static class TestcaseValidator
             if (step.Request.Form is not null && step.Request.RawBody is not null) issues.Add(new(location, "Không được gửi đồng thời form và rawBody."));
             if (!cleanup && step.Expect is null) issues.Add(new(location, "Thiếu expect."));
             if (step.Expect is { Status: not null, StatusOneOf: { Length: > 0 } }) issues.Add(new(location, "Chỉ khai báo một trong status hoặc statusOneOf."));
+            if (step.Expect is { Error: { } error })
+                ValidateErrorExpectation(location, step, error, catalogue, issues);
             if (step.Expect?.Database is { ScalarEquals: not null, ResultSet: true })
                 issues.Add(new(location, "Chỉ khai báo một trong database.scalarEquals hoặc database.resultSet."));
             if (step.Request.HttpStub is { } stub)

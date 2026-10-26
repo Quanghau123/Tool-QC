@@ -3,7 +3,7 @@ import { initializeApiBuilder } from './ui/api-builder.js';
 import { initializeEnvironmentHistory } from './ui/environment-history.js';
 import { initializeGeneratorRepair } from './generator-repair.js';
 import { initializeGenerator } from './ui/generator.js';
-import { $, bind, state } from './ui/shared.js';
+import { $, bind, locale, setLocale, state, translate } from './ui/shared.js';
 import { initializeTestcases } from './ui/testcases.js';
 import { initializeUnitX } from './ui/unitx.js';
 import { initializeWorkbookMessage } from './ui/workbook-message.js';
@@ -69,6 +69,24 @@ function initializeFeatures() {
   initializeArchitecture();
 }
 
+function renderLocaleSensitiveContent() {
+  document.querySelectorAll('[data-i18n]').forEach((element) => {
+    element.textContent = translate(element.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-aria]').forEach((element) => {
+    element.setAttribute('aria-label', translate(element.dataset.i18nAria));
+  });
+  testcases.render();
+  generator.renderEndpoints();
+  workbookMessage.renderWorkbookCases();
+  workbookMessage.renderMessages();
+  apiBuilder.render();
+  unitX.render();
+}
+
+bind('locale', 'onchange', () => setLocale($('locale').value));
+$('locale').value = locale();
+window.addEventListener('toolqc:localechange', renderLocaleSensitiveContent);
 bind('loadApiBuilderContract', 'onclick', () => apiBuilder.loadContract());
 bind('newApiWorkspace', 'onclick', () => apiBuilder.createWorkspace());
 bind('addApiBuilderOperation', 'onclick', () => apiBuilder.addOperation());
@@ -84,7 +102,7 @@ bind('generateWorkbookCases', 'onclick', () => workbookMessage.generateWorkbookC
 bind('toggleDraftJson', 'onclick', () => {
   const panel = $('draftJsonPanel');
   panel.hidden = !panel.hidden;
-  $('toggleDraftJson').textContent = panel.hidden ? 'Xem JSON' : 'Ẩn JSON';
+  $('toggleDraftJson').textContent = panel.hidden ? translate('TQC-UI-036') : translate('TQC-UI-037');
 });
 bind('project', 'onchange', async () => {
   await testcases.loadTests({ preserve: false });
@@ -126,7 +144,7 @@ bind('draftJson', 'oninput', () => {
   state.generatorReadyToSave = false;
   $('runDraft').disabled = true;
   $('activateDraft').disabled = true;
-  $('draftStatus').textContent = 'JSON đã thay đổi; cần kiểm tra lại khả năng chạy.';
+  $('draftStatus').textContent = translate('TQC-UI-043');
 });
 bind('scanMessages', 'onclick', () => workbookMessage.scanMessages());
 bind('messageSearch', 'oninput', () => workbookMessage.renderMessages());
@@ -152,6 +170,7 @@ document.querySelectorAll('[data-view]').forEach((button) => (button.onclick = (
 document.querySelectorAll('[data-tool]').forEach((button) => (button.onclick = () => showTool(button.dataset.tool)));
 
 initializeFeatures();
+renderLocaleSensitiveContent();
 const savedSourcePath = localStorage.getItem('toolqc.sourcePath');
 if (savedSourcePath) $('sourcePath').value = savedSourcePath;
 generator.loadGeneratorStatus();

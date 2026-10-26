@@ -7,6 +7,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\src\AutoTest.Core\AutoTest.Core.csproj" />
     <ProjectReference Include="..\..\src\AutoTest.MessageScanner\AutoTest.MessageScanner.csproj" />
   </ItemGroup>
 </Project>
