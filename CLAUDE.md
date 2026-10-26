@@ -89,6 +89,27 @@ copy. Do not modify `project-template` with business-specific examples.
 - Operating-system and CI environment variables override `.env`.
 - Never place tokens, passwords, API keys, or connection strings in project or
   test-case JSON files. Reference them with `${env:VARIABLE_NAME}`.
+- Error catalogues are project-local JSON files referenced from `project.json`;
+  UI locale is browser-local and must not require an environment variable.
+
+### Error catalogue and UI messages
+
+- A catalogue declares `schemaVersion`, a stable project prefix, and unique
+  `<PREFIX>-<DOMAIN>-<NNN>` entries with HTTP status and nonblank `vi`/`en`
+  messages. Do not invent business entries without current source or API evidence.
+- Use `expect.error` only for a validated catalogue entry. The runner resolves it
+  to the catalogue status, `$.errorCode`, and locale-selected `$.message` while
+  preserving explicit JSON assertions; an unsupported locale falls back to `en`.
+- UI code must display stable error codes first and use API text only as fallback.
+  Vietnamese is the default locale; English is the supported fallback. Changing
+  locale may not mutate requests, selection, workspace, project configuration,
+  environment data, or browser-persisted business data. Static UI messages belong
+  only in `runner/AutoTest.Web/wwwroot/ui/messages/`; feature modules must use
+  catalogue keys and pass dynamic values separately.
+- `AutoTest.MessageScanner` may receive `--catalogue <project.json>` for read-only
+  audit findings: `missing-vi`, `missing-en`, `unregistered-error-code`, and
+  `hard-coded-message`. It must preserve the legacy `Messages` worksheet and
+  add `Audit` only when findings exist.
 
 ## Required workflow for adding a project
 

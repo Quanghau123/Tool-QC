@@ -24,7 +24,33 @@ export const state = {
   testSignature: '',
 };
 
+import { messages } from './messages/catalogue.js';
+
 export const $ = (id) => document.getElementById(id);
+
+export function locale() {
+  try {
+    return localStorage.getItem('toolqc.locale') === 'en' ? 'en' : 'vi';
+  } catch {
+    return 'vi';
+  }
+}
+
+export function setLocale(value) {
+  const next = value === 'en' ? 'en' : 'vi';
+  try {
+    localStorage.setItem('toolqc.locale', next);
+  } catch {}
+  document.documentElement.lang = next;
+  window.dispatchEvent(new Event('toolqc:localechange'));
+  return next;
+}
+
+export function translate(code, fallback = '', values = {}) {
+  const entry = messages[code];
+  const template = entry?.[locale()] || entry?.en || fallback;
+  return template.replace(/\{(\w+)\}/g, (_, key) => String(values[key] ?? `{${key}}`));
+}
 
 export function bind(id, event, handler) {
   const element = $(id);
@@ -36,7 +62,7 @@ export async function json(url, options) {
   try {
     response = await fetch(url, options);
   } catch (cause) {
-    const error = new Error('Không kết nối được Tool-QC UI server. Chờ vài giây rồi thử lại.');
+    const error = new Error(translate('TQC-UI-001'));
     error.code = 'TQC-UI-001';
     error.detail = cause?.message || 'Failed to fetch';
     throw error;
@@ -47,12 +73,11 @@ export async function json(url, options) {
     try {
       payload = JSON.parse(text);
     } catch {}
-    const message =
-      response.status === 405
-        ? 'UI server đang chạy phiên bản cũ hoặc vừa khởi động lại. Hãy tải lại trang.'
-        : payload?.message || text || `HTTP ${response.status}`;
+    const code =
+      payload?.errorCode || payload?.code || (response.status === 405 ? 'TQC-UI-405' : `TQC-HTTP-${response.status}`);
+    const message = translate(code, payload?.message || text || `HTTP ${response.status}`);
     const error = new Error(message);
-    error.code = payload?.code || (response.status === 405 ? 'TQC-UI-405' : `TQC-HTTP-${response.status}`);
+    error.code = code;
     error.detail = payload?.detail;
     error.status = response.status;
     error.payload = payload;
@@ -66,7 +91,7 @@ export function readableError(error) {
   const lines = detail.split(/\r?\n/).filter(Boolean);
   const header = error.code ? `${error.code} — ${error.message}` : error.message;
   return lines.length
-    ? `${header}\n\n${lines.slice(0, 12).join('\n')}${lines.length > 12 ? `\n\n... và ${lines.length - 12} lỗi khác.` : ''}`
+    ? `${header}\n\n${lines.slice(0, 12).join('\n')}${lines.length > 12 ? `\n\n${translate('TQC-UI-052', '', { count: lines.length - 12 })}` : ''}`
     : header;
 }
 

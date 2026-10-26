@@ -3,7 +3,36 @@ const { test, expect } = require('@playwright/test');
 
 test('xây chuỗi API từ cấu hình dự án và lưu binding typed', async ({ page }) => {
   await page.goto('/');
+  await page.locator('#locale').selectOption('vi');
   await page.locator('#project').selectOption('ops-service');
+  const firstTest = page.locator('#tests [data-id]').first();
+  await firstTest.check();
+  await expect(page.locator('#tests .folder-count').first()).toContainText('testcase');
+  await page.locator('#locale').selectOption('en');
+  await expect(page.locator('#tests .folder-count').first()).toContainText('testcases');
+  await expect(firstTest).toBeChecked();
+  await expect(page.locator('#project')).toHaveValue('ops-service');
+  await page.locator('#locale').selectOption('vi');
+  await expect(page.locator('#tests .folder-count').first()).toContainText('testcase');
+  await expect(firstTest).toBeChecked();
+  await expect(page.locator('#project')).toHaveValue('ops-service');
+  await page.locator('#locale').selectOption('en');
+  await page.locator('#project').selectOption('ops-service');
+  await page.locator('#locale').selectOption('en');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await expect(page.locator('[data-view="toolsView"]')).toContainText('Tools');
+  await expect(page.locator('#project')).toHaveValue('ops-service');
+  await page.locator('[data-view="toolsView"]').click();
+  await page.locator('[data-tool="generatorTool"]').click();
+  page.once('dialog', (dialog) => {
+    expect(dialog.message()).toBe('Enter a source path.');
+    return dialog.accept();
+  });
+  await page.getByRole('button', { name: 'Phân tích source' }).click();
+  await expect(page.locator('#project')).toHaveValue('ops-service');
+  await page.locator('#locale').selectOption('vi');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'vi');
+  await expect(page.locator('#project')).toHaveValue('ops-service');
   await page.getByRole('button', { name: 'Công cụ' }).click();
   await page.getByRole('button', { name: 'API Builder' }).click();
   await expect(page.locator('#apiBuilderSourceStatus')).toContainText('Nhập thư mục source local hợp lệ');

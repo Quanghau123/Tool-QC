@@ -1,41 +1,41 @@
 {
   "schema_version": 6,
-  "active_request": "2026-10-26-0957-code-quality-maintenance",
-  "previous_request": "2026-10-23-1034-api-builder-project-path",
+  "active_request": "2026-10-26-1256-message-error-standard",
+  "previous_request": "2026-10-26-0957-code-quality-maintenance",
   "lane": "full",
   "phase": "report",
   "brief_file": null,
-  "spec_file": "docs/tdq/spec/2026-10-26-0957-code-quality-maintenance.md",
+  "spec_file": "docs/tdq/spec/2026-10-26-1256-message-error-standard.md",
   "spec_approved": true,
-  "spec_sha256": "ea3d4459b77add1abd5b30648250164931eb1c865cfe23f96d2090b6ccbbe2f3",
-  "spec_approved_at": "2026-10-26T10:32:48+07:00",
+  "spec_sha256": "aeaf42d7b48c07fb5578d30cb480aa432d7ad46dc32056b4445c37db103f29ee",
+  "spec_approved_at": "2026-10-26T15:40:42+07:00",
   "spec_descriptor": {
     "target": "spec",
-    "request": "2026-10-26-0957-code-quality-maintenance",
+    "request": "2026-10-26-1256-message-error-standard",
     "lane": "full",
-    "file": "docs/tdq/spec/2026-10-26-0957-code-quality-maintenance.md",
-    "sha256": "ea3d4459b77add1abd5b30648250164931eb1c865cfe23f96d2090b6ccbbe2f3",
+    "file": "docs/tdq/spec/2026-10-26-1256-message-error-standard.md",
+    "sha256": "aeaf42d7b48c07fb5578d30cb480aa432d7ad46dc32056b4445c37db103f29ee",
     "by": "duyệt spec",
-    "at": "2026-10-26T10:32:48+07:00",
+    "at": "2026-10-26T15:40:42+07:00",
     "assurance": "cli-verified",
-    "version": 1
+    "version": 2
   },
   "spec_approved_by": "duyệt spec",
   "spec_bo_qua_do": null,
   "lsp_bo_qua": null,
-  "plan_file": "docs/tdq/plan/2026-10-26-0957-code-quality-maintenance.md",
+  "plan_file": "docs/tdq/plan/2026-10-26-1256-message-error-standard.md",
   "plan_approved": true,
-  "plan_sha256": "a12b50b234474866ad875b95090c40199321dfcf4a60e1c38b6f869ac39ce65a",
-  "plan_approved_at": "2026-10-26T10:39:58+07:00",
+  "plan_sha256": "e87408b6964cc83a01490f401670aa616080b87374e6fe5da8083f7d253bfae0",
+  "plan_approved_at": "2026-10-26T13:41:02+07:00",
   "plan_approved_by": "duyệt plan",
   "plan_descriptor": {
     "target": "plan",
-    "request": "2026-10-26-0957-code-quality-maintenance",
+    "request": "2026-10-26-1256-message-error-standard",
     "lane": "full",
-    "file": "docs/tdq/plan/2026-10-26-0957-code-quality-maintenance.md",
-    "sha256": "a12b50b234474866ad875b95090c40199321dfcf4a60e1c38b6f869ac39ce65a",
+    "file": "docs/tdq/plan/2026-10-26-1256-message-error-standard.md",
+    "sha256": "e87408b6964cc83a01490f401670aa616080b87374e6fe5da8083f7d253bfae0",
     "by": "duyệt plan",
-    "at": "2026-10-26T10:39:58+07:00",
+    "at": "2026-10-26T13:41:02+07:00",
     "assurance": "cli-verified",
     "version": 1
   },
@@ -49,35 +49,39 @@
   "doc_lang": "vi",
   "muc_gat": "full",
   "muc_qc": "full",
-  "started_at": "2026-10-26T10:02:08+07:00",
-  "loai_request": "chore",
-  "nhanh_goc": "main",
-  "nhanh_request": "chore/code-quality-maintenance",
+  "started_at": "2026-10-26T12:57:14+07:00",
+  "loai_request": "feature",
+  "nhanh_goc": "chore/code-quality-maintenance",
+  "nhanh_request": "feature/message-error-standard",
   "phase_history": [
     {
       "phase": "idle",
-      "at": "2026-10-26T10:02:08+07:00"
+      "at": "2026-10-26T12:57:14+07:00"
     },
     {
       "phase": "analyze",
-      "at": "2026-10-26T10:02:08+07:00"
+      "at": "2026-10-26T12:57:29+07:00"
     },
     {
       "phase": "spec",
-      "at": "2026-10-26T10:10:34+07:00"
+      "at": "2026-10-26T13:22:37+07:00"
     },
     {
       "phase": "plan",
-      "at": "2026-10-26T10:32:49+07:00"
+      "at": "2026-10-26T13:38:03+07:00"
     },
     {
       "phase": "implement",
-      "at": "2026-10-26T10:41:06+07:00"
+      "at": "2026-10-26T13:43:56+07:00"
+    },
+    {
+      "phase": "qc",
+      "at": "2026-10-26T16:24:07+07:00"
     },
     {
       "phase": "report",
-      "at": "2026-10-26T11:54:43+07:00"
+      "at": "2026-10-26T16:32:08+07:00"
     }
   ],
-  "updated_at": "2026-10-26T12:03:23+07:00"
+  "updated_at": "2026-10-26T16:32:39+07:00"
 }

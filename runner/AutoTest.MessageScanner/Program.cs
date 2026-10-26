@@ -1,4 +1,5 @@
 // CLI cào message: nhận đường dẫn source và xuất workbook Excel.
+using AutoTest.Core;
 using AutoTest.MessageScanner;
 
 string? Argument(string key)
@@ -9,7 +10,7 @@ string? Argument(string key)
 
 if (args.Contains("--help", StringComparer.OrdinalIgnoreCase) || args.Contains("-h", StringComparer.OrdinalIgnoreCase))
 {
-    Console.WriteLine("Cách dùng: dotnet run --project runner/AutoTest.MessageScanner -- --source <đường-dẫn-source> [--output <file.xlsx>]");
+    Console.WriteLine("Cách dùng: dotnet run --project runner/AutoTest.MessageScanner -- --source <đường-dẫn-source> [--catalogue <project.json>] [--output <file.xlsx>]");
     return 0;
 }
 
@@ -29,13 +30,20 @@ try
         "message-scans",
         $"{Path.GetFileName(sourcePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))}-messages-{DateTime.Now:yyyyMMdd-HHmmss}.xlsx");
 
-    var result = new SourceMessageScanner().Scan(sourcePath);
+    string? cataloguePath = Argument("--catalogue");
+    var catalogue = cataloguePath is null
+        ? null
+        : SpecLoader.ErrorCatalogue(
+            Path.GetDirectoryName(Path.GetFullPath(cataloguePath))!,
+            SpecLoader.Project(Path.GetFullPath(cataloguePath)));
+    var result = new SourceMessageScanner().Scan(sourcePath, catalogue);
     string report = new MessageWorkbookWriter().Write(output, result);
     Console.WriteLine($"Source: {result.SourceDirectory}");
     Console.WriteLine($"Đã quét: {result.ScannedFileCount} file");
     Console.WriteLine($"Messages duy nhất: {result.Messages.Count}");
     Console.WriteLine($"Modules: {result.Messages.Select(x => x.Module).Distinct(StringComparer.OrdinalIgnoreCase).Count()}");
     Console.WriteLine($"File bỏ qua: {result.SkippedFiles.Count}");
+    Console.WriteLine($"Audit findings: {result.AuditFindings.Count}");
     Console.WriteLine($"Báo cáo Excel: {report}");
     return 0;
 }

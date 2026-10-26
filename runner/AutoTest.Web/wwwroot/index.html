@@ -9,17 +9,32 @@
   <body>
     <header>
       <div><strong>Tool-QC</strong><span>Test Console</span></div>
+      <label
+        ><span data-i18n="TQC-UI-161">Ngôn ngữ</span
+        ><select id="locale">
+          <option value="vi">Tiếng Việt</option>
+          <option value="en">English</option>
+        </select></label
+      >
       <span id="connection">Sẵn sàng</span>
     </header>
-    <nav class="main-tabs" aria-label="Chức năng chính">
+    <nav class="main-tabs" aria-label="Chức năng chính" data-i18n-aria="TQC-UI-162">
       <button class="nav-active" data-view="testsView">
-        <span class="tab-icon">✓</span><span><b>Testcases</b><small>Chọn và chạy kiểm thử</small></span></button
+        <span class="tab-icon">✓</span
+        ><span><b>Testcases</b><small data-i18n="TQC-UI-163">Chọn và chạy kiểm thử</small></span></button
       ><button data-view="historyView">
-        <span class="tab-icon">◷</span><span><b>Kết quả</b><small>Lịch sử và báo cáo chạy</small></span></button
+        <span class="tab-icon">◷</span
+        ><span
+          ><b data-i18n="TQC-UI-164">Kết quả</b><small data-i18n="TQC-UI-165">Lịch sử và báo cáo chạy</small></span
+        ></button
       ><button data-view="toolsView">
-        <span class="tab-icon">◇</span><span><b>Công cụ</b><small>Sinh testcase và cào message</small></span></button
+        <span class="tab-icon">◇</span
+        ><span
+          ><b data-i18n="TQC-UI-166">Công cụ</b><small data-i18n="TQC-UI-167">Sinh testcase và cào message</small></span
+        ></button
       ><button data-view="environmentView">
-        <span class="tab-icon">⚙</span><span><b>Cấu hình</b><small>Môi trường và kết nối</small></span>
+        <span class="tab-icon">⚙</span
+        ><span><b data-i18n="TQC-UI-168">Cấu hình</b><small data-i18n="TQC-UI-169">Môi trường và kết nối</small></span>
       </button>
     </nav>
     <main id="mainLayout">

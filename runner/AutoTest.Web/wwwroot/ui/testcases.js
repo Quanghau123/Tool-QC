@@ -1,10 +1,10 @@
-import { $, escapeHtml, json, readableError, state } from './shared.js';
+import { $, escapeHtml, json, readableError, state, translate } from './shared.js';
 
 export function initializeTestcases({ loadHistory }) {
   async function loadProjects() {
     const projects = await json('/api/projects');
     $('project').innerHTML = projects.map((x) => `<option>${escapeHtml(x.name)}</option>`).join('');
-    $('connection').textContent = 'Sẵn sàng';
+    $('connection').textContent = translate('TQC-UI-002');
     await loadTests();
   }
   async function recoverUi() {
@@ -12,7 +12,7 @@ export function initializeTestcases({ loadHistory }) {
       await loadProjects();
       return true;
     } catch (error) {
-      $('connection').textContent = 'Mất kết nối';
+      $('connection').textContent = translate('TQC-UI-003');
       $('console').textContent = readableError(error);
       return false;
     }
@@ -38,7 +38,8 @@ export function initializeTestcases({ loadHistory }) {
     state.expanded = new Set([...expanded].filter((item) => groups.includes(item)));
     if (!state.expanded.size && groups.length) state.expanded.add(groups[0]);
     $('group').innerHTML =
-      '<option value="">Tất cả</option>' + groups.map((x) => `<option>${escapeHtml(x)}</option>`).join('');
+      `<option value="">${translate('TQC-UI-140')}</option>` +
+      groups.map((x) => `<option>${escapeHtml(x)}</option>`).join('');
     $('group').value = groups.includes(group) ? group : '';
     render();
     return true;
@@ -82,9 +83,9 @@ export function initializeTestcases({ loadHistory }) {
           const items = grouped[group],
             open = query || $('group').value || state.expanded.has(group);
           const selected = items.filter((x) => state.selected.has(x.id)).length;
-          return `<section class="folder ${open ? 'open' : ''}" data-folder="${escapeHtml(group)}"><div class="folder-header"><button class="folder-toggle" data-toggle="${escapeHtml(group)}"><span class="chevron">›</span><span class="folder-icon">📁</span><strong>${escapeHtml(folderName(group))}</strong><span class="folder-count">${items.length} testcase</span></button><label class="folder-select"><input type="checkbox" data-group="${escapeHtml(group)}" ${selected === items.length ? 'checked' : ''}><span>${selected}/${items.length}</span></label></div><div class="folder-content">${items.map(testCard).join('')}</div></section>`;
+          return `<section class="folder ${open ? 'open' : ''}" data-folder="${escapeHtml(group)}"><div class="folder-header"><button class="folder-toggle" data-toggle="${escapeHtml(group)}"><span class="chevron">›</span><span class="folder-icon">📁</span><strong>${escapeHtml(folderName(group))}</strong><span class="folder-count">${translate('TQC-UI-141', '', { count: items.length })}</span></button><label class="folder-select"><input type="checkbox" data-group="${escapeHtml(group)}" ${selected === items.length ? 'checked' : ''}><span>${selected}/${items.length}</span></label></div><div class="folder-content">${items.map(testCard).join('')}</div></section>`;
         })
-        .join('') || '<div class="empty">Không tìm thấy testcase phù hợp.</div>';
+        .join('') || `<div class="empty">${translate('TQC-UI-010')}</div>`;
     document.querySelectorAll('[data-id]').forEach(
       (box) =>
         (box.onchange = () => {
@@ -110,7 +111,7 @@ export function initializeTestcases({ loadHistory }) {
   }
   function testCard(x) {
     const order = state.selectionOrder.indexOf(x.id) + 1;
-    return `<label class="test"><span class="sequence-check"><input type="checkbox" data-id="${escapeHtml(x.id)}" ${state.selected.has(x.id) ? 'checked' : ''}>${order ? `<strong>${order}</strong>` : ''}</span><div><b>${escapeHtml(x.name)}</b><div class="meta">${escapeHtml(x.id)} · ${x.stepCount} bước</div><div class="tags">${x.tags.map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join('')}</div></div>${x.destructive ? '<span class="danger">Thay đổi dữ liệu</span>' : ''}</label>`;
+    return `<label class="test"><span class="sequence-check"><input type="checkbox" data-id="${escapeHtml(x.id)}" ${state.selected.has(x.id) ? 'checked' : ''}>${order ? `<strong>${order}</strong>` : ''}</span><div><b>${escapeHtml(x.name)}</b><div class="meta">${translate('TQC-UI-142', '', { id: escapeHtml(x.id), steps: x.stepCount })}</div><div class="tags">${x.tags.map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join('')}</div></div>${x.destructive ? `<span class="danger">${translate('TQC-UI-143')}</span>` : ''}</label>`;
   }
   function folderName(group) {
     return group
@@ -119,17 +120,13 @@ export function initializeTestcases({ loadHistory }) {
       .join(' ');
   }
   async function run() {
-    if (!state.selected.size) return alert('Hãy chọn ít nhất một testcase.');
+    if (!state.selected.size) return alert(translate('TQC-UI-009'));
     const sequential = $('sequentialChain').checked;
     const ids = sequential
       ? state.selectionOrder.filter((id) => state.selected.has(id))
       : state.tests.filter((x) => state.selected.has(x.id)).map((x) => x.id);
     const chosen = ids.map((id) => state.tests.find((x) => x.id === id)).filter(Boolean);
-    if (
-      chosen.some((x) => x.destructive) &&
-      !confirm(`Sắp chạy ${chosen.length} testcase có thay đổi dữ liệu trên môi trường đã cấu hình. Tiếp tục?`)
-    )
-      return;
+    if (chosen.some((x) => x.destructive) && !confirm(translate('TQC-UI-144', '', { count: chosen.length }))) return;
     const result = await json('/api/runs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -138,7 +135,7 @@ export function initializeTestcases({ loadHistory }) {
     state.runId = result.runId;
     $('report').hidden = true;
     $('report').removeAttribute('href');
-    $('console').textContent = 'Đang khởi động...';
+    $('console').textContent = translate('TQC-UI-004');
     $('runStatus').scrollIntoView({ behavior: 'smooth', block: 'start' });
     poll();
   }
@@ -146,11 +143,11 @@ export function initializeTestcases({ loadHistory }) {
     const lines = (run.lines || []).filter((line) => line && !line.startsWith('Báo cáo HTML:'));
     const useful = lines.slice(-6).join('\n');
     return [
-      `Mã lỗi: ${run.failureType || 'TQC-RUN-001'}`,
-      `Nhóm lỗi: ${run.failureCategory || 'UNKNOWN'}`,
-      `Lỗi: ${run.failureMessage || useful || 'Testcase chạy thất bại.'}`,
-      run.fixHint ? `Cách xử lý: ${run.fixHint}` : '',
-      useful && run.failureMessage ? `Chi tiết gần nhất:\n${useful}` : '',
+      translate('TQC-UI-145', '', { value: run.failureType || 'TQC-RUN-001' }),
+      translate('TQC-UI-146', '', { value: run.failureCategory || 'UNKNOWN' }),
+      translate('TQC-UI-147', '', { value: run.failureMessage || useful || translate('TQC-UI-150') }),
+      run.fixHint ? translate('TQC-UI-148', '', { value: run.fixHint }) : '',
+      useful && run.failureMessage ? translate('TQC-UI-149', '', { value: useful }) : '',
     ]
       .filter(Boolean)
       .join('\n');
@@ -160,13 +157,17 @@ export function initializeTestcases({ loadHistory }) {
     const run = await json(`/api/runs/${state.runId}`);
     $('runStatus').className = `status ${run.status}`;
     $('runStatus').textContent =
-      { running: 'Đang chạy', passed: 'Thành công', failed: 'Thất bại', cancelled: 'Đã dừng' }[run.status] ||
-      run.status;
+      {
+        running: translate('TQC-UI-005'),
+        passed: translate('TQC-UI-006'),
+        failed: translate('TQC-UI-007'),
+        cancelled: translate('TQC-UI-008'),
+      }[run.status] || run.status;
     $('stopRun').hidden = run.status !== 'running';
     const diagnosis = run.failureType
       ? `Error Code: ${run.failureType}\nCategory: ${run.failureCategory || 'UNKNOWN'}\nMessage: ${run.failureMessage || ''}\nSuggested Action: ${run.fixHint || ''}\n\n`
       : '';
-    $('console').textContent = diagnosis + (run.lines.join('\n') || 'Đang khởi động...');
+    $('console').textContent = diagnosis + (run.lines.join('\n') || translate('TQC-UI-004'));
     $('console').scrollTop = $('console').scrollHeight;
     if (run.reportPath) {
       $('report').hidden = false;
@@ -180,24 +181,23 @@ export function initializeTestcases({ loadHistory }) {
         reportInfo.hidden = false;
         if (run.status === 'passed') {
           $('draftStatus').className = 'message-summary passed';
-          $('draftStatus').textContent = '✓ Chạy thử API thành công.';
+          $('draftStatus').textContent = `✓ ${translate('TQC-UI-151')}`;
           reportInfo.innerHTML = run.reportPath
-            ? `<b>Báo cáo</b><a href="/api/reports/${encodeURIComponent(run.id)}" target="_blank" rel="noopener">Mở báo cáo trong tab mới</a><div>${escapeHtml(run.reportPath)}</div>`
-            : '<b>Kết quả</b>Không có file báo cáo.';
+            ? `<b>${translate('TQC-UI-152')}</b><a href="/api/reports/${encodeURIComponent(run.id)}" target="_blank" rel="noopener">${translate('TQC-UI-153')}</a><div>${escapeHtml(run.reportPath)}</div>`
+            : `<b>${translate('TQC-UI-154')}</b>${translate('TQC-UI-038')}`;
         } else {
           $('draftStatus').className = 'message-summary failed';
-          $('draftStatus').textContent = `✕ Chạy thử API thất bại.\n\n${draftFailureText(run)}`;
+          $('draftStatus').textContent = `✕ ${translate('TQC-UI-155', '', { error: draftFailureText(run) })}`;
           reportInfo.innerHTML = run.reportPath
-            ? `<b>File báo cáo</b><a href="/api/reports/${encodeURIComponent(run.id)}" target="_blank" rel="noopener">Mở báo cáo chi tiết</a><div>${escapeHtml(run.reportPath)}</div>`
-            : '<b>Báo cáo</b>Runner chưa tạo được file báo cáo.';
+            ? `<b>${translate('TQC-UI-156')}</b><a href="/api/reports/${encodeURIComponent(run.id)}" target="_blank" rel="noopener">${translate('TQC-UI-157')}</a><div>${escapeHtml(run.reportPath)}</div>`
+            : `<b>${translate('TQC-UI-152')}</b>${translate('TQC-UI-039')}`;
         }
       }
       loadHistory();
     }
   }
   async function stopRun() {
-    if (state.runId && confirm('Dừng workload đang chạy?'))
-      await json(`/api/runs/${state.runId}`, { method: 'DELETE' });
+    if (state.runId && confirm(translate('TQC-UI-158'))) await json(`/api/runs/${state.runId}`, { method: 'DELETE' });
   }
 
   return {

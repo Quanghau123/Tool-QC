@@ -17,7 +17,8 @@ public sealed record StepExecutionContext(
     bool Cleanup,
     Action<StepRunResult>? ReportIntermediate = null,
     Func<CancellationToken, Task<string?>>? ResolveAuthenticationToken = null,
-    Func<string, string>? Redact = null);
+    Func<string, string>? Redact = null,
+    ErrorCatalogueSpec? ErrorCatalogue = null);
 
 public interface IEnvironmentStore
 {

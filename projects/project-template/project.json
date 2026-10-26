@@ -1,6 +1,9 @@
 {
   "name": "replace-me",
   "baseUrlVariable": "API_BASE_URL",
+  "errorCatalogue": {
+    "path": "error-catalogue.json"
+  },
   "apiBuilder": {
     "openApiPath": "openapi/openapi.json",
     "sourcePath": "source"
