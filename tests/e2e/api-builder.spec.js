@@ -20,7 +20,7 @@ test('xây chuỗi API từ cấu hình dự án và lưu binding typed', async 
   await page.getByRole('button', { name: 'Tạo workspace' }).click();
   await expect(page.locator('#apiBuilderStatus')).toContainText('đã sẵn sàng');
   await expect(page.locator('#apiBuilderOperation optgroup')).toHaveCount(1);
-  await expect(page.locator('#apiBuilderOperation optgroup')).toHaveAttribute('label', 'Orders');
+  await expect(page.locator('#apiBuilderOperation optgroup')).toHaveAttribute('label', 'OpenApi');
   await page.locator('#apiBuilderOperation').selectOption('CreateOrder');
   await page.getByRole('button', { name: 'Thêm operation vào chuỗi' }).click();
   await page.once('dialog', dialog => dialog.accept('orderId'));
@@ -38,7 +38,7 @@ test('xây chuỗi API từ cấu hình dự án và lưu binding typed', async 
   await page.locator('#project').selectOption('api-builder-fixture');
   await page.getByRole('button', { name: 'Công cụ' }).click();
   await page.getByRole('button', { name: 'API Builder' }).click();
-  await expect(page.locator('[data-api-value="1:0"]')).toHaveValue('${orderId}');
+  await expect(page.locator('[data-api-value="0:0"]')).toHaveValue('${orderId}');
   await expect(page.locator('#apiBuilderLocalSourcePath')).toHaveValue('');
   const browserStorage = await page.evaluate(() => Object.values(localStorage));
   expect(browserStorage.join('\n')).not.toContain(fixtureSource);

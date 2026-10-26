@@ -15,7 +15,7 @@ WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 Console.InputEncoding = Encoding.UTF8;
 Console.OutputEncoding = new UTF8Encoding(false);
 builder.Logging.ClearProviders();
-builder.Logging.AddConsole();
+builder.Logging.AddSimpleConsole(options => options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffK ");
 builder.WebHost.UseUrls(builder.Configuration["url"] ?? "http://127.0.0.1:5080");
 WebApplication app = builder.Build();
 string root = Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, "..", ".."));
@@ -448,9 +448,8 @@ app.MapPost("/api/projects/{project}/generate", async (string project, GenerateR
     Directory.CreateDirectory(Path.GetDirectoryName(output)!);
     ProcessStartInfo info = Utf8Process("dotnet", root);
     foreach (string argument in new[] { "run", "--project", Path.Combine(root, "runner", "AutoTest.Generator", "AutoTest.Generator.csproj"), "-c", "Release", "--", "--source", request.SourcePath, "--project", project, "--output", output }) info.ArgumentList.Add(argument);
-    using Process process = new() { StartInfo = info }; process.Start();
-    string standardOutput = await process.StandardOutput.ReadToEndAsync(); string standardError = await process.StandardError.ReadToEndAsync(); await process.WaitForExitAsync();
-    return process.ExitCode == 0 ? Results.Ok(new { output, message = standardOutput.Trim() }) : Results.BadRequest(new { message = standardError.Trim() });
+    ProcessExecutionResult result = await ProcessExecutor.RunAsync(info);
+    return result.ExitCode == 0 ? Results.Ok(new { output, message = result.StandardOutput }) : Results.BadRequest(new { message = result.StandardError });
 });
 
 app.MapPost("/api/projects/{project}/generate/analyze", async (string project, GenerateRequest request) =>
@@ -816,12 +815,8 @@ static async Task<ProcessResult> RunProcessAsync(string fileName, IEnumerable<st
 {
     ProcessStartInfo info = Utf8Process(fileName, workingDirectory);
     foreach (string argument in arguments) info.ArgumentList.Add(argument);
-    using Process process = new() { StartInfo = info };
-    process.Start();
-    Task<string> output = process.StandardOutput.ReadToEndAsync();
-    Task<string> error = process.StandardError.ReadToEndAsync();
-    await process.WaitForExitAsync();
-    return new(process.ExitCode, (await output).Trim(), (await error).Trim());
+    ProcessExecutionResult result = await ProcessExecutor.RunAsync(info);
+    return new(result.ExitCode, result.StandardOutput, result.StandardError);
 }
 static string ArchifyDiagnosticText(ProcessResult result)
     => string.Join(Environment.NewLine, new[] { result.StandardOutput, result.StandardError }.Where(value => !string.IsNullOrWhiteSpace(value))).Trim();
@@ -1075,12 +1070,8 @@ static async Task<ProcessResult> RunGeneratorAsync(string root, IEnumerable<stri
         return new(127, string.Empty, "TQC-GEN-008: Generator has not been built. Restart Tool-QC with npm start.");
     ProcessStartInfo info = Utf8Process("dotnet", root);
     foreach (string argument in new[] { generatorDll }.Concat(generatorArguments)) info.ArgumentList.Add(argument);
-    using Process process = new() { StartInfo = info };
-    process.Start();
-    string output = await process.StandardOutput.ReadToEndAsync();
-    string error = await process.StandardError.ReadToEndAsync();
-    await process.WaitForExitAsync();
-    return new(process.ExitCode, output.Trim(), error.Trim());
+    ProcessExecutionResult result = await ProcessExecutor.RunAsync(info);
+    return new(result.ExitCode, result.StandardOutput, result.StandardError);
 }
 
 static async Task<GeneratorMetadata> ReadGeneratorMetadataAsync(string path)
@@ -1111,19 +1102,14 @@ static async Task<ProcessResult> RunRunnerPreflightAsync(string root, string pro
     ProcessStartInfo info = Utf8Process("dotnet", root);
     foreach (string argument in arguments) info.ArgumentList.Add(argument);
     if (!requireCompleteCoverage) info.ArgumentList.Add("--allow-incomplete-coverage");
-    using Process process = new() { StartInfo = info };
-    process.Start();
     using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(30));
     try
     {
-        Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
-        Task<string> errorTask = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync(timeout.Token);
-        return new(process.ExitCode, (await outputTask).Trim(), (await errorTask).Trim());
+        ProcessExecutionResult result = await ProcessExecutor.RunAsync(info, timeout.Token);
+        return new(result.ExitCode, result.StandardOutput, result.StandardError);
     }
     catch (OperationCanceledException)
     {
-        if (!process.HasExited) process.Kill(entireProcessTree: true);
         return new(124, string.Empty, "TQC-GEN-006: Preflight exceeded 30 seconds and was stopped. Build the runner once, then retry.");
     }
 }

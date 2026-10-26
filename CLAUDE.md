@@ -27,6 +27,41 @@ Before making a change, read these files:
 
 Never read, print, copy, summarize, or commit secret values from `.env`.
 
+## Code quality, maintainability, and SOLID
+
+Treat code quality as a functional requirement. Before changing code, locate the
+existing ownership boundary and the closest reusable capability; do not copy
+logic or introduce a parallel implementation without a concrete reason.
+
+- Keep each function, class, module, and script focused on one responsibility
+  and one reason to change (SRP). Split mixed concerns at a meaningful boundary,
+  not into speculative micro-abstractions.
+- Extend behavior through existing data, contracts, or narrow extension points
+  when they fit (OCP); do not add broad condition chains, project-specific
+  branches, or switches that leak a caller's business rules into shared code.
+- Preserve success, error, cancellation, and side-effect contracts when
+  substituting implementations (LSP). A refactor must not silently change what
+  callers can rely on.
+- Depend only on the smallest interface, callback, or parameter set a caller
+  actually uses (ISP). Do not pass service locators, large state objects, or
+  unrelated dependencies for convenience.
+- Keep I/O, persistence, process execution, and framework-specific work at
+  their established boundaries. Depend on a shared entry point or helper where
+  multiple callers need the same behavior (DIP); do not duplicate its internals.
+- Prefer the smallest direct solution that meets an observed requirement. Do not
+  add interfaces, inheritance layers, strategies, feature flags, configuration,
+  or future-use branches for a single unproven use case (YAGNI).
+- Leave the changed area cleaner: remove dead code and obsolete comments, use
+  names that explain intent, keep control flow readable, and avoid hidden shared
+  mutable state. Do not reformat or refactor unrelated areas.
+- Add or update focused regression coverage for every behavior, error path,
+  concurrency path, or contract changed. Assert observable outcomes, keep tests
+  deterministic, and do not weaken assertions, skip checks, or raise timeouts
+  merely to make an unexpected result pass.
+- Before reporting completion, review the diff for duplicate logic, leaked
+  dependencies, broken cancellation propagation, stale tests, and unused code;
+  run the narrowest meaningful verification and report its real result.
+
 ## Repository ownership boundaries
 
 ### Shared framework — do not change for a single project's needs

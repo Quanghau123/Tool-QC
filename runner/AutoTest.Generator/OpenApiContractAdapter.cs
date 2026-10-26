@@ -8,7 +8,11 @@ public static class OpenApiContractAdapter
     {
         using JsonDocument parsed = JsonDocument.Parse(document);
         JsonElement root = parsed.RootElement;
-        if (!root.TryGetProperty("openapi", out JsonElement version) || !version.GetString()!.StartsWith("3.1", StringComparison.Ordinal))
+        if (root.ValueKind != JsonValueKind.Object
+            || !root.TryGetProperty("openapi", out JsonElement version)
+            || version.ValueKind != JsonValueKind.String
+            || string.IsNullOrWhiteSpace(version.GetString())
+            || !version.GetString()!.StartsWith("3.1", StringComparison.Ordinal))
             throw new InvalidDataException("Only OpenAPI 3.1 documents are supported.");
 
         JsonElement schemas = root.TryGetProperty("components", out JsonElement components)
