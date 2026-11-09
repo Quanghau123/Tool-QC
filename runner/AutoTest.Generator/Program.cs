@@ -64,9 +64,11 @@ if (Argument("--workbook") is { } workbookArgument)
         else
         {
             Directory.CreateDirectory(outputPath);
+            IReadOnlyList<string> fileNames = WorkbookOutputFiles.Name(batch.Items.Where(item => item.Generated).ToList());
+            int index = 0;
             foreach (WorkbookGenerationItem item in batch.Items.Where(item => item.Generated))
             {
-                string file = Path.Combine(outputPath, $"workbook-{SafeFileName(item.CaseId)}.json");
+                string file = Path.Combine(outputPath, fileNames[index++]);
                 File.WriteAllText(file, item.Json!, new UTF8Encoding(false));
             }
             Console.WriteLine(JsonSerializer.Serialize(batch, GeneratorJson.Options));
@@ -255,6 +257,4 @@ static string StripFence(string value)
     int lastFence = result.LastIndexOf("```", StringComparison.Ordinal);
     return firstLine >= 0 && lastFence > firstLine ? result[(firstLine + 1)..lastFence].Trim() : result;
 }
-
-static string SafeFileName(string value) => string.Concat(value.Select(character => char.IsLetterOrDigit(character) ? char.ToLowerInvariant(character) : '-')).Trim('-');
 

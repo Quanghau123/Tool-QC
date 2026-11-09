@@ -71,6 +71,51 @@
       "slug": "2026-10-23-1034-api-builder-project-path",
       "tao_luc": "2026-10-23T15:47:49",
       "trang_thai": "dong"
+    },
+    {
+      "dong_luc": null,
+      "duong_dan": "D:\\works\\projects\\Tool-QC\\.tdq-worktrees\\2026-10-28-0934-rebuild-68-tests\\t1.1",
+      "ma_task": "T1.1",
+      "nhanh": "tdq/2026-10-28-0934-rebuild-68-tests/t1.1",
+      "slug": "2026-10-28-0934-rebuild-68-tests",
+      "tao_luc": "2026-10-28T10:51:46",
+      "trang_thai": "mo"
+    },
+    {
+      "dong_luc": null,
+      "duong_dan": "D:\\works\\projects\\Tool-QC\\.tdq-worktrees\\2026-10-28-0934-rebuild-68-tests\\t1.2",
+      "ma_task": "T1.2",
+      "nhanh": "tdq/2026-10-28-0934-rebuild-68-tests/t1.2",
+      "slug": "2026-10-28-0934-rebuild-68-tests",
+      "tao_luc": "2026-10-28T11:11:01",
+      "trang_thai": "mo"
+    },
+    {
+      "dong_luc": null,
+      "duong_dan": "D:\\works\\projects\\Tool-QC\\.tdq-worktrees\\2026-10-28-0934-rebuild-68-tests\\t2.3",
+      "ma_task": "T2.3",
+      "nhanh": "tdq/2026-10-28-0934-rebuild-68-tests/t2.3",
+      "slug": "2026-10-28-0934-rebuild-68-tests",
+      "tao_luc": "2026-10-28T12:40:42",
+      "trang_thai": "mo"
+    },
+    {
+      "dong_luc": null,
+      "duong_dan": "D:\\works\\projects\\Tool-QC\\.tdq-worktrees\\2026-10-28-0934-rebuild-68-tests\\t3.2",
+      "ma_task": "T3.2",
+      "nhanh": "tdq/2026-10-28-0934-rebuild-68-tests/t3.2",
+      "slug": "2026-10-28-0934-rebuild-68-tests",
+      "tao_luc": "2026-10-28T13:12:47",
+      "trang_thai": "mo"
+    },
+    {
+      "dong_luc": null,
+      "duong_dan": "D:\\works\\projects\\Tool-QC\\.tdq-worktrees\\2026-10-28-0934-rebuild-68-tests\\t6.1",
+      "ma_task": "T6.1",
+      "nhanh": "tdq/2026-10-28-0934-rebuild-68-tests/t6.1",
+      "slug": "2026-10-28-0934-rebuild-68-tests",
+      "tao_luc": "2026-10-28T14:47:12",
+      "trang_thai": "mo"
     }
   ],
   "schema_version": 1

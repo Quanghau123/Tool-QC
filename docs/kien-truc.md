@@ -2,7 +2,7 @@
 
 ## Tầng
 - `AutoTest.Workbooks`: shared core kiểm tra gói Open XML, giới hạn ZIP/tài nguyên, đọc sheet/cell/formula/merge và tạo SHA-256; không chứa nghiệp vụ dự án.
-- `AutoTest.ProjectAdapters.BeBooking`: adapter riêng của `be-booking`, nhận diện family `VERIFY`, parse đủ 69 case VERIFY và giữ rule TimeFrame động.
+- `AutoTest.ProjectAdapters.BeBooking`: adapter riêng của `be-booking`, nhận diện family `VERIFY`, parse đúng 63 case từ workbook active `Campaign.xlsx` và giữ rule TimeFrame động; artifact historical 69 case chỉ làm regression oracle.
 - `AutoTest.Generator`: một pipeline analyze/generate dùng chung cho CLI và Web; output là schema-v2 draft, chưa gọi backend.
 - `AutoTest.Web`: upload tạm, hiển thị supported/blocked diagnostics, chuyển draft sang preflight/run/activation hiện có.
 
@@ -34,7 +34,7 @@ Build/run chỉ trong môi trường cô lập có filesystem tạm, mạng bị
 Không thuộc Phase 2: chạy C# tự do từ textarea, JavaScript/expression evaluator, sửa source của người dùng, tải package/network trong sandbox, test production, hoặc tự động publish generated tests. UnitX V1 tiếp tục chỉ hỗ trợ decimal decision table với operator whitelist.
 
 ## Đã chốt
-- 2026-09-28: adapter version 2 sinh đủ 69 case trên sheet `VERIFY`, hỗ trợ batch theo thứ tự workbook và blocked riêng từng case thay vì fail toàn workbook.
+- 2026-10-28: workbook active `Campaign.xlsx` (SHA-256 `785e29e5…`) có 63 case `VERIFY` tại 1–30, 33–57 và 61–68; artifact `Campaign (1).xlsx` 69 case chỉ là regression historical. Batch vẫn giữ thứ tự workbook và blocked riêng từng case thay vì fail toàn workbook.
 - 2026-09-28: builder tổng quát dùng TimeFrame tương đối theo mốc sớm nhất của từng case, giữ gap/range Duration và không hard-code `06:00`.
 - 2026-09-27: CLI và UI dùng cùng workbook pipeline; analyze/generate không mở request tới backend.
 - 2026-09-27: không thêm hoặc chạy unit test theo chỉ đạo request; validation gồm solution build, CLI smoke, schema-v2 preflight và Web upload/generate smoke.

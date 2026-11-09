@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using AutoTest.Workbooks;
 using AutoTest.ProjectAdapters.BeBooking;
 
@@ -8,6 +10,66 @@ public sealed record WorkbookGenerationBatch(IReadOnlyList<WorkbookGenerationIte
 {
     public int GeneratedCount => Items.Count(item => item.Generated);
     public int BlockedCount => Items.Count - GeneratedCount;
+}
+
+/// <summary>
+/// Owns the file name of a generated suite: named from the testcase title so an A-Z file sort
+/// follows the title order (AGENTS.md), and never overwriting an earlier file when two titles
+/// slug to the same text.
+/// </summary>
+public static partial class WorkbookOutputFiles
+{
+    private const int MaximumSlugLength = 80;
+
+    /// <summary>File name for every generated item, in the same order, deterministic and unique.</summary>
+    public static IReadOnlyList<string> Name(IReadOnlyList<WorkbookGenerationItem> items)
+    {
+        List<string> names = [];
+        HashSet<string> taken = new(StringComparer.OrdinalIgnoreCase);
+        foreach (WorkbookGenerationItem item in items)
+        {
+            string baseName = Slug(Title(item));
+            string name = $"{baseName}.json";
+            if (!taken.Add(name))
+            {
+                string suffix = Slug(CaseKey(item.CaseId));
+                name = $"{baseName}-{suffix}.json";
+                for (int attempt = 2; !taken.Add(name); attempt++) name = $"{baseName}-{suffix}-{attempt}.json";
+            }
+            names.Add(name);
+        }
+        return names;
+    }
+
+    /// <summary>Slug of a title: lowercase, diacritics kept, non-alphanumeric runs collapse to one '-'.</summary>
+    public static string Slug(string? value)
+    {
+        string slug = NonAlphanumeric().Replace((value ?? string.Empty).ToLowerInvariant(), "-").Trim('-');
+        if (slug.Length > MaximumSlugLength) slug = slug[..MaximumSlugLength].TrimEnd('-');
+        return slug.Length == 0 ? "testcase" : slug;
+    }
+
+    private static string Title(WorkbookGenerationItem item)
+    {
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(item.Json!);
+            string name = document.RootElement.GetProperty("cases")[0].GetProperty("name").GetString() ?? string.Empty;
+            return CaseNumberPrefix().Replace(name, string.Empty);
+        }
+        catch (Exception exception) when (exception is JsonException or InvalidOperationException or KeyNotFoundException or ArgumentOutOfRangeException or ArgumentNullException)
+        {
+            return item.CaseId;
+        }
+    }
+
+    private static string CaseKey(string caseId) => $"workbook-case-{caseId.Split('/').Last()}";
+
+    [GeneratedRegex(@"[^\p{L}\p{Nd}]+", RegexOptions.CultureInvariant)]
+    private static partial Regex NonAlphanumeric();
+
+    [GeneratedRegex(@"^testcase\s+\d+(?:\.\d+)?\s*:\s*", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex CaseNumberPrefix();
 }
 
 public sealed class WorkbookImportService

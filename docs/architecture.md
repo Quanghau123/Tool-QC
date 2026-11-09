@@ -73,7 +73,7 @@ live under `projects/<project-name>/testcases/**/*.json`.
 
 Workbook imports generate schema-v2 drafts. For `be-booking`, activated workbook cases live
 under `projects/be-booking/testcases/workbook-generated/verify/`, separate from handwritten
-Campaign suites. Adapter version 2 discovers and generates all 69 current `VERIFY` cases; invalid or missing selections remain individually blocked while valid cases continue. Source workbooks are temporary inputs and are not retained
+Campaign suites. The active `Campaign.xlsx` workbook (SHA-256 `785e29e5…`) discovers and generates 63 current `VERIFY` cases: 1–30, 33–57 and 61–68. The 69-case `Campaign (1).xlsx` artifact is historical regression evidence only and must not fill absent active labels. Invalid or missing selections remain individually blocked while valid cases continue. Source workbooks are temporary inputs and are not retained
 in the repository; only metadata and SHA-256 fingerprints cross the shared boundary.
 
 

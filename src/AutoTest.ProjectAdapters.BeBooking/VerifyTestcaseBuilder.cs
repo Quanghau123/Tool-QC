@@ -3,11 +3,12 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using AutoTest.Workbooks;
 
 namespace AutoTest.ProjectAdapters.BeBooking;
 
-public sealed class VerifyTestcaseBuilder
+public sealed partial class VerifyTestcaseBuilder
 {
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 
@@ -42,15 +43,40 @@ public sealed class VerifyTestcaseBuilder
             ["cases"] = new JsonArray(new JsonObject
             {
                 ["id"] = $"campaign.workbook.verify-case-{number}",
-                ["name"] = $"VERIFY - {model.Title}",
+                ["name"] = CaseName(number, model),
                 ["tags"] = new JsonArray("campaign-workbook", "campaign-verify-slots", $"verify-case-{number}"),
                 ["destructive"] = true,
                 ["variables"] = new JsonObject { ["candidateName"] = $"QC-VERIFY-{number}-${{unique}}" },
                 ["steps"] = steps,
-                ["coverage"] = Coverage(verifyStepName, evidenceStepName),
+                ["coverage"] = Coverage(verifyStepName, evidenceStepName, number),
             }),
         };
         return suite.ToJsonString(Options) + Environment.NewLine;
+    }
+
+    /// <summary>
+    /// Testcase title following AGENTS.md: "Testcase X: N" with X = workbook case number and
+    /// N = the cleaned workbook title, or a title derived from the parsed model when the sheet
+    /// cell carries no title of its own.
+    /// </summary>
+    private static string CaseName(string number, VerifyCaseModel model)
+    {
+        string title = Whitespace().Replace(model.Title ?? string.Empty, " ").Trim();
+        string withoutCaseLabel = LeadingPunctuation().Replace(CaseLabelTitle().Replace(title, string.Empty), string.Empty).Trim();
+        return $"Testcase {number}: {(withoutCaseLabel.Length == 0 ? DerivedTitle(model) : withoutCaseLabel)}";
+    }
+
+    /// <summary>Titles derived only from parsed fields: campaign kinds, day count and validity.</summary>
+    private static string DerivedTitle(VerifyCaseModel model)
+    {
+        string kinds = string.Join(" và ", model.Campaigns
+            .Select(item => item.Kind.Trim())
+            .Where(item => item.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase));
+        int dayCount = model.Campaigns.SelectMany(item => item.DailySchedules).Select(item => item.DateKey).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+        string days = dayCount > 1 ? $"trong {dayCount} ngày" : "cùng ngày";
+        string outcome = model.Expectation.IsValid ? "VerifySlots hợp lệ" : "VerifySlots bị từ chối";
+        return kinds.Length == 0 ? outcome : $"{kinds} {days}, {outcome}";
     }
 
     private static JsonObject FixtureStep(int frameCount)
@@ -136,7 +162,6 @@ public sealed class VerifyTestcaseBuilder
     private static JsonObject FrameNode(VerifyCampaignModel campaign, VerifyDailySchedule schedule, string label, string seed, int firstFrameMinutes)
     {
         JsonObject frame = new() { ["timeFrameId"] = $"${{tf{FrameOffset(label, firstFrameMinutes) + 1}}}", ["spotCount"] = schedule.PerFrame.GetValueOrDefault(label) };
-        if (!campaign.Kind.Equals("Duration", StringComparison.OrdinalIgnoreCase)) return frame;
         VerifyDurationGroup? group = schedule.Groups.FirstOrDefault(item => item.FrameLabels.Contains(label, StringComparer.OrdinalIgnoreCase));
         if (group is null) return frame;
         frame["timeFrameGroupKey"] = StableGuid(seed, schedule.Groups.ToList().IndexOf(group) + 1);
@@ -144,12 +169,19 @@ public sealed class VerifyTestcaseBuilder
         return frame;
     }
 
-    private static JsonObject EvidenceStep(string name, bool expectedValid) => DatabaseStep(
-        name,
-        "SELECT COUNT(*) FROM public.campaign WHERE \"Name\"=@name",
-        false,
-        new Dictionary<string, string> { ["name"] = "${candidateName}" },
-        expectedValid ? "1" : "0");
+    private static JsonObject EvidenceStep(string name, bool expectedValid)
+    {
+        const string candidate = "WITH candidate AS (SELECT \"Id\" FROM public.campaign WHERE \"Name\"=@name)";
+        string command = expectedValid
+            ? candidate + " SELECT CASE WHEN (SELECT COUNT(*) FROM candidate)=1 AND EXISTS (SELECT 1 FROM public.campaign_schedule schedule INNER JOIN candidate ON schedule.\"CampaignId\"=candidate.\"Id\") AND EXISTS (SELECT 1 FROM public.campaign_allocation allocation INNER JOIN candidate ON allocation.\"CampaignId\"=candidate.\"Id\") THEN 1 ELSE 0 END"
+            : candidate + " SELECT (SELECT COUNT(*) FROM candidate)+(SELECT COUNT(*) FROM public.campaign_schedule schedule INNER JOIN candidate ON schedule.\"CampaignId\"=candidate.\"Id\")+(SELECT COUNT(*) FROM public.campaign_allocation allocation INNER JOIN candidate ON allocation.\"CampaignId\"=candidate.\"Id\")";
+        return DatabaseStep(
+            name,
+            command,
+            false,
+            new Dictionary<string, string> { ["name"] = "${candidateName}" },
+            expectedValid ? "1" : "0");
+    }
 
     private static JsonObject DatabaseStep(string name, string command, bool resultSet, Dictionary<string, string>? parameters, string? scalar = null)
     {
@@ -163,10 +195,13 @@ public sealed class VerifyTestcaseBuilder
         };
     }
 
-    private static JsonObject Coverage(string verifyStep, string evidenceStep)
+    private static JsonObject Coverage(string verifyStep, string evidenceStep, string caseNumber)
     {
         JsonObject Covered(params string[] names) => new() { ["status"] = "covered", ["evidenceSteps"] = JsonSerializer.SerializeToNode(names) };
         JsonObject NotApplicable(string reason) => new() { ["status"] = "notApplicable", ["reason"] = reason };
+        string lifecycleReason = $"VERIFY case {caseNumber} records capacity topology and a VerifySlots expectation, but not a lifecycle action, mutation sequence, request payload, or post-transition state.";
+        string concurrencyReason = $"VERIFY case {caseNumber} records sequential capacity fixtures and a VerifySlots expectation, but not concurrent contenders, a shared start barrier, or winner/loser aggregate state.";
+        string scopeReason = $"VERIFY case {caseNumber} uses the environment-backed admin alias for protected requests, but its source contains no alternate principal, denied authorization result, or no-mutation denial contract.";
         return new JsonObject
         {
             ["sourceVerification"] = new JsonObject
@@ -178,10 +213,10 @@ public sealed class VerifyTestcaseBuilder
             ["contract"] = Covered(verifyStep),
             ["validation"] = Covered("Chọn fixture động theo thời điểm chạy"),
             ["authentication"] = Covered(verifyStep),
-            ["scope"] = NotApplicable("Dedicated authorization suites cover advertiser scope."),
+            ["scope"] = NotApplicable(scopeReason),
             ["integrity"] = Covered(evidenceStep),
-            ["lifecycle"] = NotApplicable("VERIFY cases do not approve or dispatch campaigns."),
-            ["concurrency"] = NotApplicable("Concurrency is covered by dedicated suites."),
+            ["lifecycle"] = NotApplicable(lifecycleReason),
+            ["concurrency"] = NotApplicable(concurrencyReason),
             ["reporting"] = Covered(verifyStep, evidenceStep),
         };
     }
@@ -191,6 +226,16 @@ public sealed class VerifyTestcaseBuilder
         byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes($"{seed}:{index}"));
         return new Guid(hash[..16]).ToString();
     }
+
+    [GeneratedRegex(@"\s+", RegexOptions.CultureInvariant)]
+    private static partial Regex Whitespace();
+
+    [GeneratedRegex(@"^Case\s+\d+(?:\.\d+)?\s*[:.\-–—]?\s*", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex CaseLabelTitle();
+
+    /// <summary>Leading dashes left behind by a two-line sheet title such as "Case 43\n– Duration A ...".</summary>
+    [GeneratedRegex(@"^[–—\-:.]+\s*", RegexOptions.CultureInvariant)]
+    private static partial Regex LeadingPunctuation();
 
     private static int FrameOffset(string label, int firstFrameMinutes) => (FrameMinutes(label) - firstFrameMinutes) / 8;
 

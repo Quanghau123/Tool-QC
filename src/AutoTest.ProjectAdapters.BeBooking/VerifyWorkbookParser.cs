@@ -28,17 +28,31 @@ public sealed partial class VerifyWorkbookParser
             List<VerifyRow> rows = Enumerable.Range(row, Math.Max(0, endRow - row + 1)).Select(currentRow => new VerifyRow(currentRow, sheet)).ToList();
             IReadOnlyList<VerifyCampaignModel> dayOne = ParseDay(rows, 0, "day1");
             IReadOnlyList<VerifyCampaignModel> dayTwo = ParseDay(rows, 10, "day2");
-            if (dayOne.Count == 0 || dayTwo.Count == 0)
-                continue;
+            string sourceRange = $"A{row}:Z{endRow}";
+            List<VerifyCaseDiagnostic> diagnostics = [];
+            if (dayOne.Count == 0)
+                diagnostics.Add(new("TQC-XLSX-BE-MISSING-DAY1", "day1", "The day 1 campaign table could not be identified from workbook cells.", sourceRange));
+            if (dayTwo.Count == 0)
+                diagnostics.Add(new("TQC-XLSX-BE-MISSING-DAY2", "day2", "The day 2 campaign table could not be identified from workbook cells.", sourceRange));
 
-            VerifyCampaignModel candidateOne = Candidate(dayOne);
-            VerifyCampaignModel candidateTwo = Candidate(dayTwo);
             bool reverse = rows.Any(item => item.Contains("ngày 2 sang ngày 1"));
-            VerifyCampaignModel source = reverse ? candidateTwo : candidateOne;
-            VerifyCampaignModel target = reverse ? candidateOne : candidateTwo;
-            bool valid = IsValid(target, source);
+            string? direction = dayOne.Count > 0 && dayTwo.Count > 0 ? reverse ? "day2-to-day1" : "day1-to-day2" : null;
+            VerifyCampaignModel? candidateOne = dayOne.Count > 0 ? Candidate(dayOne) : null;
+            VerifyCampaignModel? candidateTwo = dayTwo.Count > 0 ? Candidate(dayTwo) : null;
+            VerifyCampaignModel? source = reverse ? candidateTwo : candidateOne;
+            VerifyCampaignModel? target = reverse ? candidateOne : candidateTwo;
+            bool valid = target is not null && source is not null && IsValid(target, source);
             string? testerResult = rows.SelectMany(item => item.Values).FirstOrDefault(value => value.StartsWith("BUG:", StringComparison.OrdinalIgnoreCase) || value.Equals("PASS", StringComparison.OrdinalIgnoreCase));
-            result.Add(new($"verify/{number}", title.Replace("VERIFY - ", "", StringComparison.OrdinalIgnoreCase), Merge(dayOne, dayTwo, candidateOne, candidateTwo), new(valid, testerResult, target.Kind.Equals("Spot", StringComparison.OrdinalIgnoreCase)), reverse ? "day2-to-day1" : "day1-to-day2", row));
+            IReadOnlyList<VerifyCampaignModel> campaigns = candidateOne is not null && candidateTwo is not null
+                ? Merge(dayOne, dayTwo, candidateOne, candidateTwo)
+                : dayOne.Concat(dayTwo).ToArray();
+            string semanticClass = target?.Kind.Equals("Spot", StringComparison.OrdinalIgnoreCase) == true ? "spot" : target?.Kind.Equals("Duration", StringComparison.OrdinalIgnoreCase) == true ? "duration" : "unknown";
+            VerifySourceManifest manifest = new(title, sourceRange,
+            [
+                new("day1", row, endRow, dayOne.SelectMany(item => item.DailySchedules).SelectMany(item => item.FrameLabels).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()),
+                new("day2", row, endRow, dayTwo.SelectMany(item => item.DailySchedules).SelectMany(item => item.FrameLabels).Distinct(StringComparer.OrdinalIgnoreCase).ToArray())
+            ], direction, semanticClass);
+            result.Add(new($"verify/{number}", title.Replace("VERIFY - ", "", StringComparison.OrdinalIgnoreCase), campaigns, new(valid, testerResult, target?.Kind.Equals("Spot", StringComparison.OrdinalIgnoreCase) == true), direction ?? "unknown", row, manifest, diagnostics));
         }
         return result;
     }
