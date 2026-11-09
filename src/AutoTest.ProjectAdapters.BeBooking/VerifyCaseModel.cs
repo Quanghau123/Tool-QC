@@ -6,7 +6,24 @@ public sealed record VerifyCaseModel(
     IReadOnlyList<VerifyCampaignModel> Campaigns,
     VerifyExpectation Expectation,
     string SyncDirection,
-    int SourceRow);
+    int SourceRow,
+    VerifySourceManifest? Source = null,
+    IReadOnlyList<VerifyCaseDiagnostic>? Diagnostics = null);
+
+public sealed record VerifySourceManifest(
+    string Title,
+    string Range,
+    IReadOnlyList<VerifyDayTableManifest> DayTables,
+    string? Direction,
+    string SemanticClass);
+
+public sealed record VerifyDayTableManifest(
+    string DateKey,
+    int StartRow,
+    int EndRow,
+    IReadOnlyList<string> FrameLabels);
+
+public sealed record VerifyCaseDiagnostic(string Code, string Field, string Message, string Range);
 
 public sealed record VerifyCampaignModel(
     string Name,

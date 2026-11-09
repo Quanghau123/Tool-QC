@@ -120,7 +120,7 @@ export function initializeWorkbookMessage({ showTool }) {
         $('draftJson').value = item.json;
         $('draftArtifact').textContent = translate('TQC-UI-048', '', { output: response.output });
         $('draftGroup').value = response.group;
-        $('draftFileName').value = `workbook-${item.caseId.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.json`;
+        $('draftFileName').value = `${slugify(CaseTitle(item.json))}.json`;
         $('draftEditor').hidden = false;
         $('draftJsonPanel').hidden = true;
         $('toggleDraftJson').textContent = translate('TQC-UI-036');
@@ -172,6 +172,24 @@ export function initializeWorkbookMessage({ showTool }) {
   function clearWorkbookCases() {
     state.selectedWorkbookCases.clear();
     renderWorkbookCases();
+  }
+
+  function CaseTitle(json) {
+    try {
+      return JSON.parse(json).cases[0].name.replace(/^testcase\s+\d+(?:\.\d+)?\s*:\s*/i, '');
+    } catch {
+      return '';
+    }
+  }
+
+  function slugify(value) {
+    const slug = String(value || '')
+      .toLowerCase()
+      .replace(/[^\p{L}\p{Nd}]+/gu, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 80)
+      .replace(/-+$/, '');
+    return slug || 'testcase';
   }
 
   return {

@@ -32,10 +32,17 @@ public sealed partial class VerifyWorkbookAdapter : IWorkbookProjectAdapter
             (int row, string title, string number) = titles[index];
             int endRow = index + 1 < titles.Count ? titles[index + 1].Row - 1 : sheet.Cells.Values.Max(cell => cell.Row);
             string id = $"verify/{number}";
-            bool supported = parsedCases.ContainsKey(id);
-            string? reason = supported ? null : "The case layout could not be mapped to a complete VERIFY model.";
+            parsedCases.TryGetValue(id, out VerifyCaseModel? parsedCase);
+            bool supported = parsedCase is not null && parsedCase.Diagnostics is not { Count: > 0 };
+            string? reason = supported ? null : parsedCase?.Diagnostics?.FirstOrDefault()?.Message ?? "The case layout could not be mapped to a complete VERIFY model.";
             cases.Add(new(id, sheet.Name, "VERIFY", number, title, $"A{row}:Z{endRow}", supported, reason));
-            if (!supported) diagnostics.Add(new("TQC-XLSX-BE-UNMAPPED", reason!, sheet.Name, $"A{row}:Z{endRow}"));
+            if (!supported)
+            {
+                if (parsedCase?.Diagnostics is { Count: > 0 })
+                    diagnostics.AddRange(parsedCase.Diagnostics.Select(diagnostic => new WorkbookDiagnostic(diagnostic.Code, diagnostic.Message, sheet.Name, diagnostic.Range)));
+                else
+                    diagnostics.Add(new("TQC-XLSX-BE-UNMAPPED", reason!, sheet.Name, $"A{row}:Z{endRow}"));
+            }
         }
 
         return new(Project, Name, workbook.FileName, workbook.Sha256, cases, diagnostics);
