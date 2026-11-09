@@ -28,7 +28,7 @@ shared launcher chỉ quản lý tiến trình JMeter và cấu trúc JTL/HTML c
 Tool-QC là framework kiểm thử API theo dữ liệu: cấu hình môi trường một lần, mô tả testcase bằng JSON, sau đó chạy runner và đọc báo cáo HTML. Bạn không cần viết test C# riêng cho từng dịch vụ.
 
 1. Cài Git, .NET SDK 8 và Node.js LTS (Node 18 trở lên).
-2. Chạy một lần `npm run setup`. Lệnh kiểm prerequisite, restore NuGet theo solution, cài đúng Node packages từ `package-lock.json` khi cần và chuẩn bị Chromium cho browser E2E. Lệnh không tự cài, nâng cấp, hạ cấp hoặc đổi SDK/toolchain hệ thống.
+2. Chạy một lần `npm run setup`. Lệnh kiểm prerequisite, restore NuGet theo solution, cài đúng Node packages từ `package-lock.json` khi cần và chuẩn bị Chromium cho browser E2E. Repository cũng khai báo Playwright MCP trong `.mcp.json` để Claude Code có thể thao tác browser Chrome phục vụ UI test sau khi dependency đã được khôi phục. Lệnh không tự cài, nâng cấp, hạ cấp hoặc đổi SDK/toolchain hệ thống.
 3. Sao chép `.env.example` thành `.env`, chỉ điền cấu hình local/test của bạn; không commit file này.
 4. Chọn một project có sẵn dưới `projects/`, hoặc sao chép `projects/project-template` thành project mới.
 5. Khởi động UI bằng `npm start`, chọn project và bắt đầu từ smoke test không thay đổi dữ liệu.
@@ -55,6 +55,12 @@ Tool-QC là framework kiểm thử API theo dữ liệu: cấu hình môi trư�
 
 Thứ tự ưu tiên là biến môi trường hệ điều hành/CI, `projects/<project>/.env`, rồi `.env` ở thư mục gốc.
 
+### URL UI cho Playwright MCP
+
+Mỗi project có thể khai báo `uiBaseUrlVariable` trong `project.json`; biến này trỏ đến URL frontend chỉ dùng khi Claude Code mở Chrome để UI test. Khai báo giá trị cục bộ/test trong `projects/<project>/.env`, ví dụ `BE_BOOKING_UI_BASE_URL=http://localhost:3000`. Không đưa domain thật, credential hoặc token vào `.env.example`.
+
+`uiBaseUrlVariable` không thay thế `baseUrlVariable`: runner API tiếp tục gửi HTTP request đến URL do `baseUrlVariable` xác định. Khi yêu cầu UI test, chỉ cần nêu tên project và kịch bản; Playwright MCP dùng URL UI đã cấu hình. Mọi thao tác tạo/sửa/xóa chỉ thực hiện trên môi trường local/test hoặc staging đã được cho phép.
+
 Trên máy mới, chạy đúng một lệnh sau khi clone source:
 
 ```powershell
@@ -69,7 +75,7 @@ Sau khi tạo `.env`, lệnh đơn giản nhất để mở Tool-QC là:
 npm start
 ```
 
-Dùng UI hằng ngày không cần package JavaScript production. `npm run setup` cài development dependency và Chromium cần cho browser E2E; sau đó người phát triển có thể chạy `npm run test:e2e`. Lệnh PowerShell
+Dùng UI hằng ngày không cần package JavaScript production. `npm run setup` cài development dependency và Chromium cần cho browser E2E; sau đó người phát triển có thể chạy `npm run test:e2e`. Với Claude Code, chấp nhận MCP `playwright` do `.mcp.json` khai báo (hoặc bật bằng `/mcp`) để mở Chrome riêng cho UI test có quan sát DevTools; không dùng profile đăng nhập cá nhân hay gửi credential qua URL. Lệnh PowerShell
 `.\toolqc.ps1` vẫn được giữ cho automation và các chức năng nâng cao.
 
 UI hỗ trợ chọn chính xác testcase theo ID, dừng workload đang chạy, xem lịch sử và báo cáo cũ, chỉnh cấu hình dự án và kiểm tra nhanh các URL đã cấu hình. Runner hiện hỗ trợ HTTP JSON, multipart form, PostgreSQL fixture command, MQTT, request đồng thời trong một step, retry giới hạn, assertion JSON, biến liên bước, preflight, báo cáo HTML và JUnit tùy chọn. Redis assertions, JSON Schema/OpenAPI validation đầy đủ và parallel case scheduling chưa được triển khai.

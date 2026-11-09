@@ -1,6 +1,7 @@
 {
   "name": "replace-me",
   "baseUrlVariable": "API_BASE_URL",
+  "uiBaseUrlVariable": "UI_BASE_URL",
   "errorCatalogue": {
     "path": "error-catalogue.json"
   },

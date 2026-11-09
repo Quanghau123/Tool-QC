@@ -106,7 +106,7 @@ string catalogueProjectDirectory = Path.Combine(Path.GetTempPath(), $"autotest-c
 Directory.CreateDirectory(catalogueProjectDirectory);
 string catalogueProjectPath = Path.Combine(catalogueProjectDirectory, "project.json");
 string cataloguePath = Path.Combine(catalogueProjectDirectory, "error-catalogue.json");
-File.WriteAllText(catalogueProjectPath, """{"name":"catalogue-fixture","baseUrlVariable":"FRAMEWORK_TEST_URL","errorCatalogue":{"path":"error-catalogue.json"}}""");
+File.WriteAllText(catalogueProjectPath, """{"name":"catalogue-fixture","baseUrlVariable":"FRAMEWORK_TEST_URL","uiBaseUrlVariable":"FRAMEWORK_TEST_UI_URL","errorCatalogue":{"path":"error-catalogue.json"}}""");
 File.WriteAllText(cataloguePath, """
 {
   "schemaVersion": 1,
@@ -119,6 +119,12 @@ File.WriteAllText(cataloguePath, """
 }
 """);
 ProjectSpec catalogueProject = SpecLoader.Project(catalogueProjectPath);
+Equal("FRAMEWORK_TEST_UI_URL", catalogueProject.UiBaseUrlVariable!, "project retains optional UI URL variable");
+File.WriteAllText(catalogueProjectPath, """{"name":"catalogue-fixture","baseUrlVariable":"FRAMEWORK_TEST_URL","errorCatalogue":{"path":"error-catalogue.json"}}""");
+ProjectSpec projectWithoutUiUrl = SpecLoader.Project(catalogueProjectPath);
+if (projectWithoutUiUrl.UiBaseUrlVariable is not null)
+    throw new InvalidOperationException("project accepts omitted UI URL variable");
+File.WriteAllText(catalogueProjectPath, """{"name":"catalogue-fixture","baseUrlVariable":"FRAMEWORK_TEST_URL","uiBaseUrlVariable":"FRAMEWORK_TEST_UI_URL","errorCatalogue":{"path":"error-catalogue.json"}}""");
 ErrorCatalogueSpec catalogue = SpecLoader.ErrorCatalogue(catalogueProjectDirectory, catalogueProject);
 Equal("Cannot connect.", catalogue.Resolve("TQC-UI-001", "fr"), "catalogue falls back to English");
 Equal("Không thể kết nối.", catalogue.Resolve("TQC-UI-001", "vi"), "catalogue resolves Vietnamese");
@@ -749,7 +755,7 @@ Throws<InvalidDataException>(() => ApiBuilderProjectConfiguration.Load(contractP
 Throws<InvalidDataException>(() => ApiBuilderProjectConfiguration.Load(contractProjectRoot).ResolveSourcePath(), "API Builder rejects source file");
 Directory.Delete(contractProjectRoot, true);
 
-Console.WriteLine("Framework tests passed: 78");
+Console.WriteLine("Framework tests passed: 80");
 return 0;
 
 static StepSpec Step(string? method, string? path, DatabaseRequestSpec? database, MqttRequestSpec? mqtt)

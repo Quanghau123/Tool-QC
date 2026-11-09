@@ -1,6 +1,7 @@
 {
   "name": "ops-service",
   "baseUrlVariable": "API_BASE_URL",
+  "uiBaseUrlVariable": "OPS_UI_BASE_URL",
   "defaultHeaders": { "Accept": "application/json" },
   "authentication": {
     "strategy": "login",

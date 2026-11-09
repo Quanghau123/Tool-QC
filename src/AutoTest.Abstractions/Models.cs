@@ -7,7 +7,8 @@ public sealed record ProjectSpec(
     Dictionary<string, string>? DefaultHeaders,
     AuthSpec? Authentication,
     SafetySpec? Safety,
-    ErrorCatalogueReferenceSpec? ErrorCatalogue = null);
+    ErrorCatalogueReferenceSpec? ErrorCatalogue = null,
+    string? UiBaseUrlVariable = null);
 public sealed record AuthSpec(string Strategy, string? LoginPath, string? Method, JsonElement? Body, string? TokenPath, string? Header, string? Prefix);
 public sealed record SafetySpec(string[]? ProductionHosts);
 public sealed record ErrorCatalogueReferenceSpec(string Path);

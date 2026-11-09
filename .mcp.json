@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "--no-install",
+        "playwright-mcp",
+        "--browser",
+        "chrome",
+        "--caps",
+        "vision,devtools",
+        "--console-level",
+        "warning",
+        "--viewport-size",
+        "1440x900",
+        "--timeout-action",
+        "10000",
+        "--timeout-navigation",
+        "60000",
+        "--redact-url-params",
+        "access_token,token,id_token,code"
+      ]
+    }
+  }
+}
