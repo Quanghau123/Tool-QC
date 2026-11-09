@@ -37,7 +37,7 @@ public sealed class SourceMessageScanner
         @"Messages\s*<\s*(?<type>[A-Za-z_][A-Za-z0-9_]*(?:<[^>]+>)?)\s*>\s*\.\s*(?<method>[A-Za-z_][A-Za-z0-9_]*)\s*\((?<args>[^;]*?)\)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.Singleline);
     private static readonly Regex DisplayNameRegex = new(
-        @"\[\s*MessageDisplay\s*\(\s*""(?<name>[^""]+)""\s*\)\s*\]\s*(?:public\s+|internal\s+)?(?:sealed\s+|abstract\s+|partial\s+)*(?:class|record)\s+(?<type>[A-Za-z_][A-Za-z0-9_]*)",
+        @"\[\s*MessageDisplay\s*\(\s*(?:""(?<name>[^""]+)""|nameof\s*\(\s*(?:[A-Za-z0-9_]+\.)*(?<name>[A-Za-z0-9_]+)\s*\))\s*\)\s*\]\s*(?:public\s+|internal\s+)?(?:sealed\s+|abstract\s+|partial\s+)*(?:class|record)\s+(?<type>[A-Za-z_][A-Za-z0-9_]*)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex ErrorCodeRegex = new(
         @"\b[A-Z][A-Z0-9]{1,15}-[A-Z][A-Z0-9]*-\d{3}\b",
@@ -92,11 +92,21 @@ public sealed class SourceMessageScanner
                 scanned++;
                 string relative = Relative(root, file);
                 sourceTexts.Add((file, relative, text));
-                foreach (Match match in MessageRegex.Matches(text))
+
+                // Chỉ quét chuỗi Mes.* thô trong code, bỏ qua comment và key tài liệu mẫu Mes.X.Y
+                if (IsCodeFile(file))
                 {
-                    if (!occurrences.TryGetValue(match.Value, out var files))
-                        occurrences[match.Value] = files = new(StringComparer.OrdinalIgnoreCase);
-                    files.Add(relative);
+                    string cleanText = StripComments(text);
+                    foreach (Match match in MessageRegex.Matches(cleanText))
+                    {
+                        if (match.Value.Equals("Mes.X.Y", StringComparison.OrdinalIgnoreCase)) continue;
+                        string[] parts = match.Value.Split('.');
+                        if (parts.Length > 1 && !IsValidModuleType(parts[1])) continue;
+
+                        if (!occurrences.TryGetValue(match.Value, out var files))
+                            occurrences[match.Value] = files = new(StringComparer.OrdinalIgnoreCase);
+                        files.Add(relative);
+                    }
                 }
 
                 ReadTranslations(file, relative, text, translations);
@@ -107,10 +117,10 @@ public sealed class SourceMessageScanner
             }
         }
 
-        var displayNames = ReadDisplayNames(sourceTexts);
+        var semanticContext = BuildSemanticContext(sourceTexts);
         foreach (var source in sourceTexts.Where(item => Path.GetExtension(item.File).Equals(".cs", StringComparison.OrdinalIgnoreCase)))
         {
-            foreach (string key in InferGeneratedMessages(source.Text, displayNames))
+            foreach (string key in InferGeneratedMessages(source.File, source.Text, semanticContext))
             {
                 if (!occurrences.TryGetValue(key, out var files))
                     occurrences[key] = files = new(StringComparer.OrdinalIgnoreCase);
@@ -179,64 +189,308 @@ public sealed class SourceMessageScanner
     private static int LineNumber(string text, int index)
         => 1 + text.Take(index).Count(character => character == '\n');
 
-    private static Dictionary<string, string> ReadDisplayNames(IEnumerable<(string File, string Relative, string Text)> sources)
+    private static bool IsCodeFile(string file)
     {
-        var names = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var source in sources)
-            foreach (Match match in DisplayNameRegex.Matches(source.Text))
-                names[match.Groups["type"].Value] = match.Groups["name"].Value;
-        return names;
+        string ext = Path.GetExtension(file);
+        return ext.Equals(".cs", StringComparison.OrdinalIgnoreCase)
+            || ext.Equals(".ts", StringComparison.OrdinalIgnoreCase)
+            || ext.Equals(".tsx", StringComparison.OrdinalIgnoreCase)
+            || ext.Equals(".js", StringComparison.OrdinalIgnoreCase)
+            || ext.Equals(".jsx", StringComparison.OrdinalIgnoreCase)
+            || ext.Equals(".vue", StringComparison.OrdinalIgnoreCase)
+            || ext.Equals(".razor", StringComparison.OrdinalIgnoreCase)
+            || ext.Equals(".cshtml", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static IEnumerable<string> InferGeneratedMessages(string text, IReadOnlyDictionary<string, string> displayNames)
+    private static string StripComments(string text)
     {
+        string withoutBlock = Regex.Replace(text, @"/\*.*?\*/", "", RegexOptions.Singleline);
+        return Regex.Replace(withoutBlock, @"//.*$", "", RegexOptions.Multiline);
+    }
+
+    private sealed class SemanticResolutionContext
+    {
+        public Dictionary<string, string> DisplayNames { get; } = new(StringComparer.Ordinal);
+        public Dictionary<string, HashSet<string>> GenericClassTypeArgs { get; } = new(StringComparer.Ordinal);
+        public Dictionary<string, HashSet<string>> GenericMethodTypeArgs { get; } = new(StringComparer.Ordinal);
+        public Dictionary<string, string> VariableSubstitutions { get; } = new(StringComparer.Ordinal);
+    }
+
+    private static bool IsGenericParameter(string type)
+        => type is "T" or "TEntity" or "TRequest" or "TModel" or "TProperty" or "TSender" or "TResponse" or "TPayload" or "TDocument"
+            || (type.Length == 1 && char.IsUpper(type[0]));
+
+    private static bool IsValidModuleType(string type)
+    {
+        if (string.IsNullOrWhiteSpace(type) || IsGenericParameter(type)) return false;
+        return type switch
+        {
+            "int" or "long" or "short" or "byte" or "bool" or "string" or "object" or
+            "float" or "double" or "decimal" or "char" or "void" or
+            "DateTime" or "DateTimeOffset" or "DateOnly" or "TimeOnly" or "TimeSpan" or
+            "Guid" or "JsonElement" or "IEnumerable" or "List" or "Dictionary" => false,
+            _ => true
+        };
+    }
+
+    private static SemanticResolutionContext BuildSemanticContext(IEnumerable<(string File, string Relative, string Text)> sources)
+    {
+        var context = new SemanticResolutionContext();
+
+        // 1. Đọc [MessageDisplay("...")] hoặc [MessageDisplay(nameof(...))]
+        foreach (var source in sources)
+        {
+            foreach (Match match in DisplayNameRegex.Matches(source.Text))
+                context.DisplayNames[match.Groups["type"].Value] = match.Groups["name"].Value;
+        }
+
+        // 2. Phân giải generic class inheritance: vd class UserJwtVerifier : DefaultJwtUserVerifier<User>
+        var inheritanceRegex = new Regex(
+            @"(?:class|record)\s+[A-Za-z0-9_]+\s*:\s*(?<base>[A-Za-z0-9_]+)\s*<\s*(?<arg>[A-Za-z0-9_]+)\s*>",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+        // 3. Phân giải interface implementations: vd class UserRequest : IPhoneRequest
+        var interfaceImplRegex = new Regex(
+            @"(?:class|record)\s+(?<derived>[A-Za-z0-9_]+)\s*(?:<[^>]+>)?\s*:\s*(?:[^{,]+\s*,\s*)*(?<iface>I[A-Za-z0-9_]+)",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+        var interfaceMap = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+
+        foreach (var source in sources)
+        {
+            foreach (Match match in inheritanceRegex.Matches(source.Text))
+            {
+                string baseClass = match.Groups["base"].Value;
+                string arg = match.Groups["arg"].Value;
+                if (IsValidModuleType(arg))
+                {
+                    if (!context.GenericClassTypeArgs.TryGetValue(baseClass, out var args))
+                        context.GenericClassTypeArgs[baseClass] = args = new(StringComparer.Ordinal);
+                    args.Add(arg);
+                }
+            }
+
+            foreach (Match match in interfaceImplRegex.Matches(source.Text))
+            {
+                string derived = match.Groups["derived"].Value;
+                string iface = match.Groups["iface"].Value;
+                if (!interfaceMap.TryGetValue(iface, out var impls))
+                    interfaceMap[iface] = impls = new(StringComparer.Ordinal);
+                impls.Add(derived);
+            }
+        }
+
+        // Với validator generic kế thừa AbstractValidator<Interface>: PhoneValidator<TEntity> : AbstractValidator<IPhoneRequest>
+        var validatorRegex = new Regex(
+            @"class\s+(?<validator>[A-Za-z0-9_]+)\s*<[^>]+>\s*:\s*AbstractValidator\s*<\s*(?<iface>I[A-Za-z0-9_]+)\s*>",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+        foreach (var source in sources)
+        {
+            foreach (Match match in validatorRegex.Matches(source.Text))
+            {
+                string validator = match.Groups["validator"].Value;
+                string iface = match.Groups["iface"].Value;
+                if (interfaceMap.TryGetValue(iface, out var impls))
+                {
+                    if (!context.GenericClassTypeArgs.TryGetValue(validator, out var args))
+                        context.GenericClassTypeArgs[validator] = args = new(StringComparer.Ordinal);
+                    foreach (string impl in impls)
+                    {
+                        string entity = context.DisplayNames.TryGetValue(impl, out string? disp) ? disp : impl.Replace("Request", "");
+                        if (IsValidModuleType(entity))
+                            args.Add(entity);
+                    }
+                }
+            }
+        }
+
+        // 4. Tìm các generic method được khai báo trong services/interfaces
+        var genericMethodDeclRegex = new Regex(
+            @"(?:Task(?:<[^>]+>)?|void|[A-Za-z0-9_<>]+)\s+(?<name>[A-Za-z0-9_]+)\s*<(?<tparams>[^>]+)>\s*\(",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        var declaredGenericMethods = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var source in sources)
+        {
+            if (source.Text.Contains("Messages<") || source.File.Contains("Service", StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (Match m in genericMethodDeclRegex.Matches(source.Text))
+                {
+                    declaredGenericMethods.Add(m.Groups["name"].Value);
+                }
+            }
+        }
+
+        // 5. Phân giải các lời gọi generic method: vd .SendRecoveryCodeAsync<User, ...>()
+        var methodCallRegex = new Regex(
+            @"\.(?<method>[A-Za-z0-9_]+)\s*<\s*(?<arg>[A-Za-z0-9_]+)(?:,\s*[A-Za-z0-9_]+)*\s*>",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+        foreach (var source in sources)
+        {
+            foreach (Match match in methodCallRegex.Matches(source.Text))
+            {
+                string method = match.Groups["method"].Value;
+                string arg = match.Groups["arg"].Value;
+                if (declaredGenericMethods.Contains(method) && IsValidModuleType(arg))
+                {
+                    if (!context.GenericMethodTypeArgs.TryGetValue(method, out var args))
+                        context.GenericMethodTypeArgs[method] = args = new(StringComparer.Ordinal);
+                    args.Add(arg);
+                }
+            }
+
+            if (source.Text.Contains("nameof", StringComparison.OrdinalIgnoreCase) &&
+                source.Text.Contains("Email", StringComparison.OrdinalIgnoreCase))
+            {
+                context.VariableSubstitutions["contactProperty"] = "Email";
+            }
+        }
+
+        if (!context.VariableSubstitutions.ContainsKey("contactProperty"))
+        {
+            context.VariableSubstitutions["contactProperty"] = "Email";
+        }
+
+        return context;
+    }
+
+    private static IEnumerable<string> InferGeneratedMessages(string file, string text, SemanticResolutionContext context)
+    {
+        string enclosingClassName = Path.GetFileNameWithoutExtension(file).Split('.')[0];
+        Match classMatch = Regex.Match(text, @"(?:class|record)\s+(?<name>[A-Za-z0-9_]+)");
+        if (classMatch.Success) enclosingClassName = classMatch.Groups["name"].Value;
+
         foreach (Match match in GeneratedMessageRegex.Matches(text))
         {
             string rawType = match.Groups["type"].Value;
             string type = rawType.Split('<')[0];
-            string module = displayNames.TryGetValue(type, out string? displayed) ? displayed : type;
             string method = match.Groups["method"].Value;
             string arguments = match.Groups["args"].Value.Trim();
+
+            // Nếu type là generic parameter (T, TEntity...), phân giải thành type cụ thể từ ngữ cảnh
+            List<string> resolvedModules = new();
+            if (!IsValidModuleType(type))
+            {
+                if (context.GenericClassTypeArgs.TryGetValue(enclosingClassName, out var classArgs))
+                {
+                    foreach (string arg in classArgs)
+                    {
+                        if (!IsValidModuleType(arg)) continue;
+                        string mod = context.DisplayNames.TryGetValue(arg, out string? d) ? d : arg;
+                        resolvedModules.Add(mod);
+                    }
+                }
+
+                foreach (var kvp in context.GenericMethodTypeArgs)
+                {
+                    if (Regex.IsMatch(text, $@"\b{Regex.Escape(kvp.Key)}\s*<"))
+                    {
+                        foreach (string arg in kvp.Value)
+                        {
+                            if (!IsValidModuleType(arg)) continue;
+                            string mod = context.DisplayNames.TryGetValue(arg, out string? d) ? d : arg;
+                            resolvedModules.Add(mod);
+                        }
+                    }
+                }
+
+                // Nếu generic parameter không có bất kỳ caller hay binding cụ thể nào (dead code) -> bỏ qua không sinh Mes.T.*
+                if (resolvedModules.Count == 0) continue;
+            }
+            else
+            {
+                string mod = context.DisplayNames.TryGetValue(type, out string? displayed) ? displayed : type;
+                resolvedModules.Add(mod);
+            }
+
             string? suffix = method switch
             {
                 "Create" or "Update" or "Detail" or "List" or "Search" or "Delete" or "Import" or
-                "Assign" or "Unassign" or "SendMail" or "View" => InferOperationSuffix(method, arguments),
-                "Action" => InferActionSuffix(arguments),
-                _ => InferValidationSuffix(method, arguments)
+                "Assign" or "Unassign" or "SendMail" or "View" => InferOperationSuffix(method, arguments, context.VariableSubstitutions),
+                "Action" => InferActionSuffix(arguments, context.VariableSubstitutions),
+                _ => InferValidationSuffix(method, arguments, context.VariableSubstitutions)
             };
-            if (!string.IsNullOrWhiteSpace(suffix)) yield return $"Mes.{module}.{suffix}";
+
+            if (!string.IsNullOrWhiteSpace(suffix))
+            {
+                foreach (string module in resolvedModules.Distinct(StringComparer.Ordinal))
+                {
+                    if (!IsValidModuleType(module)) continue;
+                    yield return $"Mes.{module}.{suffix}";
+                }
+            }
+        }
+
+        // Quét thêm các rule validation dạng RuleFor(...).WithMessage(MessagesType.<Type>)
+        foreach (string key in InferFluentValidationMessages(text, enclosingClassName, context))
+        {
+            yield return key;
         }
     }
 
-    private static string InferOperationSuffix(string method, string arguments)
+    private static IEnumerable<string> InferFluentValidationMessages(
+        string text,
+        string enclosingClassName,
+        SemanticResolutionContext context)
+    {
+        var ruleRegex = new Regex(
+            @"RuleFor\s*\(\s*[A-Za-z0-9_]*\s*=>\s*[A-Za-z0-9_]*\.(?<prop>[A-Za-z0-9_]+)\s*\)(?<chain>[^;]+);",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.Singleline);
+        var withMessageRegex = new Regex(
+            @"\.WithMessage\s*\(\s*MessagesType\.(?<type>[A-Za-z0-9_]+)\s*\)",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+        if (!withMessageRegex.IsMatch(text)) yield break;
+
+        string module = context.DisplayNames.TryGetValue(enclosingClassName, out string? disp)
+            ? disp
+            : enclosingClassName.Replace("Request", "").Replace("Validator", "");
+
+        foreach (Match ruleMatch in ruleRegex.Matches(text))
+        {
+            string prop = ruleMatch.Groups["prop"].Value;
+            string chain = ruleMatch.Groups["chain"].Value;
+
+            foreach (Match msgMatch in withMessageRegex.Matches(chain))
+            {
+                string type = msgMatch.Groups["type"].Value;
+                yield return $"Mes.{module}.{type}.{prop}";
+            }
+        }
+    }
+
+    private static string InferOperationSuffix(string method, string arguments, IReadOnlyDictionary<string, string>? variables = null)
     {
         bool failed = Regex.IsMatch(arguments, @"(?:^|,)\s*false\s*(?:,|$)", RegexOptions.IgnoreCase);
-        string action = method;
-        if (method == "View")
+        // Trong kiến trúc BE Booking: Detail() -> ViewDetail, List() -> ViewList
+        string action = method switch
         {
-            string? explicitAction = ExtractName(arguments);
-            action = explicitAction ?? method;
-        }
-        else
+            "Detail" => "ViewDetail",
+            "List" => "ViewList",
+            "View" => string.IsNullOrEmpty(ExtractName(arguments, variables)) ? "View" : $"View{ExtractName(arguments, variables)}",
+            _ => method
+        };
+        if (method != "View" && method != "Detail" && method != "List")
         {
-            string? extra = ExtractName(arguments.Split(',')[0]);
+            string? extra = ExtractName(arguments.Split(',')[0], variables);
             if (extra is not null && !extra.Equals("true", StringComparison.OrdinalIgnoreCase) && !extra.Equals("false", StringComparison.OrdinalIgnoreCase))
                 action += extra;
         }
         return $"{action}.{(failed ? "Failed" : "Successfully")}";
     }
 
-    private static string? InferActionSuffix(string arguments)
+    private static string? InferActionSuffix(string arguments, IReadOnlyDictionary<string, string>? variables = null)
     {
         string[] parts = arguments.Split(',', 2);
-        string? action = ExtractName(parts[0]);
+        string? action = ExtractName(parts[0], variables);
         if (action is null) return null;
         if (parts.Length == 1) return action;
         bool success = !parts[1].Trim().StartsWith("false", StringComparison.OrdinalIgnoreCase);
         return $"{action}.{(success ? "Successfully" : "Failed")}";
     }
 
-    private static string? InferValidationSuffix(string method, string arguments)
+    private static string? InferValidationSuffix(string method, string arguments, IReadOnlyDictionary<string, string>? variables = null)
     {
         var validationMethods = new HashSet<string>(StringComparer.Ordinal)
         {
@@ -245,16 +499,32 @@ public sealed class SourceMessageScanner
             "AlreadyExist", "Expired", "NotEqual"
         };
         if (!validationMethods.Contains(method)) return null;
-        string? property = ExtractName(arguments);
+        string? property = ExtractName(arguments, variables);
         return property is null ? method : $"{method}.{property}";
     }
 
-    private static string? ExtractName(string expression)
+    private static string? ExtractName(string expression, IReadOnlyDictionary<string, string>? variables = null)
     {
         expression = expression.Trim();
         if (expression.Length == 0) return null;
-        Match literal = Regex.Match(expression, "\\\"(?<value>[^\\\"]+)\\\"");
-        if (literal.Success) return literal.Groups["value"].Value.Split('.').Last();
+
+        // Xử lý chuỗi nội suy: vd $"PleaseCheck{contactProperty}" -> PleaseCheckEmail
+        Match interp = Regex.Match(expression, @"\$""(?<prefix>[^""{]*)\{(?<var>[^}]+)\}(?<suffix>[^""]*)""");
+        if (interp.Success)
+        {
+            string varName = interp.Groups["var"].Value.Trim();
+            string subValue = variables != null && variables.TryGetValue(varName, out string? val)
+                ? val
+                : (varName.Equals("contactProperty", StringComparison.OrdinalIgnoreCase) ? "Email" : varName);
+            return $"{interp.Groups["prefix"].Value}{subValue}{interp.Groups["suffix"].Value}";
+        }
+
+        // Xử lý chuỗi literal: GIỮ NGUYÊN chuỗi, KHÔNG split dấu chấm (vd "IsWrong.OldPassword")
+        Match literal = Regex.Match(expression, "\"\"(?<value>[^\"]+)\"\"");
+        if (!literal.Success) literal = Regex.Match(expression, "\"\"\"(?<value>[^\"]+)\"\"\"");
+        if (!literal.Success) literal = Regex.Match(expression, "\\\"(?<value>[^\\\"]+)\\\"");
+        if (literal.Success) return literal.Groups["value"].Value;
+
         Match nameOf = Regex.Match(expression, @"nameof\s*\(\s*(?:[A-Za-z_][A-Za-z0-9_]*\.)*(?<value>[A-Za-z_][A-Za-z0-9_]*)\s*\)");
         if (nameOf.Success) return nameOf.Groups["value"].Value;
         Match lambda = Regex.Match(expression, @"=>\s*[A-Za-z_][A-Za-z0-9_]*\.(?<value>[A-Za-z_][A-Za-z0-9_]*)");

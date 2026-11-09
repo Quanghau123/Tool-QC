@@ -61,6 +61,81 @@ using (var messageAuditArchive = System.IO.Compression.ZipFile.OpenRead(messageA
     Equal("true", workbook.Contains("name=\"Audit\"", StringComparison.Ordinal).ToString().ToLowerInvariant(), "scanner workbook exports Audit sheet");
 }
 Directory.Delete(messageAuditDirectory, true);
+
+string csharpScanDirectory = Path.Combine(Path.GetTempPath(), $"autotest-cs-scan-{Guid.NewGuid():N}");
+Directory.CreateDirectory(csharpScanDirectory);
+File.WriteAllText(Path.Combine(csharpScanDirectory, "BaseVerifier.cs"), """
+public class DefaultJwtUserVerifier<T>
+{
+    public void Verify()
+    {
+        throw new System.Exception(Messages<T>.Blocked());
+    }
+}
+public class UserJwtVerifier : DefaultJwtUserVerifier<User> { }
+""");
+File.WriteAllText(Path.Combine(csharpScanDirectory, "PasswordService.cs"), """
+public class PasswordService
+{
+    public void ChangePassword<T>()
+    {
+        Messages<T>.Action("IsWrong.OldPassword");
+    }
+    public void SendRecovery<T, TSender>(string contactProperty)
+    {
+        Messages<T>.Action($"PleaseCheck{contactProperty}");
+    }
+}
+public class UserController
+{
+    public void Run(PasswordService s)
+    {
+        s.ChangePassword<User>();
+        s.SendRecovery<User, object>(nameof(User.Email));
+    }
+}
+""");
+File.WriteAllText(Path.Combine(csharpScanDirectory, "DeadCodeValidator.cs"), """
+// Mes.X.Y
+public class CollectionMediaUploadRequestValidator<T>
+{
+    public void Check() { Messages<T>.OverLength("File"); }
+}
+""");
+File.WriteAllText(Path.Combine(csharpScanDirectory, "AdvertiserController.cs"), """
+[MessageDisplay("Advertiser")]
+public class Advertiser { }
+public class AdvertiserController
+{
+    public void Get() { Messages<Advertiser>.Detail(); Messages<Advertiser>.List(); }
+}
+""");
+File.WriteAllText(Path.Combine(csharpScanDirectory, "UserProfileRequest.cs"), """
+[MessageDisplay("User")]
+public class UpdateProfileRequest
+{
+    public string PhoneNumber { get; set; }
+}
+public class UpdateProfileValidator
+{
+    public UpdateProfileValidator()
+    {
+        RuleFor(x => x.PhoneNumber).NotEmpty().WithMessage(MessagesType.Required);
+    }
+}
+""");
+
+MessageScanResult csScanResult = new SourceMessageScanner().Scan(csharpScanDirectory);
+var csKeys = csScanResult.Messages.Select(m => m.Key).ToHashSet();
+Equal("true", csKeys.Contains("Mes.Advertiser.ViewDetail.Successfully").ToString().ToLowerInvariant(), "scanner maps Detail() to ViewDetail.Successfully");
+Equal("true", csKeys.Contains("Mes.Advertiser.ViewList.Successfully").ToString().ToLowerInvariant(), "scanner maps List() to ViewList.Successfully");
+Equal("true", csKeys.Contains("Mes.User.Blocked").ToString().ToLowerInvariant(), "scanner resolves generic DefaultJwtUserVerifier<T> to Mes.User.Blocked");
+Equal("true", csKeys.Contains("Mes.User.IsWrong.OldPassword").ToString().ToLowerInvariant(), "scanner preserves compound action name Mes.User.IsWrong.OldPassword");
+Equal("true", csKeys.Contains("Mes.User.PleaseCheckEmail").ToString().ToLowerInvariant(), "scanner resolves interpolated string to Mes.User.PleaseCheckEmail");
+Equal("true", csKeys.Contains("Mes.User.Required.PhoneNumber").ToString().ToLowerInvariant(), "scanner resolves FluentValidation WithMessage to Mes.User.Required.PhoneNumber");
+Equal("false", csKeys.Any(k => k.StartsWith("Mes.T.")).ToString().ToLowerInvariant(), "scanner excludes unbound generic Mes.T.*");
+Equal("false", csKeys.Contains("Mes.X.Y").ToString().ToLowerInvariant(), "scanner ignores comment Mes.X.Y");
+Directory.Delete(csharpScanDirectory, true);
 Type uiSupportType = System.Reflection.Assembly.Load("AutoTest.Web").GetType("UiSupport")!;
 var diagnose = uiSupportType.GetMethod("Diagnose", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)!;
 object environmentDiagnosis = diagnose.Invoke(null, [new[] { "connection refused" }])!;
